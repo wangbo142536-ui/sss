@@ -1,0 +1,24 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: ship-supply-backend
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      max-request-size: 30MB
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/ship_supply_platform?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_0900_ai_ci&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+ship-supply:
+  standard-library:
+    category-tree-max-level: 2
+  redis:
+    host: 127.0.0.1
+    port: 6379

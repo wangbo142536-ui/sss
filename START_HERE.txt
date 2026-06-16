@@ -1,0 +1,18 @@
+Double-click startup files:
+
+1. start-all.cmd
+   Starts backend and frontend in two separate windows.
+
+2. start-backend.cmd
+   Starts the Spring Boot backend:
+   http://localhost:8080
+
+3. start-frontend.cmd
+   Starts the Vue frontend:
+   http://127.0.0.1:5173
+
+Before starting:
+- MySQL service MySQL80 should be running.
+- If backend code was changed, stop the old backend service on port 8080 before starting again.
+- Do not start another backend while an old backend is still running; otherwise the frontend may still hit old code and new APIs may return 404.
+- Keep the opened command windows open while using the project.

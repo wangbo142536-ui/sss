@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>船供电商平台方向选择</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      background: #f4f7f8;
+      color: #1f2a2e;
+    }
+    .page { padding: 28px; max-width: 1320px; margin: 0 auto; }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 22px;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0; }
+    .lead { margin: 0; color: #5e6c72; line-height: 1.7; max-width: 850px; }
+    .badge {
+      background: #0f766e;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .option {
+      background: #fff;
+      border: 1px solid #d9e3e5;
+      border-radius: 8px;
+      overflow: hidden;
+      min-height: 650px;
+      box-shadow: 0 8px 24px rgba(19, 44, 54, .08);
+    }
+    .option.recommended { border: 2px solid #0f766e; }
+    .option-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid #e5ecee;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .option h2 { margin: 0; font-size: 18px; }
+    .tag { font-size: 12px; padding: 4px 8px; border-radius: 5px; background: #e9f7f5; color: #0f766e; }
+    .mock { padding: 14px; background: #f8fafb; }
+    .nav {
+      height: 42px;
+      background: #12343b;
+      color: #fff;
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 12px;
+    }
+    .search {
+      height: 34px;
+      background: #fff;
+      border: 2px solid #e6b84a;
+      border-radius: 5px;
+      color: #77868b;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      margin: 10px 0;
+      font-size: 12px;
+    }
+    .banner {
+      height: 92px;
+      background: linear-gradient(110deg, #214f59, #0f766e 55%, #d9a441);
+      color: #fff;
+      border-radius: 6px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+    }
+    .banner b { font-size: 16px; }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+    .mini-card {
+      min-height: 62px;
+      background: #fff;
+      border: 1px solid #e1e8ea;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      color: #425157;
+    }
+    .mini-card b { display: block; color: #1f2a2e; margin-bottom: 5px; }
+    .dashboard {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      min-height: 304px;
+      background: #fff;
+      border: 1px solid #dfe8ea;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .side { background: #12343b; color: #dcebed; padding: 12px 10px; font-size: 12px; line-height: 2.25; }
+    .main { padding: 12px; }
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr 86px;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .input, .button {
+      height: 30px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      padding: 0 9px;
+      font-size: 12px;
+    }
+    .input { border: 1px solid #d8e1e3; color: #849096; }
+    .button { background: #0f766e; color: #fff; justify-content: center; }
+    .table { border: 1px solid #e0e8ea; border-radius: 6px; overflow: hidden; font-size: 11px; }
+    .row { display: grid; grid-template-columns: 1.2fr .8fr .9fr .9fr; gap: 0; }
+    .row span { padding: 8px 7px; border-bottom: 1px solid #edf2f3; min-height: 31px; }
+    .row.head span { background: #eef5f5; font-weight: 700; color: #334146; }
+    .flow { margin-top: 10px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .step { background: #eef5f5; border-radius: 5px; padding: 8px 5px; text-align: center; font-size: 11px; color: #395057; }
+    .desc { padding: 16px 18px 18px; }
+    .desc h3 { font-size: 14px; margin: 0 0 8px; }
+    .desc ul { margin: 0 0 14px 18px; padding: 0; color: #516166; line-height: 1.7; font-size: 13px; }
+    .choice {
+      padding: 12px 14px;
+      background: #eef5f5;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .recommended .choice { background: #e7f5f2; color: #164b46; font-weight: 700; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .top { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="top">
+      <div>
+        <h1>船供电商平台：产品入口结构方向</h1>
+        <p class="lead">目标是同时满足个人随意采购、公司 Excel 集采、IMPA 标准库匹配、供应商打包履约，以及附件流程里的报关、验货、驳船、签收、对账归档。</p>
+      </div>
+      <div class="badge">建议先确认方向，再展开页面细节</div>
+    </section>
+
+    <section class="grid">
+      <article class="option">
+        <div class="option-head">
+          <h2>A. 纯电商首页</h2>
+          <span class="tag">最像淘宝/京东</span>
+        </div>
+        <div class="mock">
+          <div class="nav"><span>船供商城</span><span>登录 / 购物车</span></div>
+          <div class="search">搜索伙食、IMPA 物料、供应商...</div>
+          <div class="banner"><b>靠港补给一站采购</b><span>伙食、物料、船员服务统一入口</span></div>
+          <div class="cards">
+            <div class="mini-card"><b>伙食专区</b>冻品、蔬菜、粮油、饮料</div>
+            <div class="mini-card"><b>物料专区</b>按 IMPA 分类检索</div>
+            <div class="mini-card"><b>供应商池</b>港口、评分、主营品类</div>
+            <div class="mini-card"><b>上新</b>新伙食、新物料、新供应商</div>
+          </div>
+        </div>
+        <div class="desc">
+          <h3>适合什么</h3>
+          <ul>
+            <li>个人采购体验最好，上手快。</li>
+            <li>首页电商感强，利于展示商品和供应商。</li>
+            <li>但企业 Excel 集采、整单匹配和后续履约会藏得较深。</li>
+          </ul>
+          <div class="choice">适合做流量入口，不建议作为唯一主结构。</div>
+        </div>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <h2>B. 企业采购中台</h2>
+          <span class="tag">最像业务系统</span>
+        </div>
+        <div class="mock">
+          <div class="dashboard">
+            <div class="side">工作台<br>订单<br>Excel导入<br>匹配<br>供应商<br>履约<br>对账</div>
+            <div class="main">
+              <div class="toolbar">
+                <div class="input">上传采购 Excel / 粘贴清单</div>
+                <div class="button">智能匹配</div>
+              </div>
+              <div class="table">
+                <div class="row head"><span>原始需求</span><span>标准品</span><span>最低价</span><span>缺口</span></div>
+                <div class="row"><span>Rope 20mm</span><span>IMPA 211...</span><span>¥128</span><span>可供</span></div>
+                <div class="row"><span>Fresh beef</span><span>伙食/肉类</span><span>¥42/kg</span><span>品质可切换</span></div>
+                <div class="row"><span>Paint brush</span><span>IMPA 510...</span><span>-</span><span>需替代</span></div>
+              </div>
+              <div class="flow">
+                <div class="step">匹配</div>
+                <div class="step">比价</div>
+                <div class="step">询价</div>
+                <div class="step">履约</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="desc">
+          <h3>适合什么</h3>
+          <ul>
+            <li>公司采购效率最高，Excel 清单和供应商打包好处理。</li>
+            <li>IMPA 映射、缺货替代、最低价匹配更清晰。</li>
+            <li>但首页不像电商，对个人采购和商品展示不够友好。</li>
+          </ul>
+          <div class="choice">适合内部系统，不适合承担完整商城门面。</div>
+        </div>
+      </article>
+
+      <article class="option recommended">
+        <div class="option-head">
+          <h2>C. 电商首页 + 采购工作台</h2>
+          <span class="tag">推荐</span>
+        </div>
+        <div class="mock">
+          <div class="nav"><span>船供商城</span><span>企业采购 / 个人采购 / 供应商入驻</span></div>
+          <div class="search">搜索商品、IMPA 编码、供应商、Excel 采购清单...</div>
+          <div class="banner"><b>船供服务主入口</b><span>首页电商化，企业采购进入智能匹配工作台</span></div>
+          <div class="cards">
+            <div class="mini-card"><b>船供服务</b>伙食 + IMPA 物料分类</div>
+            <div class="mini-card"><b>船员海事服务</b>建设中，占位展示</div>
+            <div class="mini-card"><b>Excel 集采</b>识别、匹配、最低价、品质切换</div>
+            <div class="mini-card"><b>供应商打包</b>同商优先、缺项提示、替代推荐</div>
+          </div>
+        </div>
+        <div class="desc">
+          <h3>适合什么</h3>
+          <ul>
+            <li>首页保持电商形态，搜索、分类、banner、上新、供应商池都能放进去。</li>
+            <li>公司用户进入采购工作台，处理 Excel 导入、IMPA 映射和整单比价。</li>
+            <li>个人用户走普通购物车，并加入满额免打包费、打包费阶梯规则。</li>
+          </ul>
+          <div class="choice">建议采用：既像电商，也能承接船供业务复杂度。</div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

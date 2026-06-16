@@ -1,0 +1,39 @@
+# Local dependencies and build outputs
+frontend/node_modules/
+frontend/dist/
+backend/target/
+__pycache__/
+*.pyc*
+
+# Local Maven/tool caches
+.m2/
+.tools/
+.agents/
+
+# Runtime logs and temp files
+logs/
+.runlogs/
+*.log
+*.out.log
+*.err.log
+.tmp/
+tmp/
+.tmp-chrome-shop-test/
+.tmp-chrome-shop-test-*/
+
+# Uploaded/runtime data
+uploads/
+backend/uploads/
+
+# Local secrets
+huoshan.txt
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+font_test.png
+tmp-logo-upload-test.png
+.idea/

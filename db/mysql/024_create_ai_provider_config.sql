@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS ai_provider_config (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  provider_code VARCHAR(64) NOT NULL,
+  provider_name VARCHAR(128) NOT NULL,
+  base_url VARCHAR(512) NOT NULL,
+  model_id VARCHAR(128) NOT NULL,
+  api_key VARCHAR(1024) NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  last_check_status VARCHAR(64) DEFAULT NULL,
+  last_check_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_ai_provider_config_provider_code (provider_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

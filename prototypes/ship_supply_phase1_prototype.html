@@ -1,0 +1,1512 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>船供平台一期低保真原型</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --line: #d8dee8;
+      --line-strong: #b7c2d2;
+      --text: #1d2733;
+      --muted: #647386;
+      --blue: #1f5f99;
+      --blue-soft: #e6f0fa;
+      --green: #2f7d57;
+      --green-soft: #e7f3ed;
+      --amber: #a86513;
+      --amber-soft: #fff1dc;
+      --red: #b44444;
+      --red-soft: #fde8e8;
+      --purple: #6a4c93;
+      --purple-soft: #efe9f7;
+      --radius: 8px;
+      --shadow: 0 1px 2px rgba(21, 32, 43, .08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      background: #142235;
+      color: #dce7f5;
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, .14);
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #e6f0fa;
+      color: #143a5c;
+      font-weight: 800;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 16px;
+      color: #ffffff;
+    }
+
+    .brand span {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      color: #9fb2c8;
+    }
+
+    .role-switch {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      padding: 4px;
+      background: rgba(255, 255, 255, .08);
+      border-radius: 8px;
+    }
+
+    .role-switch button {
+      min-height: 30px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #bed0e5;
+      cursor: pointer;
+    }
+
+    .role-switch button.active {
+      background: #ffffff;
+      color: #142235;
+      font-weight: 700;
+    }
+
+    .nav-title {
+      margin: 4px 8px 2px;
+      color: #8ea4bc;
+      font-size: 12px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 4px;
+    }
+
+    .nav button {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 7px;
+      text-align: left;
+      color: #dce7f5;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .nav button:hover,
+    .nav button.active {
+      background: rgba(255, 255, 255, .12);
+      color: #ffffff;
+    }
+
+    .nav .ico {
+      width: 22px;
+      text-align: center;
+      color: #9fc6ee;
+      font-weight: 800;
+    }
+
+    main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .topbar p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .utility {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: #617188;
+      font-size: 13px;
+      margin-right: 8px;
+    }
+
+    .topbar > div:first-child {
+      min-width: 170px;
+      flex: 0 0 auto;
+    }
+
+    .utility span {
+      white-space: nowrap;
+    }
+
+    .btn {
+      min-height: 34px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      padding: 0 12px;
+      background: #ffffff;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #ffffff;
+    }
+
+    .btn.ghost {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .btn.small {
+      min-height: 28px;
+      padding: 0 9px;
+      font-size: 12px;
+    }
+
+    .content {
+      padding: 20px 24px 28px;
+      overflow: auto;
+    }
+
+    .notice-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 42px;
+      padding: 9px 14px;
+      margin-bottom: 12px;
+      border: 1px solid #fde0bd;
+      border-radius: 8px;
+      background: #fff7ed;
+      color: #7a4a12;
+      font-size: 13px;
+    }
+
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .filter-chip {
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      border: 1px solid #d7e0ec;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #334155;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(16, 24, 39, .04);
+    }
+
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .field,
+    .select {
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #ffffff;
+      padding: 0 10px;
+      color: var(--text);
+      min-width: 130px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(130px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      min-height: 86px;
+      padding: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .layout-two {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(320px, .85fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-head {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-head h2,
+    .panel-head h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table th,
+    .table td {
+      padding: 10px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .table th {
+      color: var(--muted);
+      font-weight: 700;
+      background: #f7f9fc;
+      font-size: 12px;
+    }
+
+    .table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge.blue { background: var(--blue-soft); color: var(--blue); }
+    .badge.green { background: var(--green-soft); color: var(--green); }
+    .badge.amber { background: var(--amber-soft); color: var(--amber); }
+    .badge.red { background: var(--red-soft); color: var(--red); }
+    .badge.purple { background: var(--purple-soft); color: var(--purple); }
+    .badge.gray { background: #eef1f5; color: #596779; }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(110px, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .step {
+      position: relative;
+      min-height: 76px;
+      padding: 12px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #ffffff;
+    }
+
+    .step.done { border-color: #9bc3ad; background: var(--green-soft); }
+    .step.current { border-color: #7fa9d4; background: var(--blue-soft); }
+    .step strong { display: block; margin-bottom: 6px; }
+    .step span { color: var(--muted); font-size: 12px; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .form-item label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .form-item input,
+    .form-item select,
+    .form-item textarea {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 10px;
+      background: #ffffff;
+      color: var(--text);
+    }
+
+    .form-item textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+
+    .span-2 { grid-column: span 2; }
+    .span-4 { grid-column: span 4; }
+
+    .split-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .task-row:last-child {
+      border-bottom: 0;
+    }
+
+    .task-row strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .task-row span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .quote-grid {
+      display: grid;
+      grid-template-columns: 220px repeat(3, minmax(180px, 1fr));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .quote-cell {
+      min-height: 58px;
+      padding: 10px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .quote-cell:nth-child(4n) {
+      border-right: 0;
+    }
+
+    .quote-cell.head {
+      background: #f7f9fc;
+      font-weight: 700;
+    }
+
+    .quote-cell.win {
+      background: var(--green-soft);
+    }
+
+    .empty {
+      min-height: 130px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      border: 1px dashed var(--line-strong);
+      border-radius: var(--radius);
+      background: #fbfcfe;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7f9fc;
+    }
+
+    .tabs button {
+      min-height: 30px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .tabs button.active {
+      background: #ffffff;
+      box-shadow: var(--shadow);
+      font-weight: 700;
+    }
+
+    .drawer {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 18, 30, .42);
+      z-index: 10;
+      align-items: stretch;
+      justify-content: flex-end;
+    }
+
+    .drawer.open {
+      display: flex;
+    }
+
+    .drawer-panel {
+      width: min(620px, 100vw);
+      background: #ffffff;
+      padding: 18px;
+      overflow: auto;
+      box-shadow: -8px 0 22px rgba(0, 0, 0, .16);
+    }
+
+    .drawer-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .drawer-head h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    /* Visual refinement pass: denser, cleaner operational SaaS styling. */
+    body {
+      background: #eef2f6;
+      color: #17202c;
+    }
+
+    .app {
+      grid-template-columns: 260px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      background: #101827;
+      border-right: 1px solid rgba(255, 255, 255, .08);
+      box-shadow: 8px 0 24px rgba(16, 24, 39, .08);
+    }
+
+    .brand {
+      padding: 2px 6px 16px;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      background: #dbeafe;
+      color: #12395c;
+      box-shadow: inset 0 0 0 1px rgba(18, 57, 92, .08);
+    }
+
+    .role-switch {
+      background: rgba(255, 255, 255, .07);
+      border: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .role-switch button {
+      color: #aebed0;
+      font-weight: 700;
+    }
+
+    .role-switch button.active {
+      background: #f8fafc;
+      color: #101827;
+    }
+
+    .nav-title {
+      margin-top: 8px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .nav button {
+      min-height: 40px;
+      padding: 8px 11px;
+      color: #d5e0ed;
+    }
+
+    .nav button:hover {
+      background: rgba(219, 234, 254, .10);
+    }
+
+    .nav button.active {
+      background: #263449;
+      box-shadow: inset 3px 0 0 #60a5fa;
+    }
+
+    .topbar {
+      min-height: 72px;
+      height: auto;
+      padding: 14px 28px;
+      background: rgba(255, 255, 255, .92);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .topbar h1 {
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .topbar p {
+      font-size: 13px;
+    }
+
+    .content {
+      padding: 22px 28px 34px;
+    }
+
+    .btn {
+      min-height: 36px;
+      border-color: #c9d3e2;
+      box-shadow: 0 1px 1px rgba(16, 24, 39, .04);
+      transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+    }
+
+    .btn:hover {
+      border-color: #9fb1c8;
+      box-shadow: 0 2px 6px rgba(16, 24, 39, .08);
+    }
+
+    .btn.primary {
+      background: #155f9f;
+      border-color: #155f9f;
+    }
+
+    .btn.primary:hover {
+      background: #0f4f88;
+      border-color: #0f4f88;
+    }
+
+    .metric-grid {
+      grid-template-columns: repeat(6, minmax(150px, 1fr));
+      gap: 14px;
+    }
+
+    .metric {
+      min-height: 94px;
+      padding: 16px;
+      border-color: #dce3ee;
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(16, 24, 39, .05);
+    }
+
+    .metric span {
+      font-weight: 700;
+      color: #65758a;
+    }
+
+    .metric strong {
+      font-size: 30px;
+      color: #132033;
+    }
+
+    .layout-two {
+      grid-template-columns: minmax(680px, 1.35fr) minmax(360px, .75fr);
+      gap: 16px;
+    }
+
+    .panel {
+      border-color: #dce3ee;
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(16, 24, 39, .05);
+    }
+
+    .panel-head {
+      min-height: 54px;
+      padding: 13px 16px;
+      background: #fbfcfe;
+    }
+
+    .panel-head h2,
+    .panel-head h3 {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .panel-body {
+      padding: 0;
+      overflow-x: auto;
+    }
+
+    .panel-body > .form-grid,
+    .panel-body > .split-list,
+    .panel-body > .empty,
+    .panel-body > .quote-grid {
+      margin: 16px;
+    }
+
+    .panel-body > .quote-grid {
+      width: calc(100% - 32px);
+    }
+
+    .table {
+      min-width: 1080px;
+      table-layout: auto;
+      font-size: 13px;
+    }
+
+    .table th,
+    .table td {
+      padding: 12px 14px;
+      white-space: nowrap;
+      line-height: 1.45;
+    }
+
+    .table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f6f8fb;
+      color: #58697d;
+    }
+
+    .table td:nth-child(2),
+    .table td:nth-child(3) {
+      white-space: normal;
+      min-width: 150px;
+    }
+
+    .badge {
+      min-height: 26px;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .toolbar {
+      padding: 12px 14px;
+      border: 1px solid #dce3ee;
+      border-radius: var(--radius);
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(16, 24, 39, .04);
+    }
+
+    .field,
+    .select,
+    .form-item input,
+    .form-item select,
+    .form-item textarea {
+      border-color: #cfd8e6;
+      background: #fbfcfe;
+    }
+
+    .field:focus,
+    .select:focus,
+    .form-item input:focus,
+    .form-item select:focus,
+    .form-item textarea:focus {
+      outline: 2px solid rgba(31, 95, 153, .18);
+      border-color: #1f5f99;
+      background: #ffffff;
+    }
+
+    .timeline {
+      gap: 10px;
+    }
+
+    .step {
+      border-color: #dce3ee;
+      box-shadow: 0 6px 16px rgba(16, 24, 39, .04);
+    }
+
+    .task-row {
+      padding: 14px 16px;
+    }
+
+    .task-row strong {
+      font-size: 14px;
+    }
+
+    .quote-grid {
+      box-shadow: 0 6px 16px rgba(16, 24, 39, .04);
+    }
+
+    .quote-cell {
+      padding: 12px;
+      line-height: 1.45;
+    }
+
+    .command-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .overview-strip {
+      display: grid;
+      grid-template-columns: minmax(260px, 1.35fr) repeat(3, minmax(130px, .65fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .hero-card {
+      min-height: 156px;
+      padding: 18px;
+      border: 1px solid #dbe4f0;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 10px 28px rgba(16, 24, 39, .06);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .hero-card .eyebrow {
+      color: #607286;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .hero-card strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 28px;
+      line-height: 1.15;
+      color: #132033;
+    }
+
+    .hero-card p {
+      margin: 8px 0 0;
+      color: #607286;
+      line-height: 1.55;
+    }
+
+    .mini-stat {
+      min-height: 156px;
+      padding: 16px;
+      border: 1px solid #dbe4f0;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 10px 28px rgba(16, 24, 39, .05);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .mini-stat span {
+      color: #607286;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .mini-stat strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 30px;
+      line-height: 1;
+    }
+
+    .mini-stat small {
+      color: #728196;
+      line-height: 1.4;
+    }
+
+    .stage-strip {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .stage-pill {
+      min-height: 54px;
+      padding: 10px 12px;
+      border: 1px solid #dbe4f0;
+      border-radius: 8px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .stage-pill b {
+      font-size: 13px;
+    }
+
+    .stage-pill span {
+      min-width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #eef5fb;
+      color: #155f9f;
+      font-weight: 900;
+    }
+
+    .command-panel .panel-body {
+      overflow-x: auto;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .signal-list {
+      padding: 6px 0;
+    }
+
+    .signal {
+      display: grid;
+      grid-template-columns: 8px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      padding: 13px 16px;
+      border-bottom: 1px solid #e5ebf3;
+    }
+
+    .signal:last-child {
+      border-bottom: 0;
+    }
+
+    .signal-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      margin-top: 7px;
+      background: #155f9f;
+    }
+
+    .signal-dot.warn { background: #c87919; }
+    .signal-dot.risk { background: #c2414b; }
+    .signal-dot.good { background: #2f7d57; }
+
+    .signal strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .signal p {
+      margin: 0;
+      color: #65758a;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .status-matrix {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 16px;
+    }
+
+    .status-tile {
+      min-height: 78px;
+      padding: 12px;
+      border: 1px solid #e1e7f0;
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .status-tile span {
+      display: block;
+      color: #65758a;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .status-tile b {
+      font-size: 20px;
+    }
+
+    @media (max-width: 1180px) {
+      .command-layout { grid-template-columns: 1fr; }
+      .overview-strip { grid-template-columns: 1fr 1fr; }
+      .stage-strip { grid-template-columns: repeat(3, 1fr); }
+      .utility { display: none; }
+      .app { grid-template-columns: 210px minmax(0, 1fr); }
+      .metric-grid { grid-template-columns: repeat(3, 1fr); }
+      .timeline { grid-template-columns: repeat(4, 1fr); }
+      .layout-two { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: repeat(2, 1fr); }
+      .span-4 { grid-column: span 2; }
+    }
+
+    @media (max-width: 640px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; }
+      .topbar { height: auto; align-items: flex-start; padding: 14px; gap: 10px; flex-direction: column; }
+      .content { padding: 14px; }
+      .metric-grid { grid-template-columns: 1fr; }
+      .timeline { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr; }
+      .span-2, .span-4 { grid-column: span 1; }
+      .quote-grid { grid-template-columns: 1fr; }
+      .quote-cell { border-right: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">船</div>
+          <div>
+            <strong>船供平台</strong>
+          <span>企业级船舶供应管理</span>
+          </div>
+        </div>
+
+      <div class="role-switch" aria-label="端口切换">
+        <button class="active" data-role="agency">船代</button>
+        <button data-role="supplier">供应商</button>
+        <button data-role="ops">运营</button>
+      </div>
+
+      <div class="nav-title">船代企业端</div>
+      <nav class="nav" id="nav"></nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">工作台</h1>
+          <p id="page-desc">从采购需求、报价竞争、港口履约到结算归档组织业务。</p>
+        </div>
+        <div class="top-actions">
+          <div class="utility">
+            <span>待办(12)</span>
+            <span>消息(5)</span>
+            <span>海洋供应链有限公司</span>
+          </div>
+          <button class="btn" onclick="openDrawer('导入采购清单')"><span>⇧</span>导入清单</button>
+          <button class="btn primary" onclick="openDrawer('新建采购需求')"><span>＋</span>新建采购需求</button>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="notice-bar">
+          <span>计划靠泊提醒：SEA BRIDGE 将于 05-29 09:30 靠泊上海港锚地</span>
+          <button class="btn small">查看详情</button>
+        </div>
+        <div class="filter-bar">
+          <div class="filter-chip">全部船舶</div>
+          <div class="filter-chip">2026-05-26 至 2026-06-02</div>
+          <div class="filter-chip">全部状态</div>
+          <div class="filter-chip">全部港口</div>
+        </div>
+        <section class="page active" id="dashboard"></section>
+        <section class="page" id="orders"></section>
+        <section class="page" id="order-detail"></section>
+        <section class="page" id="requisition"></section>
+        <section class="page" id="quotes"></section>
+        <section class="page" id="products"></section>
+        <section class="page" id="suppliers"></section>
+        <section class="page" id="mapping"></section>
+        <section class="page" id="fulfillment"></section>
+        <section class="page" id="logistics"></section>
+        <section class="page" id="documents"></section>
+        <section class="page" id="settlement"></section>
+        <section class="page" id="supplier-workbench"></section>
+        <section class="page" id="supplier-rfq"></section>
+        <section class="page" id="supplier-orders"></section>
+        <section class="page" id="ops"></section>
+      </section>
+    </main>
+  </div>
+
+  <div class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <h2 id="drawer-title">新建</h2>
+        <button class="btn ghost" onclick="closeDrawer()">关闭</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item span-2">
+          <label>船名</label>
+          <input value="OCEAN STAR" />
+        </div>
+        <div class="form-item">
+          <label>港口</label>
+          <select><option>宁波舟山港</option><option>上海港</option><option>青岛港</option></select>
+        </div>
+        <div class="form-item">
+          <label>计划补给时间</label>
+          <input value="2026-05-29 14:00" />
+        </div>
+        <div class="form-item span-2">
+          <label>船东/船管公司</label>
+          <input value="Blue Ocean Management" />
+        </div>
+        <div class="form-item">
+          <label>供应方式</label>
+          <select><option>靠泊直供</option><option>锚地驳船供应</option></select>
+        </div>
+        <div class="form-item">
+          <label>加急标记</label>
+          <select><option>普通</option><option>加急</option></select>
+        </div>
+        <div class="form-item span-4">
+          <label>备注</label>
+          <textarea>船东已邮件确认需求，需先做报价。</textarea>
+        </div>
+      </div>
+      <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn">保存草稿</button>
+        <button class="btn primary">提交并进入待询价</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const pages = {
+      agency: [
+        ["dashboard", "采购总控", "从采购需求、报价竞争、港口履约到结算归档组织业务。", "⌂"],
+        ["orders", "采购订单", "查询和跟进全部船供采购订单。", "≡"],
+        ["order-detail", "订单详情", "一张订单贯穿询价、备货、物流、单证和对账。", "◎"],
+        ["requisition", "采购清单", "将船东原始清单转成可询价明细。", "▤"],
+        ["quotes", "询价报价", "发起询价、对比报价并生成对外报价单。", "¥"],
+        ["products", "标准库", "维护 IMPA/MSG 标准项，支撑映射和比价。", "□"],
+        ["suppliers", "供应商协同", "维护合作供应商、响应率和港口覆盖。", "◇"],
+        ["mapping", "SKU 映射", "供应商 SKU 对应到平台标准库。", "⇄"],
+        ["fulfillment", "备货验货", "跟进备货、验货照片和异常处理。", "✓"],
+        ["logistics", "港口履约", "记录车辆、驳船、运抵和上船节点。", "→"],
+        ["documents", "单证归档", "按订单归集报价、申报、签收和对账资料。", "▣"],
+        ["settlement", "结算归档", "开放费用项、标准模板导出和付款登记。", "∑"]
+      ],
+      supplier: [
+        ["supplier-workbench", "供应商工作台", "供应商查看待报价、待备货和异常提醒。", "⌂"],
+        ["supplier-rfq", "询价单", "供应商填写报价、库存和交货时间。", "¥"],
+        ["supplier-orders", "供货订单", "供应商确认接单、更新备货并上传资料。", "✓"],
+        ["mapping", "商品映射", "维护供应商商品与标准商品的对应关系。", "⇄"],
+        ["settlement", "对账记录", "查看应付对账和凭证资料。", "∑"]
+      ],
+      ops: [
+        ["ops", "平台运营", "维护企业、标准商品、类目单位和模板。", "⚙"],
+        ["products", "标准商品管理", "审核待确认商品，合并重复商品。", "□"],
+        ["documents", "模板与单证", "维护报价单、对账单和归档资料。", "▣"]
+      ]
+    };
+
+    const orders = [
+      ["SS-20260527-001", "OCEAN STAR / V026", "宁波舟山港 / 3号泊位", "05-29 14:00", "待报价汇总", "blue", "王海", "3家", "¥128,600", "正常"],
+      ["SS-20260527-002", "SEA BRIDGE / V118", "上海港 / 锚地", "05-28 09:30", "待验货", "amber", "李敏", "2家", "¥86,200", "加急"],
+      ["SS-20260526-009", "PACIFIC LINE / V042", "青岛港 / 7号泊位", "05-27 18:00", "物流交付中", "green", "赵宁", "4家", "¥214,900", "正常"],
+      ["SS-20260526-006", "EAST VOYAGER / V311", "宁波舟山港 / 锚地", "05-27 16:00", "异常处理中", "red", "王海", "1家", "¥43,500", "缺货"]
+    ];
+
+    const replenishment = [
+      ["蔬菜组合", "伙食 / 新鲜蔬菜包", "箱", "20", "已匹配", "green"],
+      ["矿泉水 500ml", "伙食 / 饮用水", "箱", "60", "已匹配", "green"],
+      ["M20 螺栓", "物料 / 紧固件", "盒", "12", "待确认", "amber"],
+      ["主机滤芯", "备件 / 机舱滤芯", "个", "4", "待确认", "amber"]
+    ];
+
+    const products = [
+      ["STD-FOOD-0012", "新鲜蔬菜包", "伙食", "10kg/箱", "箱", "启用", "26"],
+      ["STD-FOOD-0038", "饮用水", "伙食", "500ml*24", "箱", "启用", "18"],
+      ["STD-MAT-0091", "M20 螺栓", "物料", "不锈钢", "盒", "启用", "7"],
+      ["STD-SPARE-0177", "主机滤芯", "备件", "MAN 适配", "个", "待审核", "3"]
+    ];
+
+    const suppliers = [
+      ["宁波海源船供", "宁波舟山港", "伙食、物料", "94%", "91%", "正常"],
+      ["舟山远达物料", "宁波舟山港", "物料、备件", "88%", "86%", "正常"],
+      ["上海港联食品", "上海港", "伙食", "96%", "89%", "正常"],
+      ["青岛海润备件", "青岛港", "备件", "82%", "84%", "观察"]
+    ];
+
+    function badge(text, color = "blue") {
+      return `<span class="badge ${color}">${text}</span>`;
+    }
+
+    function renderNav(role = "agency") {
+      const nav = document.getElementById("nav");
+      nav.innerHTML = pages[role].map((item, index) => `
+        <button class="${index === 0 ? "active" : ""}" data-page="${item[0]}" data-title="${item[1]}" data-desc="${item[2]}">
+          <span class="ico">${item[3]}</span><span>${item[1]}</span>
+        </button>
+      `).join("");
+      document.querySelector(".nav-title").textContent = role === "agency" ? "船代企业端" : role === "supplier" ? "供应商协同端" : "平台运营端";
+      nav.querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => activatePage(btn)));
+      activatePage(nav.querySelector("button"));
+    }
+
+    function activatePage(btn) {
+      document.querySelectorAll(".nav button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      document.getElementById(btn.dataset.page).classList.add("active");
+      document.getElementById("page-title").textContent = btn.dataset.title;
+      document.getElementById("page-desc").textContent = btn.dataset.desc;
+    }
+
+    document.querySelectorAll(".role-switch button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".role-switch button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        renderNav(btn.dataset.role);
+      });
+    });
+
+    function openDrawer(title) {
+      document.getElementById("drawer-title").textContent = title;
+      document.getElementById("drawer").classList.add("open");
+      document.getElementById("drawer").setAttribute("aria-hidden", "false");
+    }
+
+    function closeDrawer() {
+      document.getElementById("drawer").classList.remove("open");
+      document.getElementById("drawer").setAttribute("aria-hidden", "true");
+    }
+
+    function orderTable() {
+      return `
+        <table class="table">
+          <thead><tr><th>订单编号</th><th>船名/航次</th><th>港口/泊位</th><th>补给时间</th><th>状态</th><th>业务员</th><th>供应商</th><th>金额</th><th>标记</th><th>操作</th></tr></thead>
+          <tbody>
+            ${orders.map(o => `<tr><td>${o[0]}</td><td>${o[1]}</td><td>${o[2]}</td><td>${o[3]}</td><td>${badge(o[4], o[5])}</td><td>${o[6]}</td><td>${o[7]}</td><td>${o[8]}</td><td>${o[9]}</td><td><button class="btn small" onclick="document.querySelector('[data-page=order-detail]').click()">查看</button></td></tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    function replenishmentTable() {
+      return `
+        <table class="table">
+          <thead><tr><th>原始物资名称</th><th>标准商品</th><th>单位</th><th>数量</th><th>匹配状态</th><th>操作</th></tr></thead>
+          <tbody>
+            ${replenishment.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${badge(r[4], r[5])}</td><td><button class="btn small">调整映射</button></td></tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    function productTable() {
+      return `
+        <table class="table">
+          <thead><tr><th>标准编号</th><th>标准名称</th><th>品类</th><th>规格</th><th>单位</th><th>状态</th><th>关联供应商商品</th></tr></thead>
+          <tbody>
+            ${products.map(p => `<tr><td>${p[0]}</td><td>${p[1]}</td><td>${p[2]}</td><td>${p[3]}</td><td>${p[4]}</td><td>${badge(p[5], p[5] === "启用" ? "green" : "amber")}</td><td>${p[6]}</td></tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    function supplierTable() {
+      return `
+        <table class="table">
+          <thead><tr><th>供应商</th><th>服务港口</th><th>主营品类</th><th>响应率</th><th>准时率</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            ${suppliers.map(s => `<tr><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td><td>${s[3]}</td><td>${s[4]}</td><td>${badge(s[5], s[5] === "正常" ? "green" : "amber")}</td><td><button class="btn small">查看商品</button></td></tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    function pageShell(title, actions, body) {
+      return `
+        <div class="toolbar">
+          <div class="filters">
+            <input class="field" placeholder="订单编号/船名" />
+            <select class="select"><option>全部状态</option><option>待询价</option><option>待验货</option><option>待对账</option></select>
+            <select class="select"><option>全部港口</option><option>宁波舟山港</option><option>上海港</option><option>青岛港</option></select>
+          </div>
+          <div>${actions}</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>${title}</h2></div>
+          <div class="panel-body">${body}</div>
+        </div>`;
+    }
+
+    function renderDashboard() {
+      document.getElementById("dashboard").innerHTML = `
+        <div class="overview-strip">
+          <div class="hero-card">
+            <div>
+              <div class="eyebrow">采购交易总控</div>
+              <strong>29 张采购订单正在推进</strong>
+              <p>重点关注清单匹配、供应商响应、报价有效期、港口作业窗口和对账归档，优先处理临近离港与异常订单。</p>
+            </div>
+            <div>
+              <button class="btn primary" onclick="openDrawer('新建采购需求')">新建采购需求</button>
+              <button class="btn" onclick="document.querySelector('[data-page=quotes]').click()">处理报价</button>
+            </div>
+          </div>
+          <div class="mini-stat"><div><span>待船东确认</span><strong>5</strong></div><small>2 单报价有效期少于 12 小时</small></div>
+          <div class="mini-stat"><div><span>今日交付</span><strong>4</strong></div><small>1 单锚地供应需补充运抵资料</small></div>
+          <div class="mini-stat"><div><span>异常风险</span><strong>2</strong></div><small>备件缺货、驳船时间待确认</small></div>
+        </div>
+        <div class="stage-strip">
+          <div class="stage-pill"><b>待询价</b><span>8</span></div>
+          <div class="stage-pill"><b>询价中</b><span>11</span></div>
+          <div class="stage-pill"><b>待备货</b><span>6</span></div>
+          <div class="stage-pill"><b>待验货</b><span>6</span></div>
+          <div class="stage-pill"><b>待交付</b><span>4</span></div>
+          <div class="stage-pill"><b>待对账</b><span>9</span></div>
+        </div>
+        <div class="command-layout">
+          <div class="panel command-panel">
+            <div class="panel-head">
+              <h2>订单指挥中心</h2>
+              <div>
+                <button class="btn small">筛选高风险</button>
+                <button class="btn small">导出</button>
+              </div>
+            </div>
+            <div class="panel-body">${orderTable()}</div>
+          </div>
+          <div class="side-stack">
+            <div class="panel">
+              <div class="panel-head"><h2>风险与待办</h2></div>
+              <div class="signal-list">
+                <div class="signal"><i class="signal-dot warn"></i><div><strong>OCEAN STAR 报价即将截止</strong><p>3 家供应商已报价，1 家未响应。</p></div>${badge("待汇总", "blue")}</div>
+                <div class="signal"><i class="signal-dot warn"></i><div><strong>SEA BRIDGE 需要现场验货</strong><p>供应商已送至临时仓库，需现场清点。</p></div>${badge("加急", "amber")}</div>
+                <div class="signal"><i class="signal-dot risk"></i><div><strong>EAST VOYAGER 备件缺货</strong><p>供应商建议替代型号，等待业务确认。</p></div>${badge("异常", "red")}</div>
+                <div class="signal"><i class="signal-dot good"></i><div><strong>PACIFIC LINE 待上传签收单</strong><p>已完成吊装作业，待补齐签收资料。</p></div>${badge("待归档", "green")}</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h2>单证与结算</h2></div>
+              <div class="status-matrix">
+                <div class="status-tile"><span>待上传单证</span><b>12</b></div>
+                <div class="status-tile"><span>待模板导出</span><b>7</b></div>
+                <div class="status-tile"><span>待开票</span><b>6</b></div>
+                <div class="status-tile"><span>未回款</span><b>9</b></div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderOrderDetail() {
+      document.getElementById("order-detail").innerHTML = `
+        <div class="timeline">
+          <div class="step done"><strong>需求录入</strong><span>已导入清单</span></div>
+          <div class="step done"><strong>询价报价</strong><span>3 家已报价</span></div>
+          <div class="step current"><strong>船东确认</strong><span>等待确认附件</span></div>
+          <div class="step"><strong>备货验货</strong><span>未开始</span></div>
+          <div class="step"><strong>物流交付</strong><span>未调度</span></div>
+          <div class="step"><strong>签收核销</strong><span>未上传</span></div>
+          <div class="step"><strong>对账结算</strong><span>未出账</span></div>
+          <div class="step"><strong>归档完成</strong><span>未完成</span></div>
+        </div>
+        <div class="layout-two">
+          <div class="panel">
+            <div class="panel-head"><h2>订单 SS-20260527-001</h2><div><button class="btn small">复制订单</button><button class="btn small primary">登记船东确认</button></div></div>
+            <div class="panel-body">
+              <div class="form-grid">
+                <div class="form-item"><label>船名</label><input value="OCEAN STAR" /></div>
+                <div class="form-item"><label>航次</label><input value="V026" /></div>
+                <div class="form-item"><label>港口</label><input value="宁波舟山港" /></div>
+                <div class="form-item"><label>补给时间</label><input value="2026-05-29 14:00" /></div>
+                <div class="form-item span-2"><label>船东/船管公司</label><input value="Blue Ocean Management" /></div>
+                <div class="form-item"><label>供应方式</label><input value="靠泊直供" /></div>
+                <div class="form-item"><label>业务员</label><input value="王海" /></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>关键动作</h2></div>
+            <div class="panel-body split-list">
+              <button class="btn primary" onclick="document.querySelector('[data-page=quotes]').click()">生成对外报价单</button>
+              <button class="btn" onclick="document.querySelector('[data-page=requisition]').click()">查看补给清单</button>
+              <button class="btn" onclick="document.querySelector('[data-page=documents]').click()">上传确认附件</button>
+              <button class="btn" onclick="document.querySelector('[data-page=settlement]').click()">查看费用汇总</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px;" class="panel">
+          <div class="panel-head"><h2>补给明细</h2></div>
+          <div class="panel-body">${replenishmentTable()}</div>
+        </div>`;
+    }
+
+    function renderQuotes() {
+      document.getElementById("quotes").innerHTML = `
+        <div class="toolbar">
+          <div class="tabs"><button class="active">报价对比</button><button>费用项</button><button>报价版本</button><button>模板导出</button></div>
+          <div><button class="btn">添加费用项</button><button class="btn primary">导出标准报价单</button></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>报价对比表</h2><span>${badge("推荐选择：宁波海源船供", "green")}</span></div>
+          <div class="panel-body">
+            <div class="quote-grid">
+              <div class="quote-cell head">物资/维度</div><div class="quote-cell head">宁波海源船供</div><div class="quote-cell head">舟山远达物料</div><div class="quote-cell head">上海港联食品</div>
+              <div class="quote-cell">新鲜蔬菜包</div><div class="quote-cell win">¥1,920<br>${badge("有库存", "green")}</div><div class="quote-cell">¥2,050<br>${badge("有库存", "green")}</div><div class="quote-cell">不报价</div>
+              <div class="quote-cell">饮用水</div><div class="quote-cell win">¥1,440<br>${badge("今日可送", "green")}</div><div class="quote-cell">¥1,560<br>${badge("明日可送", "amber")}</div><div class="quote-cell">¥1,620</div>
+              <div class="quote-cell">M20 螺栓</div><div class="quote-cell">¥860<br>${badge("替代规格", "amber")}</div><div class="quote-cell win">¥790<br>${badge("原规格", "green")}</div><div class="quote-cell">不报价</div>
+              <div class="quote-cell">服务评分</div><div class="quote-cell win">响应 94% / 准时 91%</div><div class="quote-cell">响应 88% / 准时 86%</div><div class="quote-cell">响应 96% / 准时 89%</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderStaticPages() {
+      document.getElementById("orders").innerHTML = pageShell("船供订单列表", `<button class="btn">导出</button><button class="btn primary" onclick="openDrawer('新建船供订单')">新建订单</button>`, orderTable());
+      document.getElementById("requisition").innerHTML = pageShell("补给清单管理", `<button class="btn">批量导入</button><button class="btn primary">匹配标准商品</button>`, replenishmentTable());
+      document.getElementById("products").innerHTML = pageShell("标准商品库", `<button class="btn">批量导入</button><button class="btn primary">新增标准商品</button>`, productTable());
+      document.getElementById("suppliers").innerHTML = pageShell("本企业供应商池", `<button class="btn">导入供应商</button><button class="btn primary">新增供应商</button>`, supplierTable());
+      document.getElementById("mapping").innerHTML = pageShell("供应商商品映射", `<button class="btn">批量导入</button><button class="btn primary">新增映射</button>`, `
+        <table class="table"><thead><tr><th>供应商</th><th>供应商商品</th><th>供应商规格</th><th>对应标准商品</th><th>可供状态</th><th>操作</th></tr></thead>
+        <tbody><tr><td>宁波海源船供</td><td>绿色蔬菜组合</td><td>10kg</td><td>新鲜蔬菜包</td><td>${badge("可供", "green")}</td><td><button class="btn small">修改</button></td></tr>
+        <tr><td>舟山远达物料</td><td>不锈钢 M20 螺丝</td><td>盒装</td><td>M20 螺栓</td><td>${badge("可供", "green")}</td><td><button class="btn small">修改</button></td></tr></tbody></table>`);
+      document.getElementById("fulfillment").innerHTML = pageShell("备货验货", `<button class="btn primary">上传验货照片</button>`, `
+        <table class="table"><thead><tr><th>订单</th><th>供应商</th><th>备货状态</th><th>计划送货</th><th>验货状态</th><th>异常</th></tr></thead>
+        <tbody><tr><td>SS-20260527-001</td><td>宁波海源船供</td><td>${badge("备货中", "blue")}</td><td>05-28 11:00</td><td>${badge("待验货", "amber")}</td><td>无</td></tr>
+        <tr><td>SS-20260527-002</td><td>舟山远达物料</td><td>${badge("已送仓", "green")}</td><td>05-27 16:00</td><td>${badge("待清点", "amber")}</td><td>1 项待确认替代品</td></tr></tbody></table>`);
+      document.getElementById("logistics").innerHTML = pageShell("物流交付", `<button class="btn primary">新建物流任务</button>`, `
+        <table class="table"><thead><tr><th>订单</th><th>供应方式</th><th>接货点</th><th>交付点</th><th>当前节点</th><th>计划时间</th><th>操作</th></tr></thead>
+        <tbody><tr><td>SS-20260526-009</td><td>靠泊直供</td><td>临时仓库 A</td><td>3号泊位</td><td>${badge("港区转运", "blue")}</td><td>05-27 17:30</td><td><button class="btn small">更新节点</button></td></tr>
+        <tr><td>SS-20260526-006</td><td>锚地驳船</td><td>码头接驳点</td><td>锚地</td><td>${badge("待运抵申报", "amber")}</td><td>05-27 19:00</td><td><button class="btn small">上传资料</button></td></tr></tbody></table>`);
+      document.getElementById("documents").innerHTML = pageShell("单证归档", `<button class="btn">导出归档包</button><button class="btn primary">上传单证</button>`, `
+        <table class="table"><thead><tr><th>单证类型</th><th>文件名称</th><th>关联订单</th><th>上传人</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody><tr><td>报价单</td><td>OCEAN_STAR_报价单.docx</td><td>SS-20260527-001</td><td>王海</td><td>${badge("已归档", "green")}</td><td><button class="btn small">下载</button></td></tr>
+        <tr><td>船东确认</td><td>确认邮件截图.png</td><td>SS-20260527-001</td><td>王海</td><td>${badge("待补充", "amber")}</td><td><button class="btn small">补充</button></td></tr></tbody></table>`);
+      document.getElementById("settlement").innerHTML = pageShell("对账结算", `<button class="btn">添加费用项</button><button class="btn primary">导出标准对账单</button>`, `
+        <table class="table"><thead><tr><th>订单</th><th>应收金额</th><th>应付金额</th><th>费用项</th><th>开票状态</th><th>回款状态</th><th>付款状态</th></tr></thead>
+        <tbody><tr><td>SS-20260527-001</td><td>¥148,900</td><td>¥128,600</td><td>物资费、港杂费、服务费</td><td>${badge("待开票", "amber")}</td><td>${badge("未回款", "gray")}</td><td>${badge("未付款", "gray")}</td></tr></tbody></table>`);
+      document.getElementById("supplier-workbench").innerHTML = `
+        <div class="metric-grid"><div class="metric"><span>待报价</span><strong>6</strong></div><div class="metric"><span>待接单</span><strong>3</strong></div><div class="metric"><span>备货中</span><strong>5</strong></div><div class="metric"><span>待上传资料</span><strong>4</strong></div><div class="metric"><span>异常</span><strong>1</strong></div><div class="metric"><span>待对账</span><strong>7</strong></div></div>
+        <div class="panel"><div class="panel-head"><h2>供应商待办</h2></div><div class="panel-body">${document.getElementById("fulfillment").innerHTML || ""}</div></div>`;
+      document.getElementById("supplier-rfq").innerHTML = pageShell("供应商询价单", `<button class="btn">拒绝报价</button><button class="btn primary">提交报价</button>`, replenishmentTable());
+      document.getElementById("supplier-orders").innerHTML = pageShell("供应商供货订单", `<button class="btn primary">更新备货状态</button>`, `
+        <table class="table"><thead><tr><th>订单</th><th>船名</th><th>交货地点</th><th>交货时间</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody><tr><td>SUP-20260527-016</td><td>OCEAN STAR</td><td>宁波临时仓库 A</td><td>05-28 11:00</td><td>${badge("备货中", "blue")}</td><td><button class="btn small">上传照片</button></td></tr></tbody></table>`);
+      document.getElementById("ops").innerHTML = `
+        <div class="layout-two">
+          <div class="panel"><div class="panel-head"><h2>运营基础配置</h2></div><div class="panel-body split-list">
+            <div class="task-row"><div><strong>企业管理</strong><span>船代企业、供应商基础资料与启停用</span></div><button class="btn small">进入</button></div>
+            <div class="task-row"><div><strong>标准商品审核</strong><span>待确认商品、重复商品合并、别名维护</span></div><button class="btn small">进入</button></div>
+            <div class="task-row"><div><strong>单证模板</strong><span>报价单、对账单、归档包模板字段配置</span></div><button class="btn small">进入</button></div>
+          </div></div>
+          <div class="panel"><div class="panel-head"><h2>运营提醒</h2></div><div class="panel-body"><div class="empty">一期运营端保持轻量，优先支撑基础数据维护。</div></div></div>
+        </div>`;
+    }
+
+    renderDashboard();
+    renderOrderDetail();
+    renderQuotes();
+    renderStaticPages();
+    renderNav("agency");
+  </script>
+</body>
+</html>

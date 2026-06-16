@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>船供一站式服务平台首页原型</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --ink: #102535;
+      --navy: #071d33;
+      --blue: #0e65b7;
+      --teal: #0b7f77;
+      --cyan: #14b8d6;
+      --amber: #f0b437;
+      --orange: #d97817;
+      --line: #dfe8ee;
+      --muted: #607281;
+      --surface: #ffffff;
+      --soft: #f3f6f8;
+    }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      background: var(--soft);
+      color: var(--ink);
+      letter-spacing: 0;
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 0 28px; }
+    .topbar {
+      height: 38px;
+      background: #071d33;
+      color: #d8e4ee;
+      font-size: 13px;
+    }
+    .topbar .wrap,
+    .header .wrap,
+    .nav .wrap {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .top-links { display: flex; gap: 22px; white-space: nowrap; }
+    .header {
+      height: 94px;
+      background: #fff;
+      border-bottom: 1px solid #dfe7ec;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      min-width: 238px;
+    }
+    .brand-mark {
+      width: 54px;
+      height: 54px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0a3a66, #0e79b2);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 22px;
+      box-shadow: 0 10px 22px rgba(8, 52, 92, .22);
+    }
+    i[data-lucide] {
+      width: 18px;
+      height: 18px;
+      stroke-width: 2;
+      flex: 0 0 auto;
+    }
+    .brand strong { display: block; font-size: 24px; line-height: 1.1; }
+    .brand span { display: block; margin-top: 5px; color: #607281; font-size: 13px; }
+    .search-zone {
+      flex: 1;
+      max-width: 760px;
+    }
+    .search-box {
+      height: 46px;
+      border: 2px solid #0e65b7;
+      border-radius: 6px;
+      display: grid;
+      grid-template-columns: 188px 1fr 96px;
+      overflow: visible;
+      background: #fff;
+      position: relative;
+    }
+    .search-box input,
+    .search-box button {
+      border: 0;
+      outline: 0;
+      font-family: inherit;
+      font-size: 14px;
+    }
+    .standard-picker {
+      position: relative;
+      min-width: 0;
+      border-right: 1px solid #d3e3ee;
+      background: #fff;
+    }
+    .standard-picker-trigger {
+      width: 100%;
+      height: 100%;
+      padding: 0 12px 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: #102535;
+      font-weight: 700;
+      background: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .standard-picker-trigger span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .standard-picker-trigger i[data-lucide] {
+      width: 16px;
+      height: 16px;
+      color: #607281;
+    }
+    .standard-picker-panel {
+      position: absolute;
+      top: 52px;
+      left: -2px;
+      z-index: 20;
+      width: min(760px, calc(100vw - 56px));
+      max-height: 456px;
+      display: none;
+      grid-template-columns: 246px 1fr;
+      border: 1px solid #ccd8e0;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 14px 28px rgba(16, 37, 53, .12);
+      overflow: hidden;
+    }
+    .standard-picker.open .standard-picker-panel { display: grid; }
+    .standard-levels,
+    .standard-children {
+      max-height: 456px;
+      overflow-y: auto;
+    }
+    .standard-levels {
+      padding: 12px;
+      background: #f8fafb;
+      border-right: 1px solid #e0ebf2;
+    }
+    .standard-children {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .standard-panel-title {
+      margin: 0 0 10px;
+      color: #607281;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .standard-source {
+      margin: 0 0 10px;
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+      border: 1px solid #dfe8ee;
+      border-radius: 8px;
+      background: #fff;
+      color: #102535;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .standard-source.connected {
+      border-color: #b9ddcf;
+      background: #f8fcfa;
+      color: #126345;
+    }
+    .standard-source.fallback {
+      border-color: #efd799;
+      background: #fffdf7;
+      color: #7a4b12;
+    }
+    .standard-source.loading {
+      color: #607281;
+    }
+    .standard-parent,
+    .standard-child {
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #102535;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .standard-parent {
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid #e1e8ee;
+      background: #fff;
+    }
+    .standard-parent b,
+    .standard-child b {
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .standard-parent span,
+    .standard-child span {
+      color: #6a7d8b;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .standard-parent:hover {
+      background: #f5f8fa;
+      border-color: #cbd8e0;
+      color: #102535;
+    }
+    .standard-parent.active {
+      background: #f3f6f8;
+      border-color: #8fa5b4;
+      color: #102535;
+      box-shadow: inset 3px 0 0 #102535;
+    }
+    .standard-parent.active span,
+    .standard-parent:hover span { color: #42596a; }
+    .standard-parent em {
+      grid-row: 1;
+      grid-column: 2;
+      min-width: 42px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: #f3f6f8;
+      color: #42596a;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 800;
+    }
+    .standard-detail-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid #e5edf3;
+      padding-bottom: 12px;
+    }
+    .standard-detail-head h3 {
+      margin: 0 0 5px;
+      font-size: 18px;
+      line-height: 1.25;
+      text-wrap: balance;
+    }
+    .standard-detail-head p {
+      margin: 0;
+      color: #607281;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .standard-count {
+      min-width: 88px;
+      border: 1px solid #dfe8ee;
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: #102535;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+      background: #f8fafb;
+    }
+    .standard-count b {
+      display: block;
+      color: #102535;
+      font-size: 18px;
+      line-height: 1.1;
+    }
+    .standard-child-grid {
+      display: grid;
+      gap: 8px;
+      position: relative;
+      padding-left: 10px;
+    }
+    .standard-child-grid::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 1px;
+      background: #d8e1e8;
+    }
+    .standard-child {
+      position: relative;
+      padding: 10px 12px 10px 14px;
+      border: 1px solid transparent;
+      background: #fff;
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      align-items: center;
+    }
+    .standard-child::before {
+      content: "";
+      position: absolute;
+      left: -10px;
+      top: 28px;
+      width: 10px;
+      height: 1px;
+      background: #d8e1e8;
+    }
+    .standard-child::after {
+      content: "";
+      position: absolute;
+      left: -14px;
+      top: 24px;
+      width: 8px;
+      height: 8px;
+      border: 2px solid #8fa5b4;
+      border-radius: 999px;
+      background: #fff;
+    }
+    .standard-child:hover {
+      border-color: #cbd8e0;
+      background: #f8fafb;
+    }
+    .standard-child.selected {
+      border-color: #8fa5b4;
+      background: #f3f6f8;
+    }
+    .standard-child.selected b {
+      color: #102535;
+    }
+    .standard-child em {
+      display: inline-flex;
+      color: #42596a;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 800;
+      justify-content: flex-end;
+      white-space: nowrap;
+    }
+    .standard-item-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .standard-item {
+      width: 100%;
+      min-height: 46px;
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid #e0e8ee;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      color: #102535;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .standard-item:hover {
+      border-color: #b8cbd8;
+      background: #f8fafb;
+    }
+    .standard-item.selected {
+      border-color: #0e65b7;
+      background: #f2f8fd;
+    }
+    .standard-item-code {
+      color: #0a4d8d;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+    .standard-item-name {
+      min-width: 0;
+      color: #102535;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.45;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .standard-item-meta {
+      color: #607281;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .standard-empty {
+      border: 1px dashed #cfe0eb;
+      border-radius: 8px;
+      padding: 18px;
+      color: #607281;
+      background: #fbfdff;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .search-box input { min-width: 0; padding: 0 15px; }
+    .search-box button {
+      background: #0e65b7;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .hotwords {
+      margin-top: 8px;
+      display: flex;
+      gap: 13px;
+      color: #6d7f8d;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .header-actions { display: flex; gap: 10px; min-width: 178px; justify-content: flex-end; }
+    .head-btn {
+      height: 40px;
+      padding: 0 15px;
+      border-radius: 6px;
+      border: 1px solid #d8e3ea;
+      display: flex;
+      align-items: center;
+      font-size: 13px;
+      background: #fff;
+      color: #213849;
+      gap: 7px;
+    }
+    .head-btn.primary { background: #0b7f77; border-color: #0b7f77; color: #fff; }
+    .nav {
+      height: 44px;
+      background: #fff;
+      border-bottom: 1px solid #dfe7ec;
+    }
+    .nav-left { display: flex; align-items: center; gap: 28px; font-size: 15px; font-weight: 700; }
+    .nav-title {
+      width: 210px;
+      height: 44px;
+      background: #0a3a66;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 9px;
+    }
+    .nav-right { display: none; }
+    .hero {
+      padding: 20px 0 26px;
+      background:
+        linear-gradient(125deg, rgba(7, 29, 51, .96) 0%, rgba(10, 58, 102, .92) 42%, rgba(11, 127, 119, .24) 100%),
+        radial-gradient(circle at 82% 16%, rgba(20, 184, 214, .26), transparent 30%),
+        #071d33;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+    .panel,
+    .hero-card,
+    .section {
+      background: #fff;
+      border: 1px solid #dfe8ee;
+      border-radius: 10px;
+      box-shadow: 0 12px 28px rgba(18, 46, 66, .06);
+    }
+    .category-panel {
+      padding: 14px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,1), rgba(245,249,252,1));
+    }
+    .category-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 2px 0 12px;
+      color: #102535;
+    }
+    .category-card {
+      display: block;
+      border: 1px solid #dfe8ee;
+      border-radius: 8px;
+      padding: 15px 14px;
+      margin-bottom: 10px;
+      background: #f8fbfd;
+      min-height: 112px;
+      transition: border-color .18s ease, background .18s ease, transform .18s ease;
+    }
+    .category-main {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 7px;
+    }
+    .category-card:hover { border-color: #0e65b7; background: #f2f8fd; transform: translateY(-1px); }
+    .category-card b { display: block; font-size: 17px; }
+    .category-card span { display: block; color: #667b89; font-size: 12px; line-height: 1.55; }
+    .category-meta {
+      margin-top: 10px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .category-meta em {
+      display: inline-flex;
+      height: 22px;
+      padding: 0 7px;
+      align-items: center;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid #dfe8ee;
+      color: #4f6373;
+      font-style: normal;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .category-card.service { margin-bottom: 0; }
+    .entry-panel {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      align-content: stretch;
+    }
+    .entry-card {
+      position: relative;
+      min-height: 178px;
+      padding: 18px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #dfe8ee;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(18, 46, 66, .06);
+    }
+    .entry-card h2 { margin: 0 0 10px; font-size: 20px; }
+    .entry-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .entry-title h2 { margin: 0; }
+    .entry-title i[data-lucide] { width: 24px; height: 24px; color: #0e65b7; }
+    .entry-card.personal .entry-title i[data-lucide] { color: #0b7f77; }
+    .entry-card p {
+      margin: 0 0 18px;
+      color: #607281;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .entry-card a {
+      display: inline-flex;
+      height: 38px;
+      padding: 0 14px;
+      align-items: center;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      position: relative;
+      z-index: 1;
+    }
+    .entry-card.collective {
+      background:
+        linear-gradient(145deg, rgba(14, 101, 183, .13), rgba(255,255,255,1) 46%),
+        #fff;
+      border-color: #9cc6ed;
+    }
+    .entry-card.personal {
+      background:
+        linear-gradient(145deg, rgba(11, 127, 119, .12), rgba(255,255,255,1) 48%),
+        #fff;
+      border-color: #a5d8ca;
+    }
+    .entry-card.collective a { background: #0e65b7; color: #fff; }
+    .entry-card.personal a { background: #0b7f77; color: #fff; }
+    .entry-card.ops {
+      background:
+        linear-gradient(145deg, rgba(240, 180, 55, .16), rgba(255,255,255,1) 48%),
+        #fff;
+      border-color: #efd799;
+    }
+    .entry-card.ops .entry-title i[data-lucide] { color: #b76812; }
+    .entry-card.ops a { background: #071d33; color: #fff; }
+    .entry-code {
+      position: absolute;
+      right: 20px;
+      bottom: 18px;
+      font-size: 42px;
+      font-weight: 800;
+      color: rgba(14, 101, 183, .09);
+    }
+    .section { padding: 22px; margin-bottom: 24px; }
+    .exchange-board {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 16px;
+    }
+    .exchange-main {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .exchange-row {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr .8fr .8fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid #edf2f5;
+      font-size: 13px;
+    }
+    .exchange-row:last-child { border-bottom: 0; }
+    .exchange-row.head {
+      background: #f4f8fb;
+      color: #4f6373;
+      font-weight: 800;
+    }
+    .exchange-row b { display: block; font-size: 15px; margin-bottom: 3px; }
+    .exchange-row span { color: #607281; }
+    .quote-state {
+      height: 26px;
+      padding: 0 9px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      background: #e9f6ff;
+      color: #0e65b7;
+      white-space: nowrap;
+    }
+    .quote-state.hot { background: #fff4df; color: #b76812; }
+    .quote-state.risk { background: #fde8e8; color: #b44444; }
+    .exchange-row a {
+      color: #0e65b7;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .port-stack {
+      display: grid;
+      gap: 12px;
+    }
+    .port-card {
+      border: 1px solid #dfe8ee;
+      border-radius: 10px;
+      padding: 15px;
+      background:
+        linear-gradient(135deg, rgba(7, 29, 51, .04), rgba(14, 101, 183, .08)),
+        #fff;
+    }
+    .port-card h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .port-card h3 i[data-lucide] { color: #0e65b7; }
+    .port-line {
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 10px;
+      color: #607281;
+      font-size: 13px;
+      line-height: 1.55;
+      margin-top: 8px;
+    }
+    .port-line b { color: #102535; }
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+    .section-head h2 { margin: 0; font-size: 24px; }
+    .section-head p { margin: 7px 0 0; color: #607281; font-size: 13px; }
+    .section-head a { color: #0e65b7; font-weight: 700; font-size: 13px; white-space: nowrap; }
+    .weather-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .weather-pill {
+      height: 32px;
+      border: 1px solid #d7e4ec;
+      border-radius: 999px;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #294255;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .weather-pill.active {
+      background: #0e65b7;
+      border-color: #0e65b7;
+      color: #fff;
+    }
+    .anchorage-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .anchorage-card {
+      border: 1px solid #dfe8ee;
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+      min-height: 184px;
+      box-shadow: 0 10px 22px rgba(18,46,66,.04);
+    }
+    .anchorage-card.priority {
+      border-color: #0e65b7;
+      box-shadow: 0 12px 28px rgba(14,101,183,.12);
+    }
+    .anchorage-head {
+      padding: 12px 12px 8px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      border-bottom: 1px solid #edf2f5;
+      background: linear-gradient(180deg, #f8fbfd, #fff);
+    }
+    .anchorage-name {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+    .anchorage-name i[data-lucide] {
+      color: #0e65b7;
+      width: 22px;
+      height: 22px;
+    }
+    .anchorage-name b {
+      display: block;
+      font-size: 17px;
+      margin-bottom: 3px;
+    }
+    .anchorage-name span {
+      display: block;
+      color: #607281;
+      font-size: 12px;
+    }
+    .fresh-tag {
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      background: #eefaf5;
+      color: #0b7f77;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .head-right {
+      display: grid;
+      justify-items: end;
+      gap: 7px;
+    }
+    .anchorage-body {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .weather-main {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .weather-symbol {
+      width: 54px;
+      height: 54px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: #eef5fb;
+      font-size: 28px;
+    }
+    .weather-desc b {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+    .weather-desc span {
+      display: block;
+      color: #607281;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .temp-range {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .temp-range b {
+      display: block;
+      color: #c93434;
+      font-size: 20px;
+    }
+    .temp-range span {
+      color: #607281;
+      font-size: 12px;
+    }
+    .anchorage-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .metric-pill {
+      min-height: 48px;
+      border-radius: 8px;
+      background: #f6f9fb;
+      padding: 7px;
+      font-size: 12px;
+      color: #607281;
+    }
+    .metric-pill b {
+      display: block;
+      color: #102535;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .sailing-tag {
+      display: inline-flex;
+      width: fit-content;
+      height: 26px;
+      padding: 0 9px;
+      align-items: center;
+      gap: 6px;
+      border-radius: 6px;
+      background: #38c65a;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .sailing-tag.watch { background: #f0b437; color: #102535; }
+    .sailing-tag.risk { background: #e45b5b; }
+    .anchorage-note {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #607281;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .anchorage-note i[data-lucide] { color: #0b7f77; }
+    .dispatch-list {
+      display: grid;
+      gap: 14px;
+    }
+    .dispatch-card {
+      border: 1px solid #dfe8ee;
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+      box-shadow: 0 10px 22px rgba(18,46,66,.04);
+    }
+    .dispatch-top {
+      display: grid;
+      grid-template-columns: 188px 1fr 150px;
+      gap: 16px;
+      align-items: stretch;
+      padding: 14px;
+      border-bottom: 1px solid #edf2f5;
+      background: linear-gradient(180deg, #f8fbfd, #fff);
+    }
+    .boat-title {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .boat-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: #eef5fb;
+      color: #0e65b7;
+      display: grid;
+      place-items: center;
+    }
+    .boat-icon i[data-lucide] { width: 24px; height: 24px; }
+    .boat-title b { display: block; font-size: 18px; margin-bottom: 4px; }
+    .boat-title span { color: #607281; font-size: 12px; }
+    .route-summary {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .route-city {
+      min-width: 0;
+    }
+    .route-city b {
+      display: block;
+      font-size: 22px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .route-city span {
+      display: block;
+      color: #607281;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+    .route-line {
+      width: 160px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #a9b7c0;
+      font-size: 12px;
+    }
+    .route-line::before,
+    .route-line::after {
+      content: "";
+      height: 1px;
+      flex: 1;
+      border-top: 1px dashed #c4d0d8;
+    }
+    .route-meta {
+      text-align: right;
+      color: #607281;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .route-meta b {
+      display: block;
+      color: #0e65b7;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+    .dispatch-body {
+      padding: 14px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .stop-card {
+      border: 1px solid #dfe8ee;
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfdff;
+      min-height: 144px;
+      position: relative;
+    }
+    .stop-card::after {
+      content: "";
+      position: absolute;
+      top: 30px;
+      right: -13px;
+      width: 14px;
+      border-top: 2px dashed #c6d3dc;
+    }
+    .stop-card:last-child::after { display: none; }
+    .stop-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .stop-head b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+    .stop-head span {
+      color: #607281;
+      font-size: 12px;
+    }
+    .stop-time {
+      height: 26px;
+      padding: 0 8px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      background: #eef5fb;
+      color: #0e65b7;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .stop-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      color: #607281;
+      font-size: 12px;
+    }
+    .stop-grid b {
+      display: block;
+      color: #102535;
+      font-size: 14px;
+      margin-top: 3px;
+    }
+    .dispatch-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: #eefaf5;
+      color: #0b7f77;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .carousel {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 224px;
+      gap: 14px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding-bottom: 6px;
+    }
+    .carousel::-webkit-scrollbar { height: 8px; }
+    .carousel::-webkit-scrollbar-thumb { background: #c9d7df; border-radius: 999px; }
+    .weather-card {
+      scroll-snap-align: start;
+      border: 1px solid #dfe8ee;
+      border-radius: 10px;
+      background: #fff;
+      min-height: 174px;
+      width: 154px;
+      padding: 13px;
+    }
+    .weather-card.past { background: #fbfdff; color: #506674; }
+    .weather-card.current {
+      border-color: #0e65b7;
+      box-shadow: 0 10px 22px rgba(14,101,183,.12);
+    }
+    .weather-time {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: #607281;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .weather-state {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+    .weather-state i[data-lucide] { width: 24px; height: 24px; color: #0e65b7; }
+    .weather-temp {
+      font-size: 23px;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+    .weather-meta {
+      color: #607281;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .sku {
+      scroll-snap-align: start;
+      border: 1px solid #dfe8ee;
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+      min-height: 272px;
+    }
+    .sku-img {
+      height: 126px;
+      background:
+        linear-gradient(135deg, rgba(14,101,183,.08), rgba(11,127,119,.08)),
+        #eef4f7;
+      display: grid;
+      place-items: center;
+      color: #6f8290;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .sku-body { padding: 13px; }
+    .tag {
+      display: inline-flex;
+      height: 22px;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: #eef5fb;
+      color: #0e65b7;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .tag.food { background: #eefaf5; color: #0b7f77; }
+    .sku b { display: block; min-height: 38px; line-height: 1.35; font-size: 14px; }
+    .sku .meta { margin: 8px 0; color: #6c7d89; font-size: 12px; line-height: 1.45; }
+    .sku .price { color: #c93434; font-size: 18px; font-weight: 800; }
+    .supplier-carousel {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .supplier {
+      min-height: 176px;
+      border: 1px solid #dfe8ee;
+      border-radius: 10px;
+      padding: 16px;
+      background: #fff;
+    }
+    .logo {
+      width: 58px;
+      height: 58px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0a3a66, #0e65b7);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 24px;
+      margin-bottom: 13px;
+    }
+    .supplier:nth-child(2) .logo { background: linear-gradient(135deg, #0b7f77, #18a08f); }
+    .supplier:nth-child(3) .logo { background: linear-gradient(135deg, #b7791f, #f0b437); }
+    .supplier:nth-child(4) .logo { background: linear-gradient(135deg, #33516a, #7b9bb2); }
+    .supplier:nth-child(5) .logo { background: linear-gradient(135deg, #6d3b80, #9a69b4); }
+    .supplier b { display: block; font-size: 16px; margin-bottom: 8px; }
+    .supplier span { display: block; color: #607281; font-size: 12px; line-height: 1.55; }
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .product {
+      border: 1px solid #dfe8ee;
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .product .sku-img { height: 112px; }
+    .product .sku-body { min-height: 142px; }
+    @media (max-width: 1100px) {
+      .header { height: auto; padding: 16px 0; }
+      .header .wrap { flex-wrap: wrap; }
+      .hero-grid { grid-template-columns: 1fr; }
+      .entry-panel { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .supplier-carousel, .product-grid, .anchorage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dispatch-top { grid-template-columns: 1fr; }
+      .route-meta { text-align: left; }
+      .dispatch-body { grid-template-columns: 1fr; }
+      .stop-card::after { display: none; }
+    }
+    @media (max-width: 720px) {
+      .wrap { padding: 0 16px; }
+      .topbar { height: auto; padding: 8px 0; }
+      .topbar .wrap, .nav .wrap { align-items: flex-start; flex-direction: column; gap: 8px; }
+      .top-links, .nav-left, .header-actions { flex-wrap: wrap; gap: 10px; }
+      .nav { height: auto; padding-bottom: 8px; }
+      .nav-title { width: auto; height: 40px; }
+      .search-box { grid-template-columns: 1fr; height: auto; }
+      .standard-picker, .search-box input, .search-box button { height: 42px; width: 100%; }
+      .standard-picker { border-right: 0; border-bottom: 1px solid #d3e3ee; }
+      .standard-picker-panel {
+        top: 44px;
+        left: 0;
+        width: 100%;
+        grid-template-columns: 1fr;
+      }
+      .standard-levels { border-right: 0; border-bottom: 1px solid #e0ebf2; }
+      .standard-child-grid { grid-template-columns: 1fr; }
+      .standard-child { grid-template-columns: 1fr; }
+      .standard-child em { justify-content: flex-start; }
+      .standard-item-list { grid-template-columns: 1fr; }
+      .standard-item {
+        grid-template-columns: 78px 1fr;
+      }
+      .standard-item-meta {
+        grid-column: 2;
+      }
+      .hero-grid, .entry-panel, .supplier-carousel, .product-grid, .anchorage-grid { grid-template-columns: 1fr; }
+      .route-summary { grid-template-columns: 1fr; }
+      .route-line { width: 100%; }
+      .carousel { grid-auto-columns: 78%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap">
+      <div>船供一站式服务平台</div>
+      <div class="top-links">
+        <a href="#">站内消息</a>
+        <a href="#">我的订单</a>
+        <a href="#">供应商入驻</a>
+        <a href="#">中文 / English</a>
+        <a href="#">请登录 / 注册</a>
+      </div>
+    </div>
+  </div>
+
+  <header class="header">
+    <div class="wrap">
+      <a class="brand" href="#">
+        <div class="brand-mark">船</div>
+        <div>
+          <strong>船供平台</strong>
+          <span>企业级船舶供应管理</span>
+        </div>
+      </a>
+      <div class="search-zone">
+        <div class="search-box">
+          <div class="standard-picker" data-standard-picker>
+            <button class="standard-picker-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span data-picker-label>物料标准库</span>
+              <i data-lucide="chevron-down"></i>
+            </button>
+            <div class="standard-picker-panel" role="listbox" aria-label="物料标准库前两级目录">
+              <div class="standard-levels" data-standard-levels></div>
+              <div class="standard-children" data-standard-children></div>
+            </div>
+          </div>
+          <input aria-label="搜索" placeholder="搜索商品、IMPA/MSG编码、供应商编码、服务项目">
+          <button>搜索</button>
+        </div>
+        <div class="hotwords">
+          <span>常用：IMPA 613435</span>
+          <span>救生消防</span>
+          <span>驳船打包</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a class="head-btn primary" href="procurement_upload.html"><i data-lucide="file-spreadsheet"></i>采购入口</a>
+        <a class="head-btn" href="personal_shop.html"><i data-lucide="file-plus-2"></i>零散补采</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <aside class="panel category-panel">
+          <div class="category-title">三大采购入口</div>
+          <a class="category-card" href="procurement_upload.html">
+            <div class="category-main"><i data-lucide="salad"></i><b>伙食采购入口</b></div>
+            <span>船员伙食、冻品、蔬果、粮油和饮料，按船员人数与航次组织清单。</span>
+            <div class="category-meta"><em>伙食清单</em><em>船员人数</em><em>冷链</em></div>
+          </a>
+          <a class="category-card" href="procurement_match_results.html">
+            <div class="category-main"><i data-lucide="package-search"></i><b>物料采购入口</b></div>
+            <span>按 IMPA / MSG 标准库匹配，处理原始物料、供应商 SKU 和替代项。</span>
+            <div class="category-meta"><em>IMPA</em><em>MSG</em><em>比价</em></div>
+          </a>
+          <a class="category-card service" href="procurement_match_results.html">
+            <div class="category-main"><i data-lucide="anchor"></i><b>服务入口</b></div>
+            <span>驳船、报关报备、港区协调、打包运输、验货签收和单证协助。</span>
+            <div class="category-meta"><em>锚地</em><em>驳船</em><em>单证</em></div>
+          </a>
+        </aside>
+
+        <aside class="entry-panel">
+          <div class="entry-card collective">
+            <div class="entry-title"><i data-lucide="badge-dollar-sign"></i><h2>询价 / 报价</h2></div>
+            <p>根据采购入口自动组织供应商响应、覆盖率、报价有效期和缺项。</p>
+            <a href="procurement_match_results.html">查看报价台</a>
+            <div class="entry-code">RFQ</div>
+          </div>
+          <div class="entry-card personal">
+            <div class="entry-title"><i data-lucide="ship-wheel"></i><h2>港口履约</h2></div>
+            <p>锚地窗口、驳船资源、到船节点和现场验货作为采购决策条件。</p>
+            <a href="#barge-dispatch">看调度</a>
+            <div class="entry-code">OPS</div>
+          </div>
+          <div class="entry-card ops">
+            <div class="entry-title"><i data-lucide="users-round"></i><h2>供应商协同</h2></div>
+            <p>按港口、品类、响应率和准时率选择供应商，不做促销式商品堆叠。</p>
+            <a href="#suppliers">看供应商</a>
+            <div class="entry-code">B2B</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="wrap">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h2>采购交易所</h2>
+            <p>把采购需求、报价竞争和港口履约窗口放在同一层，采购人员先判断订单，再进入明细。</p>
+          </div>
+          <a href="procurement_match_results.html">进入采购台</a>
+        </div>
+        <div class="exchange-board">
+          <div class="exchange-main" aria-label="采购需求动态">
+            <div class="exchange-row head"><span>采购需求</span><span>供应商响应</span><span>价格状态</span><span>交付窗口</span><span>动作</span></div>
+            <div class="exchange-row">
+              <div><b>ZHOSCO-0526 物料补给</b><span>86 条 · IMPA 匹配 84.9%</span></div>
+              <div>6 家已响应</div>
+              <div><span class="quote-state hot">报价竞争中</span></div>
+              <div>今日 18:00</div>
+              <a href="procurement_match_results.html">处理</a>
+            </div>
+            <div class="exchange-row">
+              <div><b>伙食补给短航次包</b><span>24 条 · 船员 18 人 / 5 天</span></div>
+              <div>4 家已响应</div>
+              <div><span class="quote-state">可生成报价</span></div>
+              <div>明日 09:30</div>
+              <a href="procurement_match_results.html">查看</a>
+            </div>
+            <div class="exchange-row">
+              <div><b>消防救生备件加急</b><span>12 条 · 证书随货校验</span></div>
+              <div>2 家已响应</div>
+              <div><span class="quote-state risk">缺 3 项</span></div>
+              <div>待确认</div>
+              <a href="procurement_match_results.html">补齐</a>
+            </div>
+          </div>
+          <div class="port-stack">
+            <article class="port-card">
+              <h3><i data-lucide="radar"></i>港口运营层</h3>
+              <div class="port-line"><b>锚地窗口</b><span>马峙锚地 4 小时内适合作业，虾峙门南需关注风浪。</span></div>
+              <div class="port-line"><b>驳船资源</b><span>2 艘可调度，冷链补给建议合并装船。</span></div>
+            </article>
+            <article class="port-card">
+              <h3><i data-lucide="activity"></i>市场活跃度</h3>
+              <div class="port-line"><b>报价速度</b><span>A / C 供货商响应最快，油漆类价格波动明显。</span></div>
+              <div class="port-line"><b>风险提示</b><span>未匹配条目不进入自动报价，需要人工确认或创建非标项。</span></div>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" id="weather">
+        <div class="section-head">
+          <div>
+            <h2>气象信息</h2>
+            <p>按小干岛周边锚地展示半小时内天气，用于报价、打包运输和作业窗口判断。</p>
+          </div>
+          <div class="weather-toolbar" aria-label="气象区域切换">
+            <span class="weather-pill active"><i data-lucide="anchor"></i>小干岛周边锚地</span>
+            <span class="weather-pill"><i data-lucide="map-pin"></i>舟山市</span>
+          </div>
+        </div>
+        <div class="anchorage-grid" aria-label="小干岛周边锚地半小时天气">
+          <article class="anchorage-card priority">
+            <div class="anchorage-head">
+              <div class="anchorage-name">
+                <i data-lucide="anchor"></i>
+                <div><b>马峙锚地</b><span>紧邻小干岛 · 优先关注</span></div>
+              </div>
+              <div class="head-right">
+                <span class="fresh-tag">12:20 更新</span>
+                <span class="sailing-tag"><i data-lucide="check-circle"></i>优先服务</span>
+              </div>
+            </div>
+            <div class="anchorage-body">
+              <div class="weather-main">
+                <div class="weather-symbol">🌦️</div>
+                <div class="weather-desc"><b>多云有阵雨</b><span>半小时内降雨概率 45%</span></div>
+                <div class="temp-range"><b>28°/22°</b><span>夜间 🌙</span></div>
+              </div>
+              <div class="anchorage-metrics">
+                <div class="metric-pill">风向风力<b>东南风 4级</b></div>
+                <div class="metric-pill">空气<b>优</b></div>
+                <div class="metric-pill">适航<b>适合作业</b></div>
+              </div>
+            </div>
+          </article>
+          <article class="anchorage-card">
+            <div class="anchorage-head">
+              <div class="anchorage-name">
+                <i data-lucide="anchor"></i>
+                <div><b>虾峙门南锚地</b><span>外轮加注常用锚地</span></div>
+              </div>
+              <div class="head-right">
+                <span class="fresh-tag">12:18 更新</span>
+                <span class="sailing-tag watch"><i data-lucide="alert-triangle"></i>关注风浪</span>
+              </div>
+            </div>
+            <div class="anchorage-body">
+              <div class="weather-main">
+                <div class="weather-symbol">🌧️</div>
+                <div class="weather-desc"><b>小雨</b><span>半小时内降雨概率 60%</span></div>
+                <div class="temp-range"><b>27°/21°</b><span>夜间 🌧️</span></div>
+              </div>
+              <div class="anchorage-metrics">
+                <div class="metric-pill">风向风力<b>东南风 5级</b></div>
+                <div class="metric-pill">空气<b>优</b></div>
+                <div class="metric-pill">适航<b>谨慎作业</b></div>
+              </div>
+            </div>
+          </article>
+          <article class="anchorage-card">
+            <div class="anchorage-head">
+              <div class="anchorage-name">
+                <i data-lucide="anchor"></i>
+                <div><b>秀山东锚地</b><span>保税加注相关锚地</span></div>
+              </div>
+              <div class="head-right">
+                <span class="fresh-tag">12:16 更新</span>
+                <span class="sailing-tag"><i data-lucide="check-circle"></i>窗口稳定</span>
+              </div>
+            </div>
+            <div class="anchorage-body">
+              <div class="weather-main">
+                <div class="weather-symbol">⛅</div>
+                <div class="weather-desc"><b>多云</b><span>半小时内降雨概率 25%</span></div>
+                <div class="temp-range"><b>28°/22°</b><span>夜间 🌙</span></div>
+              </div>
+              <div class="anchorage-metrics">
+                <div class="metric-pill">风向风力<b>东风 4级</b></div>
+                <div class="metric-pill">空气<b>优</b></div>
+                <div class="metric-pill">适航<b>适合作业</b></div>
+              </div>
+            </div>
+          </article>
+          <article class="anchorage-card">
+            <div class="anchorage-head">
+              <div class="anchorage-name">
+                <i data-lucide="anchor"></i>
+                <div><b>条帚门锚地</b><span>待泊、候潮、引航服务</span></div>
+              </div>
+              <div class="head-right">
+                <span class="fresh-tag">12:15 更新</span>
+                <span class="sailing-tag watch"><i data-lucide="wind"></i>风力偏强</span>
+              </div>
+            </div>
+            <div class="anchorage-body">
+              <div class="weather-main">
+                <div class="weather-symbol">🌬️</div>
+                <div class="weather-desc"><b>多云有风</b><span>半小时内降雨概率 20%</span></div>
+                <div class="temp-range"><b>26°/21°</b><span>夜间 🌙</span></div>
+              </div>
+              <div class="anchorage-metrics">
+                <div class="metric-pill">风向风力<b>东风 5级</b></div>
+                <div class="metric-pill">空气<b>良</b></div>
+                <div class="metric-pill">适航<b>谨慎作业</b></div>
+              </div>
+            </div>
+          </article>
+          <article class="anchorage-card">
+            <div class="anchorage-head">
+              <div class="anchorage-name">
+                <i data-lucide="anchor"></i>
+                <div><b>绿华山南锚地</b><span>北部海域重要锚地</span></div>
+              </div>
+              <div class="head-right">
+                <span class="fresh-tag">12:12 更新</span>
+                <span class="sailing-tag"><i data-lucide="check-circle"></i>可作业</span>
+              </div>
+            </div>
+            <div class="anchorage-body">
+              <div class="weather-main">
+                <div class="weather-symbol">🌦️</div>
+                <div class="weather-desc"><b>阵雨转多云</b><span>半小时内降雨概率 40%</span></div>
+                <div class="temp-range"><b>27°/22°</b><span>夜间 🌙</span></div>
+              </div>
+              <div class="anchorage-metrics">
+                <div class="metric-pill">风向风力<b>东北风 4级</b></div>
+                <div class="metric-pill">空气<b>优</b></div>
+                <div class="metric-pill">适航<b>可作业</b></div>
+              </div>
+            </div>
+          </article>
+          <article class="anchorage-card">
+            <div class="anchorage-head">
+              <div class="anchorage-name">
+                <i data-lucide="anchor"></i>
+                <div><b>马迹山北锚地</b><span>深水港区相关锚地</span></div>
+              </div>
+              <div class="head-right">
+                <span class="fresh-tag">12:10 更新</span>
+                <span class="sailing-tag"><i data-lucide="check-circle"></i>可作业</span>
+              </div>
+            </div>
+            <div class="anchorage-body">
+              <div class="weather-main">
+                <div class="weather-symbol">☁️</div>
+                <div class="weather-desc"><b>阴到多云</b><span>半小时内降雨概率 30%</span></div>
+                <div class="temp-range"><b>26°/21°</b><span>夜间 ☁️</span></div>
+              </div>
+              <div class="anchorage-metrics">
+                <div class="metric-pill">风向风力<b>东北风 4级</b></div>
+                <div class="metric-pill">空气<b>良</b></div>
+                <div class="metric-pill">适航<b>可作业</b></div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="anchorage-note"><i data-lucide="info"></i>锚地名称来自公开资料整理，天气数值为原型静态示例；正式系统需接入实时锚地气象数据。</div>
+      </div>
+
+      <div class="section" id="barge-dispatch">
+        <div class="section-head">
+          <div>
+            <h2>驳船调度</h2>
+            <p>统一管理小、散交通艇资源，通过线路优化和一船多供提升运输效率与利润。</p>
+          </div>
+          <a href="#">查看全部调度</a>
+        </div>
+        <div class="dispatch-list">
+          <article class="dispatch-card">
+            <div class="dispatch-top">
+              <div class="boat-title">
+                <div class="boat-icon"><i data-lucide="ship-wheel"></i></div>
+                <div><b>A交通艇</b><span>06月22日 · 第1班</span></div>
+              </div>
+              <div class="route-summary">
+                <div class="route-city"><b>小干岛码头</b><span>02:15 出发</span></div>
+                <div class="route-line">一船多供</div>
+                <div class="route-city"><b>秀山东锚地</b><span>06:20 完成 +1天</span></div>
+              </div>
+              <div class="route-meta"><b>18.6海里</b>预计 4小时05分<br>合并 3 船供应</div>
+            </div>
+            <div class="dispatch-body">
+              <div class="stop-card">
+                <div class="stop-head"><div><b>马峙锚地</b><span>船舶：海盛 18</span></div><span class="stop-time">03:05 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>03:20</b></span><span>作业时长<b>35分钟</b></span><span>物资类型<b>伙食</b></span><span>状态<b>待装船</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="route"></i>顺路供应</span>
+              </div>
+              <div class="stop-card">
+                <div class="stop-head"><div><b>马峙锚地</b><span>船舶：Ocean Star</span></div><span class="stop-time">04:10 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>04:25</b></span><span>作业时长<b>45分钟</b></span><span>物资类型<b>物料</b></span><span>状态<b>待复核</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="package-check"></i>同锚地合并</span>
+              </div>
+              <div class="stop-card">
+                <div class="stop-head"><div><b>秀山东锚地</b><span>船舶：东方 9</span></div><span class="stop-time">05:35 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>05:50</b></span><span>作业时长<b>30分钟</b></span><span>物资类型<b>打包运输</b></span><span>状态<b>可执行</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="trending-up"></i>减少空驶</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="dispatch-card">
+            <div class="dispatch-top">
+              <div class="boat-title">
+                <div class="boat-icon"><i data-lucide="ship"></i></div>
+                <div><b>B交通艇</b><span>06月22日 · 夜间班</span></div>
+              </div>
+              <div class="route-summary">
+                <div class="route-city"><b>小干岛码头</b><span>21:40 出发</span></div>
+                <div class="route-line">线路优化</div>
+                <div class="route-city"><b>条帚门锚地</b><span>02:05 完成 +1天</span></div>
+              </div>
+              <div class="route-meta"><b>24.3海里</b>预计 4小时25分<br>合并 2 锚地供应</div>
+            </div>
+            <div class="dispatch-body">
+              <div class="stop-card">
+                <div class="stop-head"><div><b>虾峙门南锚地</b><span>船舶：Blue Wave</span></div><span class="stop-time">22:45 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>23:00</b></span><span>作业时长<b>40分钟</b></span><span>物资类型<b>物料</b></span><span>状态<b>待出库</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="boxes"></i>物料优先</span>
+              </div>
+              <div class="stop-card">
+                <div class="stop-head"><div><b>条帚门锚地</b><span>船舶：新海达</span></div><span class="stop-time">00:35 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>00:50</b></span><span>作业时长<b>50分钟</b></span><span>物资类型<b>伙食+物料</b></span><span>状态<b>可执行</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="moon"></i>夜间窗口</span>
+              </div>
+              <div class="stop-card">
+                <div class="stop-head"><div><b>条帚门锚地</b><span>船舶：Pacific 6</span></div><span class="stop-time">01:35 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>01:45</b></span><span>作业时长<b>20分钟</b></span><span>物资类型<b>打包运输</b></span><span>状态<b>顺路补给</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="route"></i>一船多供</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="dispatch-card">
+            <div class="dispatch-top">
+              <div class="boat-title">
+                <div class="boat-icon"><i data-lucide="navigation"></i></div>
+                <div><b>C交通艇</b><span>06月23日 · 上午班</span></div>
+              </div>
+              <div class="route-summary">
+                <div class="route-city"><b>小干岛码头</b><span>08:30 出发</span></div>
+                <div class="route-line">远距合并</div>
+                <div class="route-city"><b>马迹山北锚地</b><span>13:55 完成</span></div>
+              </div>
+              <div class="route-meta"><b>31.8海里</b>预计 5小时25分<br>减少重复出艇 1 次</div>
+            </div>
+            <div class="dispatch-body">
+              <div class="stop-card">
+                <div class="stop-head"><div><b>绿华山南锚地</b><span>船舶：远航 32</span></div><span class="stop-time">10:05 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>10:20</b></span><span>作业时长<b>45分钟</b></span><span>物资类型<b>伙食</b></span><span>状态<b>备货中</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="salad"></i>伙食补给</span>
+              </div>
+              <div class="stop-card">
+                <div class="stop-head"><div><b>绿华山南锚地</b><span>船舶：Silver Bay</span></div><span class="stop-time">11:20 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>11:35</b></span><span>作业时长<b>35分钟</b></span><span>物资类型<b>物料</b></span><span>状态<b>待装船</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="package"></i>同区合并</span>
+              </div>
+              <div class="stop-card">
+                <div class="stop-head"><div><b>马迹山北锚地</b><span>船舶：瑞丰 5</span></div><span class="stop-time">13:00 到锚</span></div>
+                <div class="stop-grid"><span>供给开始<b>13:15</b></span><span>作业时长<b>40分钟</b></span><span>物资类型<b>打包运输</b></span><span>状态<b>可执行</b></span></div>
+                <span class="dispatch-tag"><i data-lucide="trending-up"></i>利润提升</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="section" id="new-products">
+        <div class="section-head">
+          <div>
+            <h2>上新产品</h2>
+            <p>按 SKU 轮播展示新伙食、新物料，后续可接入真实商品池。</p>
+          </div>
+          <a href="#">进入上新专区</a>
+        </div>
+        <div class="carousel">
+          <article class="sku">
+            <div class="sku-img">FRESH VEGETABLES</div>
+            <div class="sku-body">
+              <span class="tag food">新伙食</span>
+              <b>新鲜蔬菜组合</b>
+              <div class="meta">规格：按 KG 计价<br>供应商：A供货商</div>
+              <div class="price">询价</div>
+            </div>
+          </article>
+          <article class="sku">
+            <div class="sku-img">PROVISIONS</div>
+            <div class="sku-body">
+              <span class="tag food">新伙食</span>
+              <b>船员早餐补给包</b>
+              <div class="meta">规格：箱 / 套<br>供应商：B供货商</div>
+              <div class="price">询价</div>
+            </div>
+          </article>
+          <article class="sku">
+            <div class="sku-img">IMPA 613435</div>
+            <div class="sku-body">
+              <span class="tag">新物料</span>
+              <b>碳钢锯条 300MMX14T</b>
+              <div class="meta">单位：PC<br>供应商：C供货商</div>
+              <div class="price">¥0.32</div>
+            </div>
+          </article>
+          <article class="sku">
+            <div class="sku-img">MARINE PAINT</div>
+            <div class="sku-body">
+              <span class="tag">新物料</span>
+              <b>船用防污漆 红色</b>
+              <div class="meta">规格：20L / 桶<br>供应商：A供货商</div>
+              <div class="price">询价</div>
+            </div>
+          </article>
+          <article class="sku">
+            <div class="sku-img">PPE</div>
+            <div class="sku-body">
+              <span class="tag">新物料</span>
+              <b>防护手套耐磨款</b>
+              <div class="meta">单位：双<br>供应商：D供货商</div>
+              <div class="price">¥1.80</div>
+            </div>
+          </article>
+          <article class="sku">
+            <div class="sku-img">LOGISTICS</div>
+            <div class="sku-body">
+              <span class="tag">服务</span>
+              <b>打包运输服务</b>
+              <div class="meta">适用：集采订单<br>供应商：C供货商</div>
+              <div class="price">按单计费</div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="section" id="suppliers">
+        <div class="section-head">
+          <div>
+            <h2>优质供货商</h2>
+            <p>使用虚拟 A/B/C 供货商展示，后续替换为真实入驻供应商 Logo。</p>
+          </div>
+          <a href="#">查看全部供货商</a>
+        </div>
+        <div class="supplier-carousel">
+          <article class="supplier">
+            <div class="logo">A</div>
+            <b>A供货商</b>
+            <span>主营：伙食、物料<br>服务港口：舟山、宁波<br>支持：企业集采</span>
+          </article>
+          <article class="supplier">
+            <div class="logo">B</div>
+            <b>B供货商</b>
+            <span>主营：伙食补给<br>服务港口：舟山<br>响应：快速报价</span>
+          </article>
+          <article class="supplier">
+            <div class="logo">C</div>
+            <b>C供货商</b>
+            <span>主营：打包运输<br>服务港口：舟山、上海<br>支持：整单配送</span>
+          </article>
+          <article class="supplier">
+            <div class="logo">D</div>
+            <b>D供货商</b>
+            <span>主营：船用物料<br>服务港口：宁波、舟山<br>覆盖：IMPA 常用件</span>
+          </article>
+          <article class="supplier">
+            <div class="logo">E</div>
+            <b>E供货商</b>
+            <span>主营：消防救生<br>服务港口：华东港口<br>支持：证书随货</span>
+          </article>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h2>热门产品</h2>
+            <p>个人专区和搜索结果页会继续以商品流形式展开。</p>
+          </div>
+          <a href="personal_shop.html">进入个人专区</a>
+        </div>
+        <div class="product-grid">
+          <article class="product">
+            <div class="sku-img">PROVISIONS</div>
+            <div class="sku-body">
+              <span class="tag food">伙食</span>
+              <b>船员蔬果补给</b>
+              <div class="meta">供应商：A供货商</div>
+              <div class="price">询价</div>
+            </div>
+          </article>
+          <article class="product">
+            <div class="sku-img">IMPA 510304</div>
+            <div class="sku-body">
+              <span class="tag">物料</span>
+              <b>滚筒刷 4 寸</b>
+              <div class="meta">供应商：D供货商</div>
+              <div class="price">¥2.10</div>
+            </div>
+          </article>
+          <article class="product">
+            <div class="sku-img">WELDING</div>
+            <div class="sku-body">
+              <span class="tag">物料</span>
+              <b>焊接耗材组合</b>
+              <div class="meta">供应商：C供货商</div>
+              <div class="price">询价</div>
+            </div>
+          </article>
+          <article class="product">
+            <div class="sku-img">SERVICE</div>
+            <div class="sku-body">
+              <span class="tag">服务</span>
+              <b>港区打包运输</b>
+              <div class="meta">供应商：C供货商</div>
+              <div class="price">按单计费</div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>
+    const STANDARD_LIBRARY_ENDPOINTS = [
+      "http://localhost:8080/api/standard-library/impa/categories",
+      "/api/standard-library/impa/categories"
+    ];
+    const STANDARD_ITEM_ENDPOINTS = [
+      "http://localhost:8080/api/standard-library/impa/items",
+      "/api/standard-library/impa/items"
+    ];
+    const fallbackMaterialStandardLibrary = [
+      { code: "11", name: "船员后勤、娱乐用品", count: 236, children: [{ code: "1101", name: "1101 码段" }, { code: "1102", name: "1102 码段" }] },
+      { code: "15", name: "亚麻布类", count: 166, children: [{ code: "1501", name: "1501 码段" }, { code: "1502", name: "1502 码段" }] },
+      { code: "17", name: "厨房用品", count: 1796, children: [{ code: "1701", name: "1701 码段" }, { code: "1702", name: "1702 码段" }] },
+      { code: "19", name: "衣类", count: 329, children: [{ code: "1901", name: "1901 码段" }, { code: "1902", name: "1902 码段" }] },
+      { code: "21", name: "绳子和钢缆", count: 1603, children: [{ code: "2101", name: "2101 码段" }, { code: "2102", name: "2102 码段" }] },
+      { code: "23", name: "装配、索具类、甲板消耗品", count: 1574, children: [{ code: "2301", name: "2301 码段" }, { code: "2302", name: "2302 码段" }] },
+      { code: "25", name: "船舶油漆", count: 314, children: [{ code: "2501", name: "2501 码段" }, { code: "2502", name: "2502 码段" }] },
+      { code: "27", name: "涂装用器具类", count: 200, children: [{ code: "2701", name: "2701 码段" }, { code: "2702", name: "2702 码段" }] },
+      { code: "31", name: "安全防护用品", count: 0, children: [{ code: "31xx", name: "31xx 码段" }] },
+      { code: "33", name: "救生救难用具、消火器类", count: 1017, children: [{ code: "3301", name: "3301 码段" }, { code: "3302", name: "3302 码段" }] },
+      { code: "35", name: "管件、连接器", count: 430, children: [{ code: "3501", name: "3501 码段" }, { code: "3502", name: "3502 码段" }] },
+      { code: "37", name: "航海器具类", count: 763, children: [{ code: "3701", name: "3701 码段" }, { code: "3702", name: "3702 码段" }] },
+      { code: "39", name: "卫生、医药品类", count: 314, children: [{ code: "3901", name: "3901 码段" }, { code: "3902", name: "3902 码段" }] },
+      { code: "45", name: "石油制品类", count: 284, children: [{ code: "4501", name: "4501 码段" }, { code: "4502", name: "4502 码段" }] },
+      { code: "47", name: "文具类", count: 1214, children: [{ code: "4701", name: "4701 码段" }, { code: "4702", name: "4702 码段" }] },
+      { code: "49", name: "五金制品类", count: 354, children: [{ code: "4901", name: "4901 码段" }, { code: "4902", name: "4902 码段" }] },
+      { code: "51", name: "刷子、垫子类", count: 348, children: [{ code: "5103", name: "5103 码段" }, { code: "5104", name: "5104 码段" }] },
+      { code: "53", name: "洗手间用具", count: 126, children: [{ code: "5301", name: "5301 码段" }, { code: "5302", name: "5302 码段" }] },
+      { code: "55", name: "洗涤、化学制品类", count: 456, children: [{ code: "5501", name: "5501 码段" }, { code: "5502", name: "5502 码段" }] },
+      { code: "59", name: "风动、电动工具", count: 672, children: [{ code: "5901", name: "5901 码段" }, { code: "5902", name: "5902 码段" }] },
+      { code: "61", name: "一般作业工具类", count: 3692, children: [{ code: "6134", name: "6134 码段" }, { code: "6103", name: "6103 码段" }] },
+      { code: "63", name: "切削工具", count: 2295, children: [{ code: "6301", name: "6301 码段" }, { code: "6302", name: "6302 码段" }] },
+      { code: "65", name: "测量工具", count: 860, children: [{ code: "6501", name: "6501 码段" }, { code: "6502", name: "6502 码段" }] },
+      { code: "67", name: "金属板、钢筋类", count: 1169, children: [{ code: "6701", name: "6701 码段" }, { code: "6702", name: "6702 码段" }] },
+      { code: "69", name: "螺钉、螺帽类", count: 422, children: [{ code: "6901", name: "6901 码段" }, { code: "6902", name: "6902 码段" }] },
+      { code: "71", name: "管类", count: 598, children: [{ code: "7101", name: "7101 码段" }, { code: "7102", name: "7102 码段" }] },
+      { code: "73", name: "管接头类", count: 2298, children: [{ code: "7301", name: "7301 码段" }, { code: "7302", name: "7302 码段" }] },
+      { code: "75", name: "阀、旋塞类", count: 700, children: [{ code: "7501", name: "7501 码段" }, { code: "7502", name: "7502 码段" }] },
+      { code: "77", name: "轴承类", count: 1358, children: [{ code: "7701", name: "7701 码段" }, { code: "7702", name: "7702 码段" }] },
+      { code: "79", name: "电器设备", count: 1948, children: [{ code: "7901", name: "7901 码段" }, { code: "7902", name: "7902 码段" }] },
+      { code: "81", name: "接口密封用品", count: 1369, children: [{ code: "8101", name: "8101 码段" }, { code: "8102", name: "8102 码段" }] },
+      { code: "85", name: "焊接设备", count: 326, children: [{ code: "8501", name: "8501 码段" }, { code: "8502", name: "8502 码段" }] },
+      { code: "87", name: "机器设备（空白）", count: 0, children: [{ code: "87xx", name: "87xx 码段" }] }
+    ];
+    let materialStandardLibrary = [];
+    const standardItemCache = new Map();
+    let standardLibrarySource = {
+      type: "loading",
+      label: "正在连接真实接口",
+      message: "正在从后端接口读取数据库分类。"
+    };
+
+    function normalizeStandardCategories(payload, sourceType = "api") {
+      const categories = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.list)
+            ? payload.list
+            : [];
+      return categories
+        .map(parent => {
+          const parentCode = String(parent.code ?? "").trim();
+          return {
+            code: parentCode,
+            name: parent.nameCn || parent.name || parent.nameEn || parentCode,
+            nameEn: parent.nameEn || "",
+            parentCode: parent.parentCode || null,
+            level: Number(parent.level || 1),
+            sortOrder: Number(parent.sortOrder || 0),
+            count: Number(parent.itemCount ?? parent.count ?? 0),
+            children: Array.isArray(parent.children)
+              ? parent.children
+                  .map(child => {
+                    const childCode = String(child.code ?? "").trim();
+                    return {
+                      code: childCode,
+                      name: sourceType === "fallback"
+                        ? `${childCode} 码段`
+                        : (child.nameCn || child.name || child.nameEn || `${childCode} 码段`),
+                      nameEn: child.nameEn || "",
+                      parentCode: child.parentCode || parentCode,
+                      level: Number(child.level || 2),
+                      sortOrder: Number(child.sortOrder || 0),
+                      count: Number(child.itemCount ?? child.count ?? 0)
+                    };
+                  })
+                  .filter(child => child.code)
+                  .sort((a, b) => (a.sortOrder - b.sortOrder) || a.code.localeCompare(b.code, "zh-CN", { numeric: true }))
+              : []
+          };
+        })
+        .filter(parent => parent.code)
+        .sort((a, b) => (a.sortOrder - b.sortOrder) || a.code.localeCompare(b.code, "zh-CN", { numeric: true }));
+    }
+
+    async function loadStandardCategories() {
+      const errors = [];
+      for (const endpoint of STANDARD_LIBRARY_ENDPOINTS) {
+        try {
+          const response = await fetch(endpoint, { headers: { "Accept": "application/json" } });
+          if (!response.ok) throw new Error(`分类接口返回 ${response.status}`);
+          const data = await response.json();
+          const categories = normalizeStandardCategories(data, "api");
+          if (!categories.length) throw new Error("分类接口未返回可展示数据");
+          standardLibrarySource = {
+            type: "connected",
+            label: "真实接口数据",
+            message: `已连接 ${endpoint}`
+          };
+          return categories;
+        } catch (error) {
+          errors.push(`${endpoint}: ${error.message}`);
+        }
+      }
+      console.warn("物料标准库接口未连接，已展示示例数据。", errors);
+      standardLibrarySource = {
+        type: "fallback",
+        label: "接口未连接，示例数据",
+        message: `无法连接 ${STANDARD_LIBRARY_ENDPOINTS[0]}，当前仅用于静态原型预览。`
+      };
+      return normalizeStandardCategories(fallbackMaterialStandardLibrary, "fallback");
+    }
+
+    function normalizeStandardItems(payload) {
+      const items = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.list)
+            ? payload.list
+            : [];
+      return items
+        .map(item => {
+          const impaCode = String(item.impaCode ?? item.impa_code ?? "").trim();
+          return {
+            impaCode,
+            categoryCode: String(item.categoryCode ?? item.category_code ?? "").trim(),
+            segmentCode: String(item.segmentCode ?? item.segment_code ?? impaCode.slice(0, 4)).trim(),
+            name: item.nameCn || item.name || item.description || impaCode,
+            specification: item.specification || "",
+            unit: item.unit || ""
+          };
+        })
+        .filter(item => item.impaCode);
+    }
+
+    async function loadStandardItems(categoryCode, segmentCode = "") {
+      if (standardLibrarySource.type !== "connected") return [];
+      const cacheKey = `${categoryCode || ""}:${segmentCode || ""}`;
+      if (standardItemCache.has(cacheKey)) return standardItemCache.get(cacheKey);
+
+      const query = new URLSearchParams({ limit: "80" });
+      if (categoryCode) query.set("categoryCode", categoryCode);
+      if (segmentCode) query.set("segmentCode", segmentCode);
+
+      const errors = [];
+      for (const endpoint of STANDARD_ITEM_ENDPOINTS) {
+        try {
+          const response = await fetch(`${endpoint}?${query.toString()}`, { headers: { "Accept": "application/json" } });
+          if (!response.ok) throw new Error(`物料接口返回 ${response.status}`);
+          const items = normalizeStandardItems(await response.json());
+          standardItemCache.set(cacheKey, items);
+          return items;
+        } catch (error) {
+          errors.push(`${endpoint}: ${error.message}`);
+        }
+      }
+
+      console.warn("IMPA 物料明细接口未连接。", errors);
+      standardItemCache.set(cacheKey, []);
+      return [];
+    }
+
+    async function initStandardPicker() {
+      const picker = document.querySelector("[data-standard-picker]");
+      if (!picker) return;
+
+      const trigger = picker.querySelector(".standard-picker-trigger");
+      const label = picker.querySelector("[data-picker-label]");
+      const levels = picker.querySelector("[data-standard-levels]");
+      const children = picker.querySelector("[data-standard-children]");
+      let activeCode = "";
+      let selectedChildCode = "";
+
+      async function renderChildren(parent) {
+        if (!parent) {
+          children.innerHTML = `
+            <div class="standard-empty">未获取到标准库分类，请确认后端接口已启动。</div>
+          `;
+          if (window.lucide) window.lucide.createIcons();
+          return;
+        }
+        children.innerHTML = `
+          <div class="standard-detail-head">
+            <div>
+              <h3>${parent.code} · ${parent.name}</h3>
+            </div>
+            <div class="standard-count"><b>${parent.count.toLocaleString("zh-CN")}</b>标准物料</div>
+          </div>
+          <div class="standard-item-list" data-standard-item-list>
+            <div class="standard-empty">正在读取物料编码和品名...</div>
+          </div>
+        `;
+        if (window.lucide) window.lucide.createIcons();
+
+        const itemList = children.querySelector("[data-standard-item-list]");
+        const items = await loadStandardItems(parent.code);
+        if (!itemList) return;
+        if (!items.length) {
+          itemList.innerHTML = `<div class="standard-empty">${standardLibrarySource.type === "connected" ? "该分类暂未查询到物料明细。" : "当前为静态示例，启动后端后可展示真实 IMPA 编码和品名。"}</div>`;
+          return;
+        }
+        itemList.innerHTML = items.map(item => {
+          const description = item.specification ? `${item.name}/${item.specification}` : item.name;
+          return `
+            <button class="standard-item${item.impaCode === selectedChildCode ? " selected" : ""}" type="button" data-item-code="${item.impaCode}" data-item-name="${item.name}">
+              <span class="standard-item-code">${item.impaCode}</span>
+              <span class="standard-item-name">${description}</span>
+            </button>
+          `;
+        }).join("");
+      }
+
+      function renderParents() {
+        levels.innerHTML = `
+          <p class="standard-panel-title">一级目录 · ${standardLibrarySource.label}</p>
+          ${materialStandardLibrary.map(parent => `
+          <button class="standard-parent${parent.code === activeCode ? " active" : ""}" type="button" data-parent-code="${parent.code}" aria-selected="${parent.code === activeCode}">
+            <b>${parent.code} · ${parent.name}</b>
+            <em>${parent.count.toLocaleString("zh-CN")}</em>
+          </button>
+        `).join("")}
+        `;
+        renderChildren(materialStandardLibrary.find(parent => parent.code === activeCode));
+      }
+
+      function setActiveParent(parentCode) {
+        if (!parentCode || parentCode === activeCode) return;
+        activeCode = parentCode;
+        selectedChildCode = "";
+        levels.querySelectorAll("[data-parent-code]").forEach(button => {
+          const isActive = button.dataset.parentCode === activeCode;
+          button.classList.toggle("active", isActive);
+          button.setAttribute("aria-selected", String(isActive));
+        });
+        renderChildren(materialStandardLibrary.find(parent => parent.code === activeCode));
+      }
+
+      trigger.addEventListener("click", () => {
+        const isOpen = picker.classList.toggle("open");
+        trigger.setAttribute("aria-expanded", String(isOpen));
+      });
+
+      levels.addEventListener("click", event => {
+        const parentButton = event.target.closest("[data-parent-code]");
+        if (!parentButton) return;
+        setActiveParent(parentButton.dataset.parentCode);
+      });
+
+      children.addEventListener("click", event => {
+        const itemButton = event.target.closest("[data-item-code]");
+        if (!itemButton) return;
+        selectedChildCode = itemButton.dataset.itemCode;
+        label.textContent = `${itemButton.dataset.itemCode} ${itemButton.dataset.itemName}`;
+        renderChildren(materialStandardLibrary.find(parent => parent.code === activeCode));
+        picker.classList.remove("open");
+        trigger.setAttribute("aria-expanded", "false");
+      });
+
+      document.addEventListener("click", event => {
+        if (picker.contains(event.target)) return;
+        picker.classList.remove("open");
+        trigger.setAttribute("aria-expanded", "false");
+      });
+
+      levels.innerHTML = `<p class="standard-panel-title">一级目录 · 正在连接真实接口</p>`;
+      children.innerHTML = `
+        <div class="standard-empty">正在读取标准库...</div>
+      `;
+      if (window.lucide) window.lucide.createIcons();
+      materialStandardLibrary = await loadStandardCategories();
+      activeCode = materialStandardLibrary[0]?.code ?? "";
+      label.textContent = standardLibrarySource.type === "connected" ? "物料标准库" : "示例标准库";
+      renderParents();
+    }
+
+    initStandardPicker();
+    if (window.lucide) window.lucide.createIcons();
+  </script>
+</body>
+</html>

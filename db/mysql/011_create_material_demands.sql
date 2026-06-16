@@ -1,0 +1,78 @@
+-- Materials demand save/query tables.
+-- Demand numbers are generated per company and day by backend code: REQ-YYYYMMDD-001.
+
+CREATE TABLE IF NOT EXISTS material_demand (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Demand id',
+  company_id BIGINT NOT NULL COMMENT 'Company id',
+  created_by BIGINT NULL COMMENT 'Creator user id',
+  updated_by BIGINT NULL COMMENT 'Last updater user id',
+  demand_no VARCHAR(40) NOT NULL COMMENT 'Demand number',
+  application_no VARCHAR(80) NOT NULL COMMENT 'Application number',
+  vessel_name VARCHAR(160) NOT NULL COMMENT 'Vessel name',
+  inquiry_date DATE NOT NULL COMMENT 'Inquiry date',
+  source_file_name VARCHAR(255) NULL COMMENT 'Source uploaded file name',
+  document_type VARCHAR(40) NULL COMMENT 'Source document type',
+  header_row_index INT NOT NULL DEFAULT 0 COMMENT 'Parsed header row index',
+  sku_count INT NOT NULL DEFAULT 0 COMMENT 'SKU count',
+  exact_count INT NOT NULL DEFAULT 0 COMMENT 'Exact match count',
+  similar_count INT NOT NULL DEFAULT 0 COMMENT 'Similar match count',
+  unmatched_count INT NOT NULL DEFAULT 0 COMMENT 'Unmatched count',
+  status VARCHAR(30) NOT NULL DEFAULT 'SAVED' COMMENT 'Demand status',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_material_demand_company_no (company_id, demand_no),
+  KEY idx_material_demand_company_status (company_id, status),
+  KEY idx_material_demand_company_date (company_id, inquiry_date),
+  KEY idx_material_demand_application (application_no),
+  CONSTRAINT fk_material_demand_company
+    FOREIGN KEY (company_id) REFERENCES company (id),
+  CONSTRAINT fk_material_demand_created_by
+    FOREIGN KEY (created_by) REFERENCES sys_user (id) ON DELETE SET NULL,
+  CONSTRAINT fk_material_demand_updated_by
+    FOREIGN KEY (updated_by) REFERENCES sys_user (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Material demand header';
+
+CREATE TABLE IF NOT EXISTS material_demand_item (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Demand item id',
+  demand_id BIGINT NOT NULL COMMENT 'Demand id',
+  company_id BIGINT NOT NULL COMMENT 'Company id',
+  document_type VARCHAR(40) NULL COMMENT 'Source document type',
+  header_row_index INT NULL COMMENT 'Parsed header row index',
+  sequence_no INT NULL COMMENT 'Preview sequence',
+  source_row_no INT NULL COMMENT 'Source row number',
+  source_row_number INT NULL COMMENT 'Source row number alias',
+  raw_columns_json LONGTEXT NULL COMMENT 'Raw source columns JSON',
+  impa_code VARCHAR(80) NULL COMMENT 'Original IMPA code',
+  description VARCHAR(1000) NULL COMMENT 'Original description',
+  size_model VARCHAR(500) NULL COMMENT 'Original size/model',
+  quantity VARCHAR(80) NULL COMMENT 'Original quantity',
+  unit VARCHAR(80) NULL COMMENT 'Original unit',
+  remarks VARCHAR(1000) NULL COMMENT 'Original remarks',
+  supplier_item_no VARCHAR(120) NULL COMMENT 'Supplier item number',
+  raw_name_spec VARCHAR(1000) NULL COMMENT 'Raw supplier name/spec',
+  price VARCHAR(120) NULL COMMENT 'Raw price',
+  packing VARCHAR(200) NULL COMMENT 'Raw packing',
+  stock VARCHAR(120) NULL COMMENT 'Raw stock',
+  selected_impa_code VARCHAR(80) NULL COMMENT 'Selected IMPA code',
+  candidate_impa_code VARCHAR(80) NULL COMMENT 'Default candidate IMPA code',
+  candidate_name_cn VARCHAR(500) NULL COMMENT 'Candidate Chinese name',
+  candidate_name_en VARCHAR(500) NULL COMMENT 'Candidate English name',
+  candidate_spec VARCHAR(500) NULL COMMENT 'Candidate specification',
+  match_result VARCHAR(30) NULL COMMENT 'Line match result',
+  match_result_name VARCHAR(80) NULL COMMENT 'Line match result display name',
+  reason VARCHAR(80) NULL COMMENT 'Match reason code',
+  has_image TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether source row has image',
+  image_index INT NULL COMMENT 'Source image index',
+  image_anchor VARCHAR(120) NULL COMMENT 'Source image anchor',
+  candidates_json LONGTEXT NULL COMMENT 'Candidate snapshot JSON',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+  PRIMARY KEY (id),
+  KEY idx_material_demand_item_demand (demand_id, sequence_no),
+  KEY idx_material_demand_item_company (company_id),
+  CONSTRAINT fk_material_demand_item_demand
+    FOREIGN KEY (demand_id) REFERENCES material_demand (id) ON DELETE CASCADE,
+  CONSTRAINT fk_material_demand_item_company
+    FOREIGN KEY (company_id) REFERENCES company (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Material demand detail';

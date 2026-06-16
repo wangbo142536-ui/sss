@@ -1,0 +1,339 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="1450" viewBox="0 0 2300 1450">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#C7CDD1"/></marker></defs>
+<rect width="100%" height="100%" fill="#0E0F10"/>
+<rect x="0" y="0" width="2300" height="40" rx="6" fill="#8FB8DA"/>
+<text x="28" y="27" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="700" fill="#06110F">一、传统船代船供业务流程泳道图（现状）</text>
+<rect x="0" y="55" width="2300" height="552" fill="#0F1113" stroke="#26323B"/>
+<rect x="0" y="103" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="144.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">船东/船管</text>
+<rect x="0" y="175" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="216.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">船代企业</text>
+<rect x="0" y="247" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="288.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">平台系统</text>
+<rect x="0" y="319" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="360.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">供应商</text>
+<rect x="0" y="391" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="422.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">海关/海事</text>
+<text x="80.0" y="441.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">边检/港区</text>
+<rect x="0" y="463" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="504.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">驳船/物流</text>
+<rect x="0" y="535" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="576.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">痛点/价值</text>
+<rect x="0" y="55" width="160" height="48" fill="#111" stroke="#26323B"/>
+<rect x="160" y="55" width="270" height="48" rx="6" fill="#102033" stroke="#315173"/>
+<text x="295.0" y="84.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">1.需求受理与计划</text>
+<line x1="160" y1="55" x2="160" y2="607" stroke="#26323B"/>
+<rect x="430" y="55" width="350" height="48" rx="6" fill="#102033" stroke="#315173"/>
+<text x="605.0" y="84.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">2.智能询价与比价</text>
+<line x1="430" y1="55" x2="430" y2="607" stroke="#26323B"/>
+<rect x="780" y="55" width="310" height="48" rx="6" fill="#102033" stroke="#315173"/>
+<text x="935.0" y="84.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">3.在线资料与审批跟进</text>
+<line x1="780" y1="55" x2="780" y2="607" stroke="#26323B"/>
+<rect x="1090" y="55" width="300" height="48" rx="6" fill="#102033" stroke="#315173"/>
+<text x="1240.0" y="84.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">4.备货与物流可视化</text>
+<line x1="1090" y1="55" x2="1090" y2="607" stroke="#26323B"/>
+<rect x="1390" y="55" width="410" height="48" rx="6" fill="#102033" stroke="#315173"/>
+<text x="1595.0" y="84.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">5.驳船调度与上船交付</text>
+<line x1="1390" y1="55" x2="1390" y2="607" stroke="#26323B"/>
+<rect x="1800" y="55" width="400" height="48" rx="6" fill="#102033" stroke="#315173"/>
+<text x="2000.0" y="84.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">6.对账结算与归档</text>
+<line x1="1800" y1="55" x2="1800" y2="607" stroke="#26323B"/>
+<rect x="195" y="100" width="135" height="48" rx="6" fill="#122944" stroke="#4C82BB" stroke-width="1.5"/>
+<text x="262.5" y="119.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">邮件下发</text>
+<text x="262.5" y="138.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">补给清单</text>
+<rect x="185" y="172" width="130" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="250.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">接收委托</text>
+<text x="250.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">人工整理需求</text>
+<rect x="330" y="172" width="130" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="395.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">分类清单</text>
+<text x="395.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">依赖经验</text>
+<rect x="455" y="172" width="145" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="527.5" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">电话/微信询价</text>
+<text x="527.5" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">联系供应商</text>
+<rect x="620" y="172" width="140" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="690.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">汇总报价</text>
+<text x="690.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">人工加费用</text>
+<rect x="570" y="244" width="130" height="48" rx="6" fill="#5A330A" stroke="#B46F19" stroke-width="1.5"/>
+<text x="635.0" y="263.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">报价/库存</text>
+<text x="635.0" y="282.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">微信反馈</text>
+<rect x="785" y="172" width="140" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="855.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">制作报价单</text>
+<text x="855.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">发船东确认</text>
+<rect x="930" y="172" width="140" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1000.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">制作申报资料</text>
+<text x="1000.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">人工跑单</text>
+<rect x="850" y="388" width="120" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="910.0" y="417.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">海关审核</text>
+<rect x="980" y="388" width="120" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="1040.0" y="417.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">海事审核</text>
+<rect x="1110" y="388" width="120" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="1170.0" y="407.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">边检/港区</text>
+<text x="1170.0" y="426.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">审批</text>
+<rect x="1115" y="172" width="140" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1185.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">现场验货</text>
+<text x="1185.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">点数拍照</text>
+<rect x="1265" y="172" width="145" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1337.5" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">安排车辆</text>
+<text x="1337.5" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">转运至码头</text>
+<rect x="1120" y="316" width="120" height="48" rx="6" fill="#5A330A" stroke="#B46F19" stroke-width="1.5"/>
+<text x="1180.0" y="345.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">备货</text>
+<rect x="1250" y="316" width="140" height="48" rx="6" fill="#5A330A" stroke="#B46F19" stroke-width="1.5"/>
+<text x="1320.0" y="345.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">送至临时仓库</text>
+<rect x="1165" y="460" width="155" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1242.5" y="479.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">港区转运</text>
+<text x="1242.5" y="498.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">至码头接驳点</text>
+<rect x="1430" y="172" width="145" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1502.5" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">协调码头/船方</text>
+<text x="1502.5" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">确认时间</text>
+<rect x="1460" y="388" width="145" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="1532.5" y="407.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">运抵申报</text>
+<text x="1532.5" y="426.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">拍照发海关</text>
+<rect x="1490" y="460" width="140" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1560.0" y="479.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">驳船出海</text>
+<text x="1560.0" y="498.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">接驳</text>
+<rect x="1645" y="460" width="130" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1710.0" y="479.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">吊船作业</text>
+<text x="1710.0" y="498.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">靠泊/锚地船</text>
+<rect x="1790" y="460" width="120" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1850.0" y="489.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">物资上船</text>
+<rect x="1540" y="100" width="135" height="48" rx="6" fill="#122944" stroke="#4C82BB" stroke-width="1.5"/>
+<text x="1607.5" y="119.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">船长/大副</text>
+<text x="1607.5" y="138.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">签字确认</text>
+<rect x="1695" y="172" width="145" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1767.5" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">跟进吊装</text>
+<text x="1767.5" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">拍照交接</text>
+<rect x="1855" y="172" width="135" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1922.5" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">费用汇总</text>
+<text x="1922.5" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">人工对账</text>
+<rect x="2010" y="172" width="110" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="2065.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">开票</text>
+<text x="2065.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">服务费</text>
+<rect x="2015" y="100" width="110" height="48" rx="6" fill="#122944" stroke="#4C82BB" stroke-width="1.5"/>
+<text x="2070.0" y="129.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">回款</text>
+<rect x="2135" y="172" width="120" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="2195.0" y="191.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">纸质资料</text>
+<text x="2195.0" y="210.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">归档保存</text>
+<rect x="185" y="532" width="250" height="42" rx="6" fill="#4E1F28" stroke="#C75C6A" stroke-width="1.5"/>
+<text x="310.0" y="549.1" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">依赖人工沟通</text>
+<text x="310.0" y="566.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">需求易遗漏</text>
+<rect x="520" y="532" width="260" height="42" rx="6" fill="#4E1F28" stroke="#C75C6A" stroke-width="1.5"/>
+<text x="650.0" y="549.1" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">电话/微信询价效率低</text>
+<text x="650.0" y="566.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">报价混乱、易出错</text>
+<rect x="850" y="532" width="260" height="42" rx="6" fill="#4E1F28" stroke="#C75C6A" stroke-width="1.5"/>
+<text x="980.0" y="549.1" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">纸质资料多</text>
+<text x="980.0" y="566.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">多部门跑腿、审批慢</text>
+<rect x="1150" y="532" width="260" height="42" rx="6" fill="#4E1F28" stroke="#C75C6A" stroke-width="1.5"/>
+<text x="1280.0" y="549.1" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">人工验货、易错漏</text>
+<text x="1280.0" y="566.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">物流信息不透明</text>
+<rect x="1450" y="532" width="270" height="42" rx="6" fill="#4E1F28" stroke="#C75C6A" stroke-width="1.5"/>
+<text x="1585.0" y="549.1" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">驳船调度混乱</text>
+<text x="1585.0" y="566.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">天气/延误风险高</text>
+<rect x="1880" y="532" width="260" height="42" rx="6" fill="#4E1F28" stroke="#C75C6A" stroke-width="1.5"/>
+<text x="2010.0" y="549.1" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">对账复杂、回款周期长</text>
+<text x="2010.0" y="566.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#FFECEF">纸质单据易丢失</text>
+<rect x="0" y="705" width="2300" height="40" rx="6" fill="#80B764"/>
+<text x="28" y="27" font-family="Microsoft YaHei, Arial, sans-serif" font-size="22" font-weight="700" fill="#06110F">二、船供平台数字化业务流程泳道图（优化后，一期范围版）</text>
+<rect x="0" y="760" width="2300" height="552" fill="#0F1113" stroke="#26323B"/>
+<rect x="0" y="808" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="849.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">船东/船管</text>
+<rect x="0" y="880" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="921.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">船代企业</text>
+<rect x="0" y="952" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="993.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">平台系统</text>
+<rect x="0" y="1024" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="1065.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">供应商</text>
+<rect x="0" y="1096" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="1127.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">海关/海事</text>
+<text x="80.0" y="1146.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">边检/港区</text>
+<rect x="0" y="1168" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="1209.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">驳船/物流</text>
+<rect x="0" y="1240" width="2300" height="72" fill="none" stroke="#26323B" stroke-width="1"/>
+<text x="80.0" y="1281.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="700" fill="#F0F3F4">痛点/价值</text>
+<rect x="0" y="760" width="160" height="48" fill="#111" stroke="#26323B"/>
+<rect x="160" y="760" width="270" height="48" rx="6" fill="#163113" stroke="#315173"/>
+<text x="295.0" y="789.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">1.需求受理与计划</text>
+<line x1="160" y1="760" x2="160" y2="1312" stroke="#26323B"/>
+<rect x="430" y="760" width="350" height="48" rx="6" fill="#163113" stroke="#315173"/>
+<text x="605.0" y="789.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">2.智能询价与比价</text>
+<line x1="430" y1="760" x2="430" y2="1312" stroke="#26323B"/>
+<rect x="780" y="760" width="310" height="48" rx="6" fill="#163113" stroke="#315173"/>
+<text x="935.0" y="789.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">3.在线资料与审批跟进</text>
+<line x1="780" y1="760" x2="780" y2="1312" stroke="#26323B"/>
+<rect x="1090" y="760" width="300" height="48" rx="6" fill="#163113" stroke="#315173"/>
+<text x="1240.0" y="789.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">4.备货与物流可视化</text>
+<line x1="1090" y1="760" x2="1090" y2="1312" stroke="#26323B"/>
+<rect x="1390" y="760" width="410" height="48" rx="6" fill="#163113" stroke="#315173"/>
+<text x="1595.0" y="789.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">5.驳船调度与上船交付</text>
+<line x1="1390" y1="760" x2="1390" y2="1312" stroke="#26323B"/>
+<rect x="1800" y="760" width="400" height="48" rx="6" fill="#163113" stroke="#315173"/>
+<text x="2000.0" y="789.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#F3F7F8">6.对账结算与归档</text>
+<line x1="1800" y1="760" x2="1800" y2="1312" stroke="#26323B"/>
+<rect x="195" y="805" width="140" height="48" rx="6" fill="#122944" stroke="#4C82BB" stroke-width="1.5"/>
+<text x="265.0" y="824.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">线下/邮件委托</text>
+<text x="265.0" y="843.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">船东确认附件</text>
+<rect x="185" y="877" width="140" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="255.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">创建需求单</text>
+<text x="255.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">自动分类清单</text>
+<rect x="185" y="949" width="140" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="255.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">清单导入</text>
+<text x="255.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">系统辅助分类</text>
+<rect x="455" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="530.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">选择供应商范围</text>
+<text x="530.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">一键发起询价</text>
+<rect x="455" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="530.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">匹配供应商</text>
+<text x="530.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">多维度比价</text>
+<rect x="505" y="1021" width="120" height="48" rx="6" fill="#5A330A" stroke="#B46F19" stroke-width="1.5"/>
+<text x="565.0" y="1050.3" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">在线报价</text>
+<rect x="650" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="725.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">自动计算费用</text>
+<text x="725.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">生成报价单</text>
+<rect x="650" y="1021" width="150" height="48" rx="6" fill="#5A330A" stroke="#B46F19" stroke-width="1.5"/>
+<text x="725.0" y="1040.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">确认订单</text>
+<text x="725.0" y="1059.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">备货</text>
+<rect x="820" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="895.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">确认报价</text>
+<text x="895.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">登记船东确认</text>
+<rect x="810" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="885.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">报价版本</text>
+<text x="885.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">留痕管理</text>
+<rect x="1000" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1075.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">在线提交资料</text>
+<text x="1075.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">系统模板</text>
+<rect x="990" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="1065.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">电子申报资料</text>
+<text x="1065.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">一键生成</text>
+<rect x="880" y="1093" width="120" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="940.0" y="1112.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">在线审核</text>
+<text x="940.0" y="1131.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">海关</text>
+<rect x="1010" y="1093" width="120" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="1070.0" y="1112.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">在线审核</text>
+<text x="1070.0" y="1131.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">海事</text>
+<rect x="1140" y="1093" width="120" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="1200.0" y="1112.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">审批状态登记</text>
+<text x="1200.0" y="1131.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">接口预留</text>
+<rect x="1170" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1245.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">查看备货进度</text>
+<text x="1245.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">异常记录</text>
+<rect x="1170" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="1245.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">验货照片上传</text>
+<text x="1245.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">留存凭证</text>
+<rect x="1170" y="1021" width="160" height="48" rx="6" fill="#5A330A" stroke="#B46F19" stroke-width="1.5"/>
+<text x="1250.0" y="1040.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">送货至指定仓库</text>
+<text x="1250.0" y="1059.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#FFF3E2">预约到达时间</text>
+<rect x="1190" y="1165" width="150" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1265.0" y="1184.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">港区转运</text>
+<text x="1265.0" y="1203.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">实时上报位置</text>
+<rect x="1345" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1420.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">港区运输</text>
+<text x="1420.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">实时跟踪</text>
+<rect x="1345" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="1420.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">物流轨迹跟踪</text>
+<text x="1420.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">全程可视化</text>
+<rect x="1510" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1585.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">驳船调度</text>
+<text x="1585.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">时间预约</text>
+<rect x="1510" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="1585.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">驳船定位</text>
+<text x="1585.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">航线规划</text>
+<rect x="1500" y="1093" width="150" height="48" rx="6" fill="#392451" stroke="#8060AA" stroke-width="1.5"/>
+<text x="1575.0" y="1112.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">运抵申报</text>
+<text x="1575.0" y="1131.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#F1EAFE">电子回执</text>
+<rect x="1505" y="1165" width="150" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1580.0" y="1184.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">驳船出海</text>
+<text x="1580.0" y="1203.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">实时定位</text>
+<rect x="1670" y="805" width="140" height="48" rx="6" fill="#122944" stroke="#4C82BB" stroke-width="1.5"/>
+<text x="1740.0" y="824.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">船方签收</text>
+<text x="1740.0" y="843.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">上传签收件</text>
+<rect x="1670" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1745.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">作业过程跟踪</text>
+<text x="1745.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">照片/视频留存</text>
+<rect x="1670" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="1745.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">电子签收</text>
+<text x="1745.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">自动核销</text>
+<rect x="1670" y="1165" width="150" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1745.0" y="1184.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">到船吊装</text>
+<text x="1745.0" y="1203.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">实时记录</text>
+<rect x="1835" y="1165" width="150" height="48" rx="6" fill="#113C3D" stroke="#3E8E8D" stroke-width="1.5"/>
+<text x="1910.0" y="1184.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">物资上船</text>
+<text x="1910.0" y="1203.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E7FFFF">电子签收</text>
+<rect x="1880" y="805" width="145" height="48" rx="6" fill="#122944" stroke="#4C82BB" stroke-width="1.5"/>
+<text x="1952.5" y="824.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">确认对账</text>
+<text x="1952.5" y="843.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#EAF4FF">线下付款登记</text>
+<rect x="1875" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="1950.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">对账单自动生成</text>
+<text x="1950.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">在线开票记录</text>
+<rect x="1875" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="1950.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">自动对账</text>
+<text x="1950.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">数据统计</text>
+<rect x="2050" y="877" width="150" height="48" rx="6" fill="#173B1B" stroke="#4D8D3B" stroke-width="1.5"/>
+<text x="2125.0" y="896.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">资料云端归档</text>
+<text x="2125.0" y="915.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F5E7">一键导出</text>
+<rect x="2050" y="949" width="150" height="48" rx="6" fill="#183552" stroke="#5E8CC7" stroke-width="1.5"/>
+<text x="2125.0" y="968.9" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">电子档案库</text>
+<text x="2125.0" y="987.6" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="15" font-weight="600" fill="#E9F2FF">永久保存</text>
+<rect x="185" y="1237" width="245" height="42" rx="6" fill="#173B1B" stroke="#6CB354" stroke-width="1.5"/>
+<text x="307.5" y="1254.2" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">一期：船代代录需求</text>
+<text x="307.5" y="1271.7" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">船东端二期预留</text>
+<rect x="500" y="1237" width="260" height="42" rx="6" fill="#173B1B" stroke="#6CB354" stroke-width="1.5"/>
+<text x="630.0" y="1254.2" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">一期：供应商协同报价</text>
+<text x="630.0" y="1271.7" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">系统辅助比价</text>
+<rect x="850" y="1237" width="260" height="42" rx="6" fill="#173B1B" stroke="#6CB354" stroke-width="1.5"/>
+<text x="980.0" y="1254.2" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">一期：资料线上化</text>
+<text x="980.0" y="1271.7" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">监管直连接口预留</text>
+<rect x="1180" y="1237" width="260" height="42" rx="6" fill="#173B1B" stroke="#6CB354" stroke-width="1.5"/>
+<text x="1310.0" y="1254.2" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">一期：节点可视化</text>
+<text x="1310.0" y="1271.7" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">实时定位二期增强</text>
+<rect x="1510" y="1237" width="260" height="42" rx="6" fill="#173B1B" stroke="#6CB354" stroke-width="1.5"/>
+<text x="1640.0" y="1254.2" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">一期：驳船任务记录</text>
+<text x="1640.0" y="1271.7" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">定位/航线二期接入</text>
+<rect x="1870" y="1237" width="300" height="42" rx="6" fill="#173B1B" stroke="#6CB354" stroke-width="1.5"/>
+<text x="2020.0" y="1254.2" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">一期：对账归档</text>
+<text x="2020.0" y="1271.7" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="600" fill="#E9F7E3">支付/担保交易预留</text>
+<line x1="262" y1="148" x2="250" y2="172" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="315" y1="196" x2="330" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="460" y1="196" x2="455" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="600" y1="196" x2="620" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="640" y1="244" x2="650" y2="220" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="760" y1="196" x2="785" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="925" y1="196" x2="930" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1000" y1="220" x2="910" y2="388" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="970" y1="412" x2="980" y2="412" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1100" y1="412" x2="1110" y2="412" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1070" y1="196" x2="1115" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1255" y1="196" x2="1265" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1180" y1="364" x2="1190" y2="460" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1320" y1="484" x2="1490" y2="484" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1410" y1="196" x2="1430" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1510" y1="220" x2="1530" y2="388" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1630" y1="484" x2="1645" y2="484" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1775" y1="484" x2="1790" y2="484" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1607" y1="148" x2="1760" y2="172" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1840" y1="196" x2="1855" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1990" y1="196" x2="2010" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="2065" y1="172" x2="2070" y2="148" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="2120" y1="196" x2="2135" y2="196" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="265" y1="853" x2="255" y2="877" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="255" y1="925" x2="255" y2="949" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="325" y1="973" x2="455" y2="973" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="335" y1="901" x2="455" y2="901" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="530" y1="997" x2="565" y2="1021" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="625" y1="1045" x2="650" y2="1045" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="605" y1="901" x2="650" y2="973" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="800" y1="973" x2="820" y2="901" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="960" y1="901" x2="1000" y2="901" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1075" y1="997" x2="940" y2="1093" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1000" y1="1117" x2="1010" y2="1117" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1130" y1="1117" x2="1140" y2="1117" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1150" y1="901" x2="1170" y2="901" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1245" y1="1069" x2="1245" y2="1165" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1320" y1="973" x2="1345" y2="973" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1495" y1="901" x2="1510" y2="901" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1585" y1="997" x2="1580" y2="1165" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1650" y1="1189" x2="1670" y2="1189" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1745" y1="853" x2="1745" y2="949" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1820" y1="973" x2="1875" y2="973" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="2025" y1="973" x2="2050" y2="973" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<line x1="1960" y1="949" x2="1950" y2="853" stroke="#C7CDD1" stroke-width="2" marker-end="url(#arrow)" opacity="0.85"/>
+<text x="1100" y="1410" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="16" font-weight="700" fill="#EAF2E6">说明：新版按一期范围收敛：船代 + 供应商协同先落地；船东端、监管直连、支付担保、实时定位作为二期/三期能力预留。</text>
+</svg>
