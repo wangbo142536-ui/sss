@@ -10,6 +10,7 @@ export interface StandardCategoryNode {
 
 export interface ImpaStandardItem {
   impaCode: string;
+  cnCode?: string | null;
   categoryCode: string;
   segmentCode: string;
   nameCn: string;

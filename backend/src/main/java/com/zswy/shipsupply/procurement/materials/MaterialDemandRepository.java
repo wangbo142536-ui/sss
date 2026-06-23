@@ -65,9 +65,9 @@ public class MaterialDemandRepository {
                 """
                 INSERT INTO material_demand
                   (company_id, created_by, updated_by, demand_no, application_no, vessel_name,
-                   inquiry_date, source_file_name, document_type, header_row_index, sku_count, exact_count,
+                   supply_port_code, supply_port_name, vessel_eta, inquiry_date, source_file_name, document_type, header_row_index, sku_count, exact_count,
                    similar_count, unmatched_count, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SAVED')
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SAVED')
                 """,
                 Statement.RETURN_GENERATED_KEYS
             );
@@ -77,14 +77,17 @@ public class MaterialDemandRepository {
             statement.setString(4, demandNo);
             statement.setString(5, request.applicationNo());
             statement.setString(6, request.vesselName());
-            statement.setObject(7, LocalDate.parse(request.inquiryDate()));
-            statement.setString(8, request.sourceFileName());
-            statement.setString(9, request.documentType());
-            statement.setInt(10, request.headerRowIndex());
-            statement.setInt(11, stats.skuCount());
-            statement.setInt(12, stats.exactCount());
-            statement.setInt(13, stats.similarCount());
-            statement.setInt(14, stats.unmatchedCount());
+            statement.setString(7, request.supplyPortCode());
+            statement.setString(8, request.supplyPortName());
+            statement.setString(9, request.vesselEta());
+            statement.setObject(10, LocalDate.parse(request.inquiryDate()));
+            statement.setString(11, request.sourceFileName());
+            statement.setString(12, request.documentType());
+            statement.setInt(13, request.headerRowIndex());
+            statement.setInt(14, stats.skuCount());
+            statement.setInt(15, stats.exactCount());
+            statement.setInt(16, stats.similarCount());
+            statement.setInt(17, stats.unmatchedCount());
             return statement;
         }, keyHolder);
         return keyHolder.getKey().longValue();
@@ -103,6 +106,9 @@ public class MaterialDemandRepository {
             SET updated_by = ?,
                 application_no = ?,
                 vessel_name = ?,
+                supply_port_code = ?,
+                supply_port_name = ?,
+                vessel_eta = ?,
                 inquiry_date = ?,
                 source_file_name = ?,
                 document_type = ?,
@@ -111,12 +117,15 @@ public class MaterialDemandRepository {
                 exact_count = ?,
                 similar_count = ?,
                 unmatched_count = ?,
-                status = 'SAVED'
+                status = CASE WHEN status = 'COMPARING' THEN 'COMPARING' ELSE 'SAVED' END
             WHERE id = ? AND company_id = ?
             """,
             userId,
             request.applicationNo(),
             request.vesselName(),
+            request.supplyPortCode(),
+            request.supplyPortName(),
+            request.vesselEta(),
             LocalDate.parse(request.inquiryDate()),
             request.sourceFileName(),
             request.documentType(),
@@ -206,6 +215,50 @@ public class MaterialDemandRepository {
         ).stream().findFirst();
     }
 
+    public void markComparingIfSaved(long companyId, long demandId) {
+        jdbcTemplate.update(
+            """
+            UPDATE material_demand
+            SET status = 'COMPARING',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ?
+              AND id = ?
+              AND status = 'SAVED'
+            """,
+            companyId,
+            demandId
+        );
+    }
+
+    public void markOrdered(long companyId, long demandId) {
+        jdbcTemplate.update(
+            """
+            UPDATE material_demand
+            SET status = 'ORDERED',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ?
+              AND id = ?
+              AND status <> 'DISCARDED'
+            """,
+            companyId,
+            demandId
+        );
+    }
+
+    public void markDiscarded(long companyId, long demandId) {
+        jdbcTemplate.update(
+            """
+            UPDATE material_demand
+            SET status = 'DISCARDED',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ?
+              AND id = ?
+            """,
+            companyId,
+            demandId
+        );
+    }
+
     public MaterialDemandListResponse list(
         long companyId,
         String keyword,
@@ -230,6 +283,7 @@ public class MaterialDemandRepository {
                 OR demand_no LIKE CONCAT('%', ?, '%')
                 OR application_no LIKE CONCAT('%', ?, '%')
                 OR vessel_name LIKE CONCAT('%', ?, '%')
+                OR supply_port_name LIKE CONCAT('%', ?, '%')
                 OR source_file_name LIKE CONCAT('%', ?, '%')
               )
             ORDER BY updated_at DESC, id DESC
@@ -243,6 +297,7 @@ public class MaterialDemandRepository {
             dateFrom,
             dateTo,
             dateTo,
+            keyword,
             keyword,
             keyword,
             keyword,
@@ -282,6 +337,7 @@ public class MaterialDemandRepository {
                 OR demand_no LIKE CONCAT('%', ?, '%')
                 OR application_no LIKE CONCAT('%', ?, '%')
                 OR vessel_name LIKE CONCAT('%', ?, '%')
+                OR supply_port_name LIKE CONCAT('%', ?, '%')
                 OR source_file_name LIKE CONCAT('%', ?, '%')
               )
             """,
@@ -293,6 +349,7 @@ public class MaterialDemandRepository {
             dateFrom,
             dateTo,
             dateTo,
+            keyword,
             keyword,
             keyword,
             keyword,
@@ -313,6 +370,9 @@ public class MaterialDemandRepository {
             rs.getString("demand_no"),
             rs.getString("application_no"),
             rs.getString("vessel_name"),
+            safeString(rs, "supply_port_code"),
+            safeString(rs, "supply_port_name"),
+            safeString(rs, "vessel_eta"),
             inquiryDate == null ? null : inquiryDate.toString(),
             rs.getString("source_file_name"),
             rs.getString("document_type"),
@@ -414,5 +474,13 @@ public class MaterialDemandRepository {
             return null;
         }
         return timestamp.toLocalDateTime().toString();
+    }
+
+    private String safeString(ResultSet rs, String columnName) throws SQLException {
+        try {
+            return rs.getString(columnName);
+        } catch (SQLException ex) {
+            return null;
+        }
     }
 }

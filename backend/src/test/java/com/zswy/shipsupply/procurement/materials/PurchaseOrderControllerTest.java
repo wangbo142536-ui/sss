@@ -121,6 +121,18 @@ class PurchaseOrderControllerTest {
     }
 
     @Test
+    void returnsSupplierPurchaseOrderDetail() throws Exception {
+        when(purchaseOrderService.supplierDetail("Bearer supplier", 501L)).thenReturn(detail(501L, "PO-20260616-001"));
+
+        mockMvc.perform(get("/api/supplier/procurement/orders/501")
+                .header("Authorization", "Bearer supplier"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.order.purchaseOrderId").value(501))
+            .andExpect(jsonPath("$.supplierOrders[0].supplierCompanyId").value(24))
+            .andExpect(jsonPath("$.supplierOrders[0].items[0].skuId").value(1));
+    }
+
+    @Test
     void confirmsSupplierOrder() throws Exception {
         PurchaseSupplierConfirmRequest request = new PurchaseSupplierConfirmRequest(
             "2026-06-18T10:00:00",
@@ -196,6 +208,8 @@ class PurchaseOrderControllerTest {
             "2026-06-21T18:00:00",
             "LOWEST_MIXED",
             "最低混供",
+            2,
+            2,
             2,
             2,
             new BigDecimal("40.50"),

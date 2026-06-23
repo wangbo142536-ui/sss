@@ -118,6 +118,174 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
+    void createsOrderOnlyForSelectedComparisonRows() {
+        when(currentUserService.requireActiveCompanyUser("Bearer buyer"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.findActiveByDemandAndStrategy(22L, 101L, "LOWEST_MIXED"))
+            .thenReturn(Optional.empty());
+        when(purchaseOrderRepository.nextOrderNo(22L, LocalDate.now())).thenReturn("PO-20260616-003");
+        when(purchaseOrderRepository.companyName(22L)).thenReturn("采购商");
+        when(comparisonService.comparison("Bearer buyer", 101L)).thenReturn(comparisonWithMixedCandidates());
+        when(purchaseOrderRepository.insertOrder(any())).thenReturn(savedDetail(503L, "PO-20260616-003"));
+
+        service.createFromDemand("Bearer buyer", 101L, new PurchaseOrderCreateRequest(
+            null,
+            "LOWEST_MIXED",
+            null,
+            null,
+            null,
+            "UNIFIED_PACKAGING",
+            null,
+            List.of(new PurchaseOrderSelectedItemRequest(202L, 2L))
+        ));
+
+        ArgumentCaptor<PurchaseOrderDraft> draftCaptor = ArgumentCaptor.forClass(PurchaseOrderDraft.class);
+        verify(purchaseOrderRepository).insertOrder(draftCaptor.capture());
+        PurchaseOrderDraft draft = draftCaptor.getValue();
+        assertThat(draft.supplierOrders()).hasSize(1);
+        assertThat(draft.supplierOrders().get(0).supplierName()).isEqualTo("供应商 B");
+        assertThat(draft.items()).hasSize(1);
+        assertThat(draft.items().get(0).demandItemId()).isEqualTo(202L);
+        assertThat(draft.items().get(0).skuId()).isEqualTo(2L);
+    }
+
+    @Test
+    void createsOrderUsingSelectedItemQuantityWhenDemandQuantityIsMissing() {
+        when(currentUserService.requireActiveCompanyUser("Bearer buyer"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.findActiveByDemandAndStrategy(22L, 101L, "LOWEST_MIXED"))
+            .thenReturn(Optional.empty());
+        when(purchaseOrderRepository.nextOrderNo(22L, LocalDate.now())).thenReturn("PO-20260616-004");
+        when(purchaseOrderRepository.companyName(22L)).thenReturn("采购商");
+        when(comparisonService.comparison("Bearer buyer", 101L)).thenReturn(comparisonWithMixedCandidates());
+        when(purchaseOrderRepository.insertOrder(any())).thenReturn(savedDetail(504L, "PO-20260616-004"));
+
+        service.createFromDemand("Bearer buyer", 101L, new PurchaseOrderCreateRequest(
+            null,
+            "LOWEST_MIXED",
+            null,
+            null,
+            null,
+            "UNIFIED_PACKAGING",
+            null,
+            List.of(new PurchaseOrderSelectedItemRequest(202L, 2L, "5", new BigDecimal("5"), new BigDecimal("67.50")))
+        ));
+
+        ArgumentCaptor<PurchaseOrderDraft> draftCaptor = ArgumentCaptor.forClass(PurchaseOrderDraft.class);
+        verify(purchaseOrderRepository).insertOrder(draftCaptor.capture());
+        PurchaseOrderDraft draft = draftCaptor.getValue();
+        assertThat(draft.totalAmount()).isEqualByComparingTo("67.50");
+        assertThat(draft.items()).hasSize(1);
+        assertThat(draft.items().get(0).quantity()).isEqualTo("5");
+        assertThat(draft.items().get(0).pricingQuantity()).isEqualByComparingTo("5");
+        assertThat(draft.items().get(0).amount()).isEqualByComparingTo("67.50");
+        assertThat(draft.items().get(0).quantityFallbackFlag()).isFalse();
+    }
+
+    @Test
+    void createsOrderUsingSelectedUnitPriceSnapshot() {
+        when(currentUserService.requireActiveCompanyUser("Bearer buyer"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.findActiveByDemandAndStrategy(22L, 101L, "LOWEST_MIXED"))
+            .thenReturn(Optional.empty());
+        when(purchaseOrderRepository.nextOrderNo(22L, LocalDate.now())).thenReturn("PO-20260616-005");
+        when(purchaseOrderRepository.companyName(22L)).thenReturn("采购商");
+        when(comparisonService.comparison("Bearer buyer", 101L)).thenReturn(comparisonWithMixedCandidates());
+        when(purchaseOrderRepository.insertOrder(any())).thenReturn(savedDetail(505L, "PO-20260616-005"));
+
+        service.createFromDemand("Bearer buyer", 101L, new PurchaseOrderCreateRequest(
+            null,
+            "LOWEST_MIXED",
+            null,
+            null,
+            null,
+            "UNIFIED_PACKAGING",
+            null,
+            List.of(new PurchaseOrderSelectedItemRequest(
+                202L,
+                2L,
+                "2",
+                new BigDecimal("2"),
+                new BigDecimal("300.00"),
+                "BOX",
+                new BigDecimal("150.00"),
+                new BigDecimal("21.4286"),
+                new BigDecimal("42.8572")
+            ))
+        ));
+
+        ArgumentCaptor<PurchaseOrderDraft> draftCaptor = ArgumentCaptor.forClass(PurchaseOrderDraft.class);
+        verify(purchaseOrderRepository).insertOrder(draftCaptor.capture());
+        PurchaseOrderDraft draft = draftCaptor.getValue();
+        assertThat(draft.totalAmount()).isEqualByComparingTo("300.00");
+        assertThat(draft.totalAmountUsd()).isEqualByComparingTo("42.8572");
+        assertThat(draft.items().get(0).unit()).isEqualTo("BOX");
+        assertThat(draft.items().get(0).unitPrice()).isEqualByComparingTo("150.00");
+        assertThat(draft.items().get(0).unitPriceUsd()).isEqualByComparingTo("21.4286");
+        assertThat(draft.items().get(0).amount()).isEqualByComparingTo("300.00");
+        assertThat(draft.items().get(0).amountUsd()).isEqualByComparingTo("42.8572");
+    }
+
+    @Test
+    void discardsDemandAndLinkedPurchaseOrdersFromDemand() {
+        when(currentUserService.requireActiveCompanyUser("Bearer buyer"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.discardByDemand(22L, 101L, 10L)).thenReturn(2);
+
+        MaterialDemandStatusResponse response = service.discardByDemand("Bearer buyer", 101L);
+
+        assertThat(response.demandId()).isEqualTo(101L);
+        assertThat(response.status()).isEqualTo("DISCARDED");
+        assertThat(response.discardedPurchaseOrderCount()).isEqualTo(2);
+        verify(purchaseOrderRepository).discardByDemand(22L, 101L, 10L);
+    }
+
+    @Test
+    void repeatedDiscardReturnsCurrentDiscardedStateWithoutNewOrderChanges() {
+        when(currentUserService.requireActiveCompanyUser("Bearer buyer"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.discardByDemand(22L, 101L, 10L)).thenReturn(0);
+
+        MaterialDemandStatusResponse response = service.discardByDemand("Bearer buyer", 101L);
+
+        assertThat(response.demandId()).isEqualTo(101L);
+        assertThat(response.status()).isEqualTo("DISCARDED");
+        assertThat(response.discardedPurchaseOrderCount()).isZero();
+        verify(purchaseOrderRepository).discardByDemand(22L, 101L, 10L);
+    }
+
+    @Test
+    void discardsDemandAndLinkedPurchaseOrdersFromPurchaseOrder() {
+        when(currentUserService.requireActiveCompanyUser("Bearer buyer"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.discardByOrder(22L, 501L, 10L)).thenReturn(new PurchaseOrderDiscardResult(101L, 2));
+
+        MaterialDemandStatusResponse response = service.discardByPurchaseOrder("Bearer buyer", 501L);
+
+        assertThat(response.demandId()).isEqualTo(101L);
+        assertThat(response.status()).isEqualTo("DISCARDED");
+        assertThat(response.discardedPurchaseOrderCount()).isEqualTo(2);
+        verify(purchaseOrderRepository).discardByOrder(22L, 501L, 10L);
+    }
+
+    @Test
+    void rejectsSupplierActionWhenOrderIsDiscarded() {
+        when(currentUserService.requireActiveCompanyUser("Bearer supplier"))
+            .thenReturn(new CurrentUserContext(20L, 24L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.isOrderDiscarded(501L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.confirmSupplierOrder("Bearer supplier", 501L, 601L, new PurchaseSupplierConfirmRequest(
+            "2026-06-18T10:00:00",
+            null,
+            null,
+            "UNIFIED_PACKAGING",
+            null
+        )))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("PURCHASE_ORDER_DISCARDED");
+    }
+
+    @Test
     void returnsExistingOrderWhenDemandAndStrategyAlreadyHaveActiveOrder() {
         when(currentUserService.requireActiveCompanyUser("Bearer buyer"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
@@ -202,6 +370,35 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
+    void supplierMarksReadyAndSuppliedWithDeliveryImage() {
+        when(currentUserService.requireActiveCompanyUser("Bearer supplier"))
+            .thenReturn(new CurrentUserContext(30L, 24L, "ACTIVE", "ACTIVE"));
+        when(purchaseOrderRepository.isOrderDiscarded(501L)).thenReturn(false);
+        when(purchaseOrderRepository.markSupplierReady(24L, 30L, 501L, 601L)).thenReturn(Optional.of(savedDetail(501L, "PO-20260616-001")));
+        when(purchaseOrderRepository.markSupplierSupplied(24L, 30L, 501L, 601L, new PurchaseSupplierSupplyCompleteRequest(
+            "FILE-1",
+            "/api/files/FILE-1",
+            "已拍照供船"
+        ))).thenReturn(Optional.of(savedDetail(501L, "PO-20260616-001")));
+
+        PurchaseOrderDetailResponse ready = service.markSupplierReady("Bearer supplier", 501L, 601L);
+        PurchaseOrderDetailResponse supplied = service.markSupplierSupplied("Bearer supplier", 501L, 601L, new PurchaseSupplierSupplyCompleteRequest(
+            "FILE-1",
+            "/api/files/FILE-1",
+            "已拍照供船"
+        ));
+
+        assertThat(ready.order().purchaseOrderId()).isEqualTo(501L);
+        assertThat(supplied.order().purchaseOrderId()).isEqualTo(501L);
+        verify(purchaseOrderRepository).markSupplierReady(24L, 30L, 501L, 601L);
+        verify(purchaseOrderRepository).markSupplierSupplied(24L, 30L, 501L, 601L, new PurchaseSupplierSupplyCompleteRequest(
+            "FILE-1",
+            "/api/files/FILE-1",
+            "已拍照供船"
+        ));
+    }
+
+    @Test
     void supplierRejectRequiresReason() {
         when(currentUserService.requireActiveCompanyUser("Bearer supplier"))
             .thenReturn(new CurrentUserContext(20L, 24L, "ACTIVE", "ACTIVE"));
@@ -219,21 +416,27 @@ class PurchaseOrderServiceTest {
         MaterialSupplierCandidate supplierADiagonalSingle = sku(4L, 24L, "供应商 A", "A-004", "Diagonal Cutting Plier", "611706", "15.00", "PCS", "ON_SHELF");
         return new MaterialDemandComparisonResponse(
             demand,
-            new MaterialDemandSupplyInfo("MV BLUE", "待补充", "2026-06-16", "天气待接入", "STATIC_PLACEHOLDER"),
+            new MaterialDemandSupplyInfo("MV BLUE", "舟山港", "ZHOUSHAN", "舟山港", "2026-06-16T12:30", "2026-06-16", "天气待接入", "STATIC_PLACEHOLDER"),
             List.of(),
             List.of(
                 item(201L, "611705", "Flat Nose Plier", "3", "PCS", new BigDecimal("3"), null, supplierAFlat, supplierAFlatSingle),
                 item(202L, "611706", "Diagonal Cutting Plier", "abc", "PCS", BigDecimal.ONE, "计价数量按 1", supplierBDiagonal, supplierADiagonalSingle)
-            )
+            ),
+            false,
+            false,
+            null
         );
     }
 
     private MaterialDemandComparisonResponse comparisonWithoutCandidates() {
         return new MaterialDemandComparisonResponse(
             demand(),
-            new MaterialDemandSupplyInfo("MV BLUE", "待补充", "2026-06-16", "天气待接入", "STATIC_PLACEHOLDER"),
+            new MaterialDemandSupplyInfo("MV BLUE", "舟山港", "ZHOUSHAN", "舟山港", "2026-06-16T12:30", "2026-06-16", "天气待接入", "STATIC_PLACEHOLDER"),
             List.of(),
-            List.of(item(201L, "611705", "Flat Nose Plier", "3", "PCS", new BigDecimal("3"), null, null, null))
+            List.of(item(201L, "611705", "Flat Nose Plier", "3", "PCS", new BigDecimal("3"), null, null, null)),
+            false,
+            false,
+            null
         );
     }
 
@@ -241,9 +444,12 @@ class PurchaseOrderServiceTest {
         MaterialSupplierCandidate invalid = sku(1L, 24L, "供应商 A", "A-001", "Flat Nose Plier", "611705", "9.00", "PCS", "OFF_SHELF");
         return new MaterialDemandComparisonResponse(
             demand(),
-            new MaterialDemandSupplyInfo("MV BLUE", "待补充", "2026-06-16", "天气待接入", "STATIC_PLACEHOLDER"),
+            new MaterialDemandSupplyInfo("MV BLUE", "舟山港", "ZHOUSHAN", "舟山港", "2026-06-16T12:30", "2026-06-16", "天气待接入", "STATIC_PLACEHOLDER"),
             List.of(),
-            List.of(item(201L, "611705", "Flat Nose Plier", "3", "PCS", new BigDecimal("3"), null, invalid, invalid))
+            List.of(item(201L, "611705", "Flat Nose Plier", "3", "PCS", new BigDecimal("3"), null, invalid, invalid)),
+            false,
+            false,
+            null
         );
     }
 
@@ -253,6 +459,9 @@ class PurchaseOrderServiceTest {
             "REQ-20260616-001",
             "APP-001",
             "MV BLUE",
+            "ZHOUSHAN",
+            "舟山港",
+            "2026-06-16T12:30",
             "2026-06-16",
             "rfq.xlsx",
             "DEMAND_INQUIRY",
@@ -291,6 +500,8 @@ class PurchaseOrderServiceTest {
             pricingQuantity,
             pricingQuantityNote,
             unit,
+            impaCode,
+            productName,
             lowest,
             single,
             candidates,
@@ -351,6 +562,8 @@ class PurchaseOrderServiceTest {
             "2026-06-21T18:00:00",
             "LOWEST_MIXED",
             "最低混供",
+            2,
+            2,
             2,
             2,
             new BigDecimal("54.00"),

@@ -23,11 +23,13 @@ export interface MaterialSupplierCandidate {
   platformCode?: string;
   categoryCode?: string;
   categoryName?: string;
+  specification?: string;
   specifications?: unknown;
   attributeSummary?: string;
   unitPrice?: number;
   currency?: string;
   currencySymbol?: string;
+  unit?: string;
   stockQty?: number;
   stockUnit?: string;
   packageSpec?: string;
@@ -103,6 +105,9 @@ export interface MaterialDemandSummary {
   demandNo: string;
   applicationNo?: string;
   vesselName?: string;
+  supplyPortCode?: string;
+  supplyPortName?: string;
+  vesselEta?: string;
   inquiryDate?: string;
   sourceFileName?: string;
   documentType?: MaterialDocumentType;
@@ -133,6 +138,9 @@ export interface MaterialDemandSavePayload {
   demandNo?: string;
   applicationNo?: string;
   vesselName?: string;
+  supplyPortCode?: string;
+  supplyPortName?: string;
+  vesselEta?: string;
   inquiryDate?: string;
   sourceFileName?: string;
   documentType?: MaterialDocumentType;
@@ -151,11 +159,15 @@ export interface MaterialDemandSaveResponse {
 export interface MaterialComparisonSupplyInfo {
   vesselName?: string;
   supplyPort?: string;
+  supplyPortCode?: string;
+  supplyPortName?: string;
+  vesselEta?: string;
   port?: string;
   supplyDate?: string;
   inquiryDate?: string;
   weather?: string;
   weatherInfo?: string;
+  weatherText?: string;
 }
 
 export interface MaterialComparisonSupplierSummary {
@@ -165,6 +177,7 @@ export interface MaterialComparisonSupplierSummary {
   matchedCount?: number;
   skuCount?: number;
   totalAmount?: number;
+  totalAmountUsd?: number;
   amount?: number;
   currency?: string;
 }
@@ -177,8 +190,11 @@ export interface MaterialComparisonStrategy {
   unmatchedCount: number;
   unpricedCount: number;
   totalAmount?: number;
+  totalAmountUsd?: number;
   currency?: string;
   suppliers: MaterialComparisonSupplierSummary[];
+  enabled?: boolean;
+  disabledReason?: string;
 }
 
 export interface MaterialComparisonCandidate {
@@ -191,13 +207,25 @@ export interface MaterialComparisonCandidate {
   platformCode?: string;
   categoryCode?: string;
   categoryName?: string;
+  specification?: string;
   specifications?: unknown;
   attributeSummary?: string;
   unitPrice?: number;
+  unitPriceUsd?: number;
+  lineAmount?: number;
+  lineAmountUsd?: number;
   currency?: string;
   currencySymbol?: string;
   stockQty?: number;
   stockUnit?: string;
+  unit?: string;
+  selectedUnit?: string;
+  unitPriceOptions?: Array<{
+    unit?: string;
+    unitPrice?: number;
+    unitPriceUsd?: number;
+    defaultSelected?: boolean;
+  }>;
   packageSpec?: string;
   imageUrl?: string;
   thumbnailUrl?: string;
@@ -213,11 +241,14 @@ export interface MaterialComparisonItem {
   impaCode?: string;
   platformCode?: string;
   productName?: string;
+  description?: string;
   specification?: string;
   quantity?: string;
   pricingQuantity?: number;
   pricingQuantityNote?: string;
   unit?: string;
+  sourceSkuCode?: string;
+  sourceSkuName?: string;
   lowestCandidate?: MaterialComparisonCandidate;
   singleSupplierCandidate?: MaterialComparisonCandidate;
   candidates: MaterialComparisonCandidate[];
@@ -229,4 +260,7 @@ export interface MaterialDemandComparisonResponse {
   supplyInfo?: MaterialComparisonSupplyInfo;
   strategies: MaterialComparisonStrategy[];
   items: MaterialComparisonItem[];
+  isOrdered?: boolean;
+  isDiscarded?: boolean;
+  existingPurchaseOrderId?: number;
 }

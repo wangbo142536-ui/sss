@@ -109,11 +109,13 @@ function normalizeSupplierCandidate(value: unknown): MaterialSupplierCandidate |
     platformCode: readString(value, "platformCode"),
     categoryCode: readString(value, "categoryCode"),
     categoryName: readString(value, "categoryName"),
+    specification: readString(value, "specification"),
     specifications: value.specifications,
     attributeSummary: readString(value, "attributeSummary"),
     unitPrice: readNumber(value, "unitPrice"),
     currency: readString(value, "currency"),
     currencySymbol: readString(value, "currencySymbol"),
+    unit: readString(value, "unit"),
     stockQty: readNumber(value, "stockQty"),
     stockUnit: readString(value, "stockUnit"),
     packageSpec: readString(value, "packageSpec"),
@@ -128,6 +130,16 @@ function normalizeSupplierCandidate(value: unknown): MaterialSupplierCandidate |
 
 function normalizeComparisonCandidate(value: unknown): MaterialComparisonCandidate | undefined {
   if (!isRecord(value)) return undefined;
+  const unitPriceOptions = Array.isArray(value.unitPriceOptions)
+    ? value.unitPriceOptions
+        .filter(isRecord)
+        .map((option) => ({
+          unit: readString(option, "unit"),
+          unitPrice: readNumber(option, "unitPrice"),
+          unitPriceUsd: readNumber(option, "unitPriceUsd"),
+          defaultSelected: readBoolean(option, "defaultSelected")
+        }))
+    : [];
   return {
     skuId: readNumber(value, "skuId"),
     companyId: readNumber(value, "companyId"),
@@ -138,13 +150,20 @@ function normalizeComparisonCandidate(value: unknown): MaterialComparisonCandida
     platformCode: readString(value, "platformCode"),
     categoryCode: readString(value, "categoryCode"),
     categoryName: readString(value, "categoryName"),
+    specification: readString(value, "specification"),
     specifications: value.specifications,
     attributeSummary: readString(value, "attributeSummary"),
     unitPrice: readNumber(value, "unitPrice"),
+    unitPriceUsd: readNumber(value, "unitPriceUsd"),
+    lineAmount: readNumber(value, "lineAmount"),
+    lineAmountUsd: readNumber(value, "lineAmountUsd"),
     currency: readString(value, "currency"),
     currencySymbol: readString(value, "currencySymbol"),
     stockQty: readNumber(value, "stockQty"),
     stockUnit: readString(value, "stockUnit"),
+    unit: readString(value, "unit"),
+    selectedUnit: readString(value, "selectedUnit"),
+    unitPriceOptions,
     packageSpec: readString(value, "packageSpec"),
     imageUrl: readString(value, "imageUrl"),
     thumbnailUrl: readString(value, "thumbnailUrl"),
@@ -229,6 +248,9 @@ function normalizeDemandSummary(value: unknown): MaterialDemandSummary | null {
     demandNo: readString(value, "demandNo") || "",
     applicationNo: readString(value, "applicationNo"),
     vesselName: readString(value, "vesselName"),
+    supplyPortCode: readString(value, "supplyPortCode"),
+    supplyPortName: readString(value, "supplyPortName"),
+    vesselEta: readString(value, "vesselEta"),
     inquiryDate: readString(value, "inquiryDate"),
     sourceFileName: readString(value, "sourceFileName"),
     documentType: readString(value, "documentType") as MaterialDocumentType | undefined,
@@ -295,11 +317,15 @@ function normalizeComparisonSupplyInfo(value: unknown) {
   return {
     vesselName: readString(value, "vesselName"),
     supplyPort: readString(value, "supplyPort"),
+    supplyPortCode: readString(value, "supplyPortCode"),
+    supplyPortName: readString(value, "supplyPortName"),
+    vesselEta: readString(value, "vesselEta"),
     port: readString(value, "port"),
     supplyDate: readString(value, "supplyDate"),
     inquiryDate: readString(value, "inquiryDate"),
     weather: readString(value, "weather"),
-    weatherInfo: readString(value, "weatherInfo")
+    weatherInfo: readString(value, "weatherInfo"),
+    weatherText: readString(value, "weatherText")
   };
 }
 
@@ -312,6 +338,7 @@ function normalizeComparisonSupplierSummary(value: unknown) {
     matchedCount: readNumber(value, "matchedCount"),
     skuCount: readNumber(value, "skuCount"),
     totalAmount: readNumber(value, "totalAmount"),
+    totalAmountUsd: readNumber(value, "totalAmountUsd"),
     amount: readNumber(value, "amount"),
     currency: readString(value, "currency")
   };
@@ -332,8 +359,11 @@ function normalizeComparisonStrategy(value: unknown): MaterialComparisonStrategy
     unmatchedCount: readNumber(value, "unmatchedCount") ?? 0,
     unpricedCount: readNumber(value, "unpricedCount") ?? 0,
     totalAmount: readNumber(value, "totalAmount"),
+    totalAmountUsd: readNumber(value, "totalAmountUsd"),
     currency: readString(value, "currency"),
-    suppliers
+    suppliers,
+    enabled: readBoolean(value, "enabled"),
+    disabledReason: readString(value, "disabledReason")
   };
 }
 
@@ -348,11 +378,14 @@ function normalizeComparisonItem(value: unknown): MaterialComparisonItem | null 
     impaCode: readString(value, "impaCode"),
     platformCode: readString(value, "platformCode"),
     productName: readString(value, "productName"),
+    description: readString(value, "description"),
     specification: readString(value, "specification"),
     quantity: readString(value, "quantity"),
     pricingQuantity: readNumber(value, "pricingQuantity"),
     pricingQuantityNote: readString(value, "pricingQuantityNote"),
     unit: readString(value, "unit"),
+    sourceSkuCode: readString(value, "sourceSkuCode"),
+    sourceSkuName: readString(value, "sourceSkuName"),
     lowestCandidate: normalizeComparisonCandidate(value.lowestCandidate),
     singleSupplierCandidate: normalizeComparisonCandidate(value.singleSupplierCandidate),
     candidates,
@@ -372,7 +405,10 @@ function normalizeMaterialDemandComparison(payload: unknown): MaterialDemandComp
     demand: demand ?? undefined,
     supplyInfo: normalizeComparisonSupplyInfo(unwrapped.supplyInfo),
     strategies: strategySource.map(normalizeComparisonStrategy).filter((item): item is MaterialComparisonStrategy => Boolean(item)),
-    items: itemSource.map(normalizeComparisonItem).filter((item): item is MaterialComparisonItem => Boolean(item))
+    items: itemSource.map(normalizeComparisonItem).filter((item): item is MaterialComparisonItem => Boolean(item)),
+    isOrdered: readBoolean(unwrapped, "isOrdered"),
+    isDiscarded: readBoolean(unwrapped, "isDiscarded"),
+    existingPurchaseOrderId: readNumber(unwrapped, "existingPurchaseOrderId")
   };
 }
 
@@ -466,4 +502,15 @@ export async function saveMaterialDemand(payload: MaterialDemandSavePayload): Pr
 
 export async function getMaterialDemandComparison(demandId: number | string): Promise<MaterialDemandComparisonResponse> {
   return normalizeMaterialDemandComparison(await requestJson(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/comparison`));
+}
+
+export async function discardMaterialDemand(demandId: number | string): Promise<unknown> {
+  return requestJson(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/discard`, { method: "POST" });
+}
+
+export async function listMaterialDemandItemSupplierCandidates(demandId: number | string, itemId: number | string): Promise<MaterialComparisonCandidate[]> {
+  const payload = await requestJson(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/items/${encodeURIComponent(String(itemId))}/supplier-candidates`);
+  const unwrapped = unwrapPayload(payload);
+  const source = Array.isArray(unwrapped) ? unwrapped : [];
+  return source.map(normalizeComparisonCandidate).filter((item): item is MaterialComparisonCandidate => Boolean(item));
 }

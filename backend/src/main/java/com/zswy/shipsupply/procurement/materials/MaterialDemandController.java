@@ -77,4 +77,13 @@ public class MaterialDemandController {
     ) {
         return materialDemandComparisonService.comparison(authorizationHeader, id);
     }
+
+    @GetMapping("/{id}/items/{itemId}/supplier-candidates")
+    public java.util.List<MaterialSupplierCandidate> itemSupplierCandidates(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long id,
+        @PathVariable Long itemId
+    ) {
+        return materialDemandComparisonService.itemSupplierCandidates(authorizationHeader, id, itemId);
+    }
 }

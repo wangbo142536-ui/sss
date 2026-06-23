@@ -22,6 +22,7 @@ public class ImpaItemRepository {
         StringBuilder sql = new StringBuilder(
             """
             SELECT zh.impa_code,
+                   item.cn_code,
                    zh.category_code,
                    category.category_name_cn,
                    LEFT(zh.impa_code, 4) AS segment_code,
@@ -87,6 +88,7 @@ public class ImpaItemRepository {
     private ImpaItemResponse mapRow(ResultSet resultSet, int rowNum) throws SQLException {
         return new ImpaItemResponse(
             resultSet.getString("impa_code"),
+            resultSet.getString("cn_code"),
             resultSet.getString("category_code"),
             resultSet.getString("category_name_cn"),
             resultSet.getString("segment_code"),

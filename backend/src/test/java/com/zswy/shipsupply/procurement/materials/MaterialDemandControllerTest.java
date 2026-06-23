@@ -141,7 +141,7 @@ class MaterialDemandControllerTest {
         MaterialDemandSummaryResponse summary = summary(101L);
         MaterialDemandComparisonResponse response = new MaterialDemandComparisonResponse(
             summary,
-            new MaterialDemandSupplyInfo("MV BLUE", "待补充", "2026-06-05", "天气待接入", "STATIC_PLACEHOLDER"),
+            new MaterialDemandSupplyInfo("MV BLUE", "舟山港", "ZHOUSHAN", "舟山港", "2026-06-05T09:30", "2026-06-05", "天气待接入", "STATIC_PLACEHOLDER"),
             List.of(new MaterialDemandComparisonStrategy(
                 "LOWEST_MIXED",
                 "最低混供",
@@ -151,7 +151,9 @@ class MaterialDemandControllerTest {
                 0,
                 java.math.BigDecimal.ZERO,
                 "CNY",
-                List.of()
+                List.of(),
+                false,
+                "ONLY_ONE_SUPPLIER"
             )),
             List.of(new MaterialDemandComparisonItem(
                 201L,
@@ -165,11 +167,16 @@ class MaterialDemandControllerTest {
                 new java.math.BigDecimal("2"),
                 null,
                 "PCS",
+                "110101",
+                "COTTON RAG",
                 null,
                 null,
                 List.of(),
                 "NO_SUPPLIER_CANDIDATE"
-            ))
+            )),
+            false,
+            false,
+            null
         );
         when(materialDemandComparisonService.comparison("Bearer company-token", 101L)).thenReturn(response);
 
@@ -190,6 +197,9 @@ class MaterialDemandControllerTest {
             demandNo,
             "APP-001",
             "MV BLUE",
+            "ZHOUSHAN",
+            "舟山港",
+            "2026-06-05T09:30",
             "2026-06-05",
             "STCL26SD003-R01.xlsx",
             "DEMAND_INQUIRY",
@@ -255,6 +265,9 @@ class MaterialDemandControllerTest {
             "REQ-20260605-001",
             "APP-001",
             "MV BLUE",
+            "ZHOUSHAN",
+            "舟山港",
+            "2026-06-05T09:30",
             "2026-06-05",
             "STCL26SD003-R01.xlsx",
             "DEMAND_INQUIRY",

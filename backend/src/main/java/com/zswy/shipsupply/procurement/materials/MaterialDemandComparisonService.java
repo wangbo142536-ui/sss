@@ -1,6 +1,7 @@
 package com.zswy.shipsupply.procurement.materials;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -24,6 +25,7 @@ public class MaterialDemandComparisonService {
 
     private static final int MAX_CANDIDATES_PER_ITEM = 10;
     private static final String CNY = "CNY";
+    private static final BigDecimal USD_RATE = new BigDecimal("7");
     private static final BigDecimal MISSING_PRICE = new BigDecimal("999999999");
     private static final Pattern TOKEN_SPLITTER = Pattern.compile("[^A-Za-z0-9]+");
     private static final Set<String> STOP_WORDS = Set.of(
@@ -35,24 +37,33 @@ public class MaterialDemandComparisonService {
     private final CurrentUserService currentUserService;
     private final MaterialDemandRepository materialDemandRepository;
     private final MaterialSupplierCandidateProvider supplierCandidateProvider;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     public MaterialDemandComparisonService(
         CurrentUserService currentUserService,
         MaterialDemandRepository materialDemandRepository,
-        MaterialSupplierCandidateProvider supplierCandidateProvider
+        MaterialSupplierCandidateProvider supplierCandidateProvider,
+        PurchaseOrderRepository purchaseOrderRepository
     ) {
         this.currentUserService = currentUserService;
         this.materialDemandRepository = materialDemandRepository;
         this.supplierCandidateProvider = supplierCandidateProvider;
+        this.purchaseOrderRepository = purchaseOrderRepository;
     }
 
     public MaterialDemandComparisonResponse comparison(String authorizationHeader, Long demandId) {
         CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
         MaterialDemandSummaryResponse demand = requireDemand(currentUser.companyId(), demandId);
+        if ("DISCARDED".equalsIgnoreCase(demand.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "MATERIAL_DEMAND_DISCARDED");
+        }
+        materialDemandRepository.markComparingIfSaved(currentUser.companyId(), demandId);
         List<MaterialDemandItemResponse> demandItems = materialDemandRepository.items(currentUser.companyId(), demandId);
-        List<MaterialSupplierCandidate> supplierPool = supplierCandidateProvider.findOnShelfCandidates().stream()
-            .filter(candidate -> "ON_SHELF".equalsIgnoreCase(nullToEmpty(candidate.shelfStatus())))
-            .toList();
+        List<MaterialSupplierCandidate> supplierPool = onShelfSupplierPool();
+        Long existingPurchaseOrderId = purchaseOrderRepository.findFirstActiveOrderIdByDemand(currentUser.companyId(), demandId);
+        if (existingPurchaseOrderId != null && existingPurchaseOrderId <= 0) {
+            existingPurchaseOrderId = null;
+        }
 
         List<ComparisonItemDraft> drafts = demandItems.stream()
             .map(item -> draftItem(item, supplierPool))
@@ -66,14 +77,39 @@ public class MaterialDemandComparisonService {
             demand,
             new MaterialDemandSupplyInfo(
                 demand.vesselName(),
-                "待补充",
-                demand.inquiryDate(),
+                firstNonBlank(demand.supplyPortName(), demand.supplyPortCode(), "待补充"),
+                demand.supplyPortCode(),
+                demand.supplyPortName(),
+                demand.vesselEta(),
+                firstNonBlank(datePart(demand.vesselEta()), demand.inquiryDate()),
                 "天气待接入",
                 "STATIC_PLACEHOLDER"
             ),
             List.of(lowestMixedStrategy(drafts), singleSupplier.strategy()),
-            items
+            items,
+            existingPurchaseOrderId != null || "ORDERED".equalsIgnoreCase(demand.status()),
+            "DISCARDED".equalsIgnoreCase(demand.status()),
+            existingPurchaseOrderId
         );
+    }
+
+    public List<MaterialSupplierCandidate> itemSupplierCandidates(String authorizationHeader, Long demandId, Long itemId) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        MaterialDemandSummaryResponse demand = requireDemand(currentUser.companyId(), demandId);
+        if ("DISCARDED".equalsIgnoreCase(demand.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "MATERIAL_DEMAND_DISCARDED");
+        }
+        MaterialDemandItemResponse item = materialDemandRepository.items(currentUser.companyId(), demandId).stream()
+            .filter(candidate -> itemId != null && itemId.equals(candidate.itemId()))
+            .findFirst()
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_DEMAND_ITEM_NOT_FOUND"));
+        return draftItem(item, onShelfSupplierPool()).candidates();
+    }
+
+    private List<MaterialSupplierCandidate> onShelfSupplierPool() {
+        return supplierCandidateProvider.findOnShelfCandidates().stream()
+            .filter(candidate -> "ON_SHELF".equalsIgnoreCase(nullToEmpty(candidate.shelfStatus())))
+            .toList();
     }
 
     private MaterialDemandSummaryResponse requireDemand(Long companyId, Long demandId) {
@@ -129,7 +165,7 @@ public class MaterialDemandComparisonService {
             .filter(candidate -> candidate.rank() > 0)
             .sorted(candidateComparator())
             .limit(MAX_CANDIDATES_PER_ITEM)
-            .map(ScoredSupplierCandidate::candidate)
+            .map(candidate -> pricedCandidate(candidate.candidate(), requestedQty))
             .toList();
     }
 
@@ -206,6 +242,7 @@ public class MaterialDemandComparisonService {
                 .thenComparing(MaterialDemandComparisonSupplier::supplierName, Comparator.nullsLast(String::compareTo))
                 .thenComparing(MaterialDemandComparisonSupplier::companyId, Comparator.nullsLast(Long::compareTo)))
             .toList();
+        boolean enabled = suppliers.size() > 1;
         return new MaterialDemandComparisonStrategy(
             "LOWEST_MIXED",
             "最低混供",
@@ -214,8 +251,11 @@ public class MaterialDemandComparisonService {
             drafts.size() - priced.size(),
             unpriced.size(),
             amount(priced, ComparisonItemDraft::lowestCandidate),
+            amountUsd(priced, ComparisonItemDraft::lowestCandidate),
             CNY,
-            suppliers
+            suppliers,
+            enabled,
+            enabled ? null : "ONLY_ONE_SUPPLIER"
         );
     }
 
@@ -239,7 +279,7 @@ public class MaterialDemandComparisonService {
             .orElse(null);
         if (best == null) {
             return new SingleSupplierSelection(
-                new MaterialDemandComparisonStrategy("SINGLE_SUPPLIER", "集中采购", 0, drafts.size(), drafts.size(), 0, BigDecimal.ZERO, CNY, List.of()),
+                new MaterialDemandComparisonStrategy("SINGLE_SUPPLIER", "集中采购", 0, drafts.size(), drafts.size(), 0, BigDecimal.ZERO, BigDecimal.ZERO, CNY, List.of(), true, null),
                 Map.of()
             );
         }
@@ -252,8 +292,11 @@ public class MaterialDemandComparisonService {
                 drafts.size() - best.matchedCount(),
                 0,
                 best.totalAmount(),
+                best.totalAmountUsd(),
                 CNY,
-                List.of(best.supplier())
+                List.of(best.supplier()),
+                true,
+                null
             ),
             best.candidateByItemId()
         );
@@ -273,6 +316,9 @@ public class MaterialDemandComparisonService {
         BigDecimal totalAmount = bestPicks.stream()
             .map(pick -> lineAmount(pick.candidate(), pick.draft().pricingQuantity()))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalAmountUsd = bestPicks.stream()
+            .map(pick -> lineAmountUsd(pick.candidate(), pick.draft().pricingQuantity()))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         Map<Long, MaterialSupplierCandidate> candidateByItemId = bestPicks.stream()
             .collect(Collectors.toMap(pick -> pick.draft().item().itemId(), SupplierItemPick::candidate));
         MaterialDemandComparisonSupplier supplier = new MaterialDemandComparisonSupplier(
@@ -284,9 +330,10 @@ public class MaterialDemandComparisonService {
             0,
             stockSatisfied,
             totalAmount,
+            totalAmountUsd,
             CNY
         );
-        return new SingleSupplierOption(key, supplier, bestPicks.size(), stockSatisfied, totalAmount, candidateByItemId);
+        return new SingleSupplierOption(key, supplier, bestPicks.size(), stockSatisfied, totalAmount, totalAmountUsd, candidateByItemId);
     }
 
     private MaterialDemandComparisonSupplier supplierSummary(SupplierKey key, List<ComparisonItemDraft> drafts, int totalCount) {
@@ -302,6 +349,7 @@ public class MaterialDemandComparisonService {
             0,
             stockSatisfied,
             amount(drafts, ComparisonItemDraft::lowestCandidate),
+            amountUsd(drafts, ComparisonItemDraft::lowestCandidate),
             CNY
         );
     }
@@ -312,11 +360,39 @@ public class MaterialDemandComparisonService {
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    private BigDecimal amountUsd(List<ComparisonItemDraft> drafts, Function<ComparisonItemDraft, MaterialSupplierCandidate> candidateAccessor) {
+        return drafts.stream()
+            .map(draft -> lineAmountUsd(candidateAccessor.apply(draft), draft.pricingQuantity()))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     private BigDecimal lineAmount(MaterialSupplierCandidate candidate, BigDecimal quantity) {
         if (candidate == null || candidate.unitPrice() == null) {
             return BigDecimal.ZERO;
         }
         return candidate.unitPrice().multiply(quantity);
+    }
+
+    private BigDecimal lineAmountUsd(MaterialSupplierCandidate candidate, BigDecimal quantity) {
+        if (candidate == null || candidate.unitPriceUsd() == null) {
+            return BigDecimal.ZERO;
+        }
+        return candidate.unitPriceUsd().multiply(quantity);
+    }
+
+    private MaterialSupplierCandidate pricedCandidate(MaterialSupplierCandidate candidate, BigDecimal requestedQty) {
+        List<MaterialSupplierUnitPriceOption> options = candidate.unitPriceOptions();
+        if (options == null || options.isEmpty()) {
+            String unit = firstNonBlank(candidate.selectedUnit(), candidate.stockUnit());
+            options = candidate.unitPrice() == null
+                ? List.of()
+                : List.of(new MaterialSupplierUnitPriceOption(unit, candidate.unitPrice(), usd(candidate.unitPrice()), true));
+        }
+        return candidate.withUnitPriceOptions(options).withLineAmounts(requestedQty);
+    }
+
+    private BigDecimal usd(BigDecimal cnyAmount) {
+        return cnyAmount == null ? null : cnyAmount.divide(USD_RATE, 4, RoundingMode.HALF_UP);
     }
 
     private BigDecimal parsePositiveQuantity(String value) {
@@ -394,8 +470,28 @@ public class MaterialDemandComparisonService {
         }
     }
 
-    private String nullToEmpty(String value) {
+    private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String datePart(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String text = value.trim();
+        return text.length() >= 10 ? text.substring(0, 10) : text;
     }
 
     private int compareSingleSupplierOption(SingleSupplierOption left, SingleSupplierOption right) {
@@ -442,6 +538,8 @@ public class MaterialDemandComparisonService {
                 pricingQuantity,
                 pricingQuantityNote,
                 item.unit(),
+                firstNonBlank(item.supplierItemNo(), item.impaCode(), item.platformCode()),
+                firstNonBlank(item.rawNameSpec(), item.description(), item.productName()),
                 lowestCandidate,
                 singleSupplierCandidate,
                 candidates,
@@ -476,6 +574,7 @@ public class MaterialDemandComparisonService {
         int matchedCount,
         int stockSatisfiedCount,
         BigDecimal totalAmount,
+        BigDecimal totalAmountUsd,
         Map<Long, MaterialSupplierCandidate> candidateByItemId
     ) {
     }

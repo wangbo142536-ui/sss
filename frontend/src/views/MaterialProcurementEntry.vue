@@ -1,17 +1,21 @@
 ﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import StableDateTimeInput from "@/components/StableDateTimeInput.vue";
 import WorkbenchLayout from "@/components/WorkbenchLayout.vue";
-import { t } from "@/i18n";
+import { t, useI18n } from "@/i18n";
+import { listPublicDictionaryItems, type DictionaryItem } from "@/services/dataDictionaryService";
 import { getMaterialDemandDetail, saveMaterialDemand, uploadMaterialMatchPreview } from "@/services/procurementMaterialService";
-import type { MaterialMatchCandidate, MaterialMatchPreviewItem, MaterialMatchPreviewResponse, MaterialMatchResult } from "@/types/procurementMaterials";
+import type { MaterialDemandSaveResponse, MaterialMatchCandidate, MaterialMatchPreviewItem, MaterialMatchPreviewResponse, MaterialMatchResult } from "@/types/procurementMaterials";
 
 const route = useRoute();
 const router = useRouter();
+const { language } = useI18n();
 const isMaterialSearchOpen = ref(false);
 const isMatchExpanded = ref(false);
 const isUploading = ref(false);
 const isSavingDemand = ref(false);
+const isAutoSavingCompare = ref(false);
 const isLoadingDemand = ref(false);
 const uploadError = ref("");
 const saveError = ref("");
@@ -26,42 +30,51 @@ const fileInputRef = ref<HTMLInputElement | null>(null);
 const matchPreview = ref<MaterialMatchPreviewResponse | null>(null);
 const demandId = ref<number | undefined>();
 const demandNo = ref("");
-type DemandFormKey = "applicationNo" | "vesselName" | "inquiryDate";
+const demandStatus = ref("");
+type DemandFormKey = "applicationNo" | "vesselName" | "supplyPortCode" | "vesselEta";
 const demandForm = ref({
   applicationNo: "",
   vesselName: "",
-  inquiryDate: new Date().toISOString().slice(0, 10)
+  supplyPortCode: "",
+  supplyPortName: "",
+  vesselEta: ""
 });
 const invalidDemandField = ref<DemandFormKey | "">("");
-const demandInputRefs = ref<Partial<Record<DemandFormKey, HTMLInputElement>>>({});
+const invalidMaterialRowKey = ref("");
+const invalidMaterialField = ref<"quantity" | "unit" | "">("");
+const demandInputRefs = ref<Partial<Record<DemandFormKey, HTMLElement>>>({});
+const portOptions = ref<DictionaryItem[]>([]);
+const unitOptions = ref<DictionaryItem[]>([]);
 const progressOverlayVisible = ref(false);
 const progressPercent = ref(0);
 const progressStageIndex = ref(0);
 const progressState = ref<"running" | "success" | "failed">("running");
 const progressResult = ref<MaterialMatchPreviewResponse | null>(null);
 let progressTimer: number | undefined;
+const DEFAULT_MATERIAL_QUANTITY = "1";
+const DEFAULT_MATERIAL_UNIT = "个";
 
 const supplyInfo = computed(() => [
-  { key: "applicationNo" as const, label: t("page.materials.applicationNo"), placeholder: t("page.materials.applicationNoPlaceholder"), type: "text" },
-  { key: "vesselName" as const, label: t("page.materials.vesselName"), placeholder: t("page.materials.vesselNamePlaceholder"), type: "text" },
-  { key: "inquiryDate" as const, label: t("page.materials.inquiryDate"), placeholder: t("page.materials.inquiryDatePlaceholder"), type: "date" }
+  { key: "vesselName" as const, label: t("page.materials.vesselName"), placeholder: t("page.materials.vesselNamePlaceholder"), type: "text", required: true },
+  { key: "supplyPortCode" as const, label: t("page.materials.supplyPort"), placeholder: t("page.materials.supplyPortPlaceholder"), type: "select", required: true },
+  { key: "vesselEta" as const, label: t("page.materials.vesselEta"), placeholder: t("page.materials.vesselEtaPlaceholder"), type: "datetime", required: true }
 ]);
 
 const demandRequiredFields: Array<{ key: DemandFormKey; errorKey: string }> = [
-  { key: "applicationNo", errorKey: "page.materials.applicationNoRequired" },
   { key: "vesselName", errorKey: "page.materials.vesselNameRequired" },
-  { key: "inquiryDate", errorKey: "page.materials.inquiryDateRequired" }
+  { key: "supplyPortCode", errorKey: "page.materials.supplyPortRequired" },
+  { key: "vesselEta", errorKey: "page.materials.vesselEtaRequired" }
 ];
 
 const commonCategories = [
-  "缂嗙怀绱㈠叿",
-  "鑸圭敤娌规紗",
-  "瀹夊叏闃叉姢",
-  "鏁戠敓娑堥槻",
-  "閫氱敤浜旈噾",
-  "鎵嬪姩宸ュ叿",
-  "鐢垫皵鍣ㄦ潗",
-  "鐒婃帴鑰楁潗"
+  "缆绳索具",
+  "船用油漆",
+  "安全防护",
+  "救生消防",
+  "通用五金",
+  "手动作业工具",
+  "电气器材",
+  "焊接耗材"
 ];
 
 const previewItems = computed(() => matchPreview.value?.items ?? []);
@@ -79,6 +92,11 @@ const progressMatchedLabel = computed(() =>
     : t("page.materials.progressReading")
 );
 const progressPendingLabel = computed(() => (progressResult.value ? t("page.materials.progressCountValue", { count: progressResult.value.unmatchedCount }) : t("page.materials.progressReading")));
+const demandStatusValue = computed(() => demandStatus.value.toUpperCase());
+const isDemandReadonly = computed(() => ["ORDERED", "DISCARDED", "SUPPLIED"].includes(demandStatusValue.value));
+const isDemandInComparisonStage = computed(() => !["", "SAVED"].includes(demandStatusValue.value));
+const isDemandActionBusy = computed(() => isUploading.value || isSavingDemand.value || isAutoSavingCompare.value || isLoadingDemand.value);
+const isMaterialEditDisabled = computed(() => isDemandInComparisonStage.value || isDemandReadonly.value || isDemandActionBusy.value);
 
 const matchFilters = computed(() => [
   { value: "ALL" as const, label: `${t("common.all")} ${previewItems.value.length}` },
@@ -96,20 +114,21 @@ const filteredItems = computed(() => {
     return [
       item.impaCode,
       item.platformCode,
-      item.cleanName,
-      item.coreName,
-      item.description,
       item.sizeModel,
-      item.remarks,
-      item.supplierItemNo,
-      item.rawNameSpec,
       item.candidateImpaCode,
-      item.candidateNameCn,
-      item.candidateNameEn,
-      item.reason,
-      ...(item.parsedAttributes ?? []).flatMap((attribute) => [attribute.name, attribute.value, attribute.rawText]),
-      ...(item.riskFlags ?? []),
-      ...Object.values(item.rawColumns ?? {})
+      item.candidateSpec,
+      (item as MaterialMatchPreviewItem & { cnCode?: string }).cnCode,
+      (item as MaterialMatchPreviewItem & { candidateCnCode?: string }).candidateCnCode,
+      ...(item.candidates ?? []).flatMap((candidate) => [
+        candidate.impaCode,
+        candidate.specification,
+        (candidate as MaterialMatchCandidate & { cnCode?: string }).cnCode
+      ]),
+      ...(item.candidateSnapshot ?? []).flatMap((candidate) => [
+        candidate.impaCode,
+        candidate.specification,
+        (candidate as MaterialMatchCandidate & { cnCode?: string }).cnCode
+      ])
     ]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(keyword));
@@ -362,6 +381,89 @@ function applySelectedCandidates(): MaterialMatchPreviewItem[] {
   });
 }
 
+function parsePositiveQuantity(value: unknown): number | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const parsed = Number(text.replace(/,/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeQuantityValue(value: unknown): string {
+  const text = String(value ?? "").trim();
+  return parsePositiveQuantity(text) === null ? DEFAULT_MATERIAL_QUANTITY : text;
+}
+
+function normalizeUnitValue(value: unknown): string {
+  const text = String(value ?? "").trim();
+  if (!text) return DEFAULT_MATERIAL_UNIT;
+  const matched = unitOptions.value.find((item) => [item.itemCode, item.itemValue, item.itemName, item.itemNameEn].some((candidate) => String(candidate ?? "").trim().toLowerCase() === text.toLowerCase()));
+  return matched?.itemName || text;
+}
+
+function dictionaryOptionLabel(item: DictionaryItem): string {
+  const code = item.itemValue || item.itemCode;
+  return code && code !== item.itemName ? `${item.itemName} / ${code}` : item.itemName;
+}
+
+function unitDictionaryOptionLabel(item: DictionaryItem): string {
+  if (language.value === "en-US") {
+    return item.itemNameEn || item.itemValue || item.itemName || item.itemCode;
+  }
+  return item.itemName || item.itemValue || item.itemCode;
+}
+
+function unitOptionValue(item: DictionaryItem): string {
+  return item.itemName || item.itemValue || item.itemCode;
+}
+
+function selectedPortName(): string {
+  const selected = portOptions.value.find((item) => item.itemCode === demandForm.value.supplyPortCode || item.itemValue === demandForm.value.supplyPortCode);
+  return selected?.itemName || demandForm.value.supplyPortName || "";
+}
+
+function handleSupplyPortChange(): void {
+  demandForm.value.supplyPortName = selectedPortName();
+  handleDemandInput("supplyPortCode");
+}
+
+async function loadProcurementDictionaries(): Promise<void> {
+  try {
+    const [ports, units] = await Promise.all([
+      listPublicDictionaryItems("PORT"),
+      listPublicDictionaryItems("UNIT")
+    ]);
+    portOptions.value = ports;
+    unitOptions.value = units;
+    if (demandForm.value.supplyPortCode) {
+      demandForm.value.supplyPortName = selectedPortName();
+    }
+    if (matchPreview.value) {
+      matchPreview.value = {
+        ...matchPreview.value,
+        items: matchPreview.value.items.map(normalizeMaterialItemDefaults)
+      };
+    }
+  } catch {
+    portOptions.value = [];
+    unitOptions.value = [];
+  }
+}
+
+function normalizeMaterialItemDefaults(item: MaterialMatchPreviewItem): MaterialMatchPreviewItem {
+  return {
+    ...item,
+    quantity: normalizeQuantityValue(item.quantity),
+    unit: normalizeUnitValue(item.unit)
+  };
+}
+
+function normalizeMaterialPreviewDefaults(preview: MaterialMatchPreviewResponse): MaterialMatchPreviewResponse {
+  return {
+    ...preview,
+    items: preview.items.map(normalizeMaterialItemDefaults)
+  };
+}
+
 function refreshPreviewStats(items: MaterialMatchPreviewItem[]): MaterialMatchPreviewResponse | null {
   if (!matchPreview.value) return null;
   return {
@@ -377,6 +479,10 @@ function refreshPreviewStats(items: MaterialMatchPreviewItem[]): MaterialMatchPr
 function setDemandInputRef(key: DemandFormKey, element: unknown): void {
   if (element instanceof HTMLInputElement) {
     demandInputRefs.value[key] = element;
+  } else if (element instanceof HTMLSelectElement) {
+    demandInputRefs.value[key] = element;
+  } else if (element && typeof (element as { focus?: unknown }).focus === "function") {
+    demandInputRefs.value[key] = element as HTMLElement;
   } else {
     delete demandInputRefs.value[key];
   }
@@ -397,6 +503,64 @@ function handleDemandInput(key: DemandFormKey): void {
   }
 }
 
+function materialRowKey(row: MaterialMatchPreviewItem): string {
+  const index = previewItems.value.findIndex((item) => item === row);
+  return rowKey(row, index >= 0 ? index : 0);
+}
+
+function updateMaterialRowField(row: MaterialMatchPreviewItem, field: "quantity" | "unit", value: string): void {
+  const preview = matchPreview.value;
+  if (!preview || isMaterialEditDisabled.value) return;
+  const index = preview.items.findIndex((item) => item === row);
+  if (index < 0) return;
+  const items = preview.items.slice();
+  items[index] = { ...items[index], [field]: value };
+  matchPreview.value = { ...preview, items };
+  matchConfirmed.value = false;
+
+  const key = rowKey(items[index], index);
+  if (invalidMaterialRowKey.value === key && (field !== "quantity" || parsePositiveQuantity(value) !== null)) {
+    invalidMaterialRowKey.value = "";
+    invalidMaterialField.value = "";
+    saveError.value = "";
+  }
+}
+
+function normalizeMaterialRowField(row: MaterialMatchPreviewItem, field: "quantity" | "unit"): void {
+  const preview = matchPreview.value;
+  if (!preview || isMaterialEditDisabled.value) return;
+  const index = preview.items.findIndex((item) => item === row);
+  if (index < 0) return;
+  const current = preview.items[index];
+  const normalized = field === "quantity" ? String(current.quantity ?? "").trim() : normalizeUnitValue(current.unit);
+  updateMaterialRowField(current, field, normalized);
+}
+
+function validateMaterialRows(): boolean {
+  const preview = matchPreview.value;
+  if (!preview) return false;
+
+  const invalidQuantityIndex = preview.items.findIndex((item) => parsePositiveQuantity(item.quantity) === null);
+  if (invalidQuantityIndex >= 0) {
+    const row = preview.items[invalidQuantityIndex];
+    const key = rowKey(row, invalidQuantityIndex);
+    invalidMaterialRowKey.value = key;
+    invalidMaterialField.value = "quantity";
+    expandedRowKey.value = key;
+    saveNotice.value = "";
+    saveError.value = t("page.materials.quantityPositiveRequired");
+    return false;
+  }
+
+  matchPreview.value = {
+    ...preview,
+    items: preview.items.map((item) => ({ ...item, unit: normalizeUnitValue(item.unit) }))
+  };
+  invalidMaterialRowKey.value = "";
+  invalidMaterialField.value = "";
+  return true;
+}
+
 function validateDemandForm(): boolean {
   const missingField = demandRequiredFields.find((field) => !String(demandForm.value[field.key] ?? "").trim());
   if (!missingField) {
@@ -413,19 +577,21 @@ function friendlyDemandSaveError(error: unknown): string {
   if (!(error instanceof Error) || !error.message) return t("page.materials.saveFailed");
   const message = error.message;
   const normalized = message.toLowerCase();
-  if (normalized.includes("applicationno") || normalized.includes("application no")) return t("page.materials.applicationNoRequired");
   if (normalized.includes("vesselname") || normalized.includes("vessel name")) return t("page.materials.vesselNameRequired");
-  if (normalized.includes("inquirydate") || normalized.includes("inquiry date")) return t("page.materials.inquiryDateRequired");
+  if (normalized.includes("supplyport") || normalized.includes("supply port")) return t("page.materials.supplyPortRequired");
+  if (normalized.includes("vesseleta") || normalized.includes("vessel eta") || normalized.includes("inquirydate") || normalized.includes("inquiry date")) return t("page.materials.vesselEtaRequired");
+  if (normalized.includes("quantity")) return t("page.materials.quantityPositiveRequired");
   return message;
 }
 
-async function saveDemand(): Promise<void> {
-  if (!matchPreview.value || !previewItems.value.length || isSavingDemand.value) return;
+async function persistDemand(showSuccess: boolean): Promise<MaterialDemandSaveResponse | null> {
+  if (!matchPreview.value || !previewItems.value.length || isDemandReadonly.value) return null;
   saveError.value = "";
   saveNotice.value = "";
-  if (!validateDemandForm()) return;
-  isSavingDemand.value = true;
-  const items = applySelectedCandidates();
+  if (!validateDemandForm()) return null;
+  if (!validateMaterialRows()) return null;
+
+  const items = applySelectedCandidates().map(normalizeMaterialItemDefaults);
   const nextPreview = refreshPreviewStats(items);
   if (nextPreview) matchPreview.value = nextPreview;
   matchConfirmed.value = true;
@@ -434,9 +600,11 @@ async function saveDemand(): Promise<void> {
     const response = await saveMaterialDemand({
       demandId: demandId.value,
       demandNo: demandNo.value,
-      applicationNo: demandForm.value.applicationNo.trim(),
+      applicationNo: demandForm.value.applicationNo.trim() || undefined,
       vesselName: demandForm.value.vesselName.trim(),
-      inquiryDate: demandForm.value.inquiryDate.trim(),
+      supplyPortCode: demandForm.value.supplyPortCode.trim(),
+      supplyPortName: selectedPortName(),
+      vesselEta: demandForm.value.vesselEta.trim(),
       sourceFileName: selectedFileName.value,
       documentType: matchPreview.value.documentType,
       headerRowIndex: matchPreview.value.headerRowIndex,
@@ -444,29 +612,49 @@ async function saveDemand(): Promise<void> {
     });
     demandId.value = response.demandId;
     demandNo.value = response.demandNo;
-    saveNotice.value = t("page.materials.saveSuccess");
+    demandStatus.value = response.status || demandStatus.value || "SAVED";
+    if (showSuccess) saveNotice.value = t("page.materials.saveSuccess");
+    return response;
   } catch (error) {
     saveError.value = friendlyDemandSaveError(error);
+    return null;
+  }
+}
+
+async function saveDemand(): Promise<void> {
+  if (!matchPreview.value || !previewItems.value.length || isDemandActionBusy.value || isDemandReadonly.value) return;
+  isSavingDemand.value = true;
+  try {
+    await persistDemand(true);
   } finally {
     isSavingDemand.value = false;
   }
 }
 
 function quoteMaterialPreview(): void {
-  if (!matchPreview.value || !previewItems.value.length) return;
+  if (!matchPreview.value || !previewItems.value.length || isDemandActionBusy.value || isDemandReadonly.value) return;
   saveNotice.value = t("page.materials.quoteSuccess");
   window.setTimeout(() => {
     router.push("/inquiries");
   }, 360);
 }
 
-function openComparisonDetail(): void {
-  if (!demandId.value) {
+async function openComparisonDetail(): Promise<void> {
+  if (isDemandReadonly.value) {
     saveNotice.value = "";
-    saveError.value = t("page.materials.saveBeforeCompare");
+    saveError.value = t("page.materials.readonlyAfterCompare");
     return;
   }
-  router.push(`/procurement/requests/${encodeURIComponent(String(demandId.value))}/compare`);
+  if (!matchPreview.value || !previewItems.value.length || isDemandActionBusy.value) return;
+
+  isAutoSavingCompare.value = true;
+  try {
+    const response = await persistDemand(false);
+    if (!response?.demandId) return;
+    await router.push(`/procurement/requests/${encodeURIComponent(String(response.demandId))}/compare`);
+  } finally {
+    isAutoSavingCompare.value = false;
+  }
 }
 
 function routeDemandId(): string {
@@ -483,13 +671,17 @@ async function loadDemandDetail(id: string): Promise<void> {
     const detail = await getMaterialDemandDetail(id);
     demandId.value = detail.demand.demandId;
     demandNo.value = detail.demand.demandNo;
+    demandStatus.value = detail.demand.status || "";
     demandForm.value = {
       applicationNo: detail.demand.applicationNo || "",
       vesselName: detail.demand.vesselName || "",
-      inquiryDate: detail.demand.inquiryDate || new Date().toISOString().slice(0, 10)
+      supplyPortCode: detail.demand.supplyPortCode || "",
+      supplyPortName: detail.demand.supplyPortName || "",
+      vesselEta: detail.demand.vesselEta || ""
     };
+    if (demandForm.value.supplyPortCode) demandForm.value.supplyPortName = selectedPortName();
     selectedFileName.value = detail.demand.sourceFileName || "";
-    matchPreview.value = {
+    matchPreview.value = normalizeMaterialPreviewDefaults({
       documentType: detail.demand.documentType || "UNKNOWN",
       headerRowIndex: detail.demand.headerRowIndex || 0,
       totalRows: detail.demand.skuCount || detail.items.length,
@@ -497,7 +689,7 @@ async function loadDemandDetail(id: string): Promise<void> {
       similarCount: detail.demand.similarCount,
       unmatchedCount: detail.demand.unmatchedCount,
       items: detail.items
-    };
+    });
     statusFilter.value = "ALL";
     expandedRowKey.value = "";
     selectedCandidateIndexes.value = {};
@@ -509,7 +701,7 @@ async function loadDemandDetail(id: string): Promise<void> {
 }
 
 function openFilePicker(): void {
-  if (!isUploading.value) fileInputRef.value?.click();
+  if (!isDemandActionBusy.value && !isDemandReadonly.value) fileInputRef.value?.click();
 }
 
 function clearProgressTimer(): void {
@@ -552,7 +744,7 @@ function delay(ms: number): Promise<void> {
 }
 
 async function handleFile(file?: File): Promise<void> {
-  if (!file || isUploading.value) return;
+  if (!file || isDemandActionBusy.value || isDemandReadonly.value) return;
   selectedFileName.value = file.name;
   uploadError.value = "";
   saveNotice.value = "";
@@ -563,7 +755,7 @@ async function handleFile(file?: File): Promise<void> {
   startProgressOverlay();
 
   try {
-    const preview = await uploadMaterialMatchPreview(file);
+    const preview = normalizeMaterialPreviewDefaults(await uploadMaterialMatchPreview(file));
     matchPreview.value = preview;
     progressResult.value = preview;
     clearProgressTimer();
@@ -600,6 +792,7 @@ function toggleRow(row: MaterialMatchPreviewItem, index: number): void {
 }
 
 onMounted(() => {
+  void loadProcurementDictionaries();
   void loadDemandDetail(routeDemandId());
 });
 
@@ -620,17 +813,42 @@ onBeforeUnmount(() => {
   <div class="material-workbench">
     <section class="material-stage" :aria-label="t('nav.materials')">
       <section class="command-head">
-        <div class="supply-strip" aria-label="鏈琛ョ粰淇℃伅">
+        <div class="supply-strip" :aria-label="t('compare.mainInfo')">
           <div v-for="item in supplyInfo" :key="item.key" class="supply-item">
             <label>
-              <span class="required-field-label"><i aria-hidden="true">*</i>{{ item.label }}</span>
-              <input
+              <span :class="{ 'required-field-label': item.required }"><i v-if="item.required" aria-hidden="true">*</i>{{ item.label }}</span>
+              <select
+                v-if="item.type === 'select'"
                 :ref="(element) => setDemandInputRef(item.key, element)"
                 v-model="demandForm[item.key]"
                 :class="{ 'is-invalid': invalidDemandField === item.key }"
-                :type="item.type"
+                :disabled="isDemandActionBusy || isDemandReadonly"
+                :aria-invalid="invalidDemandField === item.key"
+                @change="handleSupplyPortChange"
+              >
+                <option value="">{{ item.placeholder }}</option>
+                <option v-for="port in portOptions" :key="port.id || port.itemCode" :value="port.itemCode">
+                  {{ dictionaryOptionLabel(port) }}
+                </option>
+              </select>
+              <StableDateTimeInput
+                v-else-if="item.type === 'datetime'"
+                :ref="(element) => setDemandInputRef(item.key, element)"
+                v-model="demandForm[item.key]"
+                mode="datetime"
+                :invalid="invalidDemandField === item.key"
                 :placeholder="item.placeholder"
-                :disabled="isLoadingDemand || isSavingDemand"
+                :disabled="isDemandActionBusy || isDemandReadonly"
+                @input="handleDemandInput(item.key)"
+              />
+              <input
+                v-else
+                :ref="(element) => setDemandInputRef(item.key, element)"
+                v-model="demandForm[item.key]"
+                :class="{ 'is-invalid': invalidDemandField === item.key }"
+                type="text"
+                :placeholder="item.placeholder"
+                :disabled="isDemandActionBusy || isDemandReadonly"
                 :aria-invalid="invalidDemandField === item.key"
                 @input="handleDemandInput(item.key)"
               />
@@ -638,7 +856,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="supply-upload-item">
             <div
-              :class="['drop-zone', 'supply-drop-zone', { 'is-loading': isUploading, 'has-error': uploadError }]"
+              :class="['drop-zone', 'supply-drop-zone', { 'is-loading': isUploading, 'has-error': uploadError, 'is-disabled': isDemandActionBusy || isDemandReadonly }]"
               role="button"
               tabindex="0"
               @click="openFilePicker"
@@ -647,7 +865,7 @@ onBeforeUnmount(() => {
               @dragover.prevent
               @drop.prevent="handleDrop"
             >
-              <input ref="fileInputRef" class="file-input" type="file" accept=".xlsx,.xls" :disabled="isUploading" @change="handleFileChange" />
+              <input ref="fileInputRef" class="file-input" type="file" accept=".xlsx,.xls" :disabled="isDemandActionBusy || isDemandReadonly" @change="handleFileChange" />
               <i aria-hidden="true">
                 <svg viewBox="0 0 24 24">
                   <path d="M12 15V4m0 0 4 4m-4-4-4 4" />
@@ -674,32 +892,25 @@ onBeforeUnmount(() => {
                 <span>{{ t("page.materials.totalRows") }} {{ matchPreview.totalRows }}</span>
                 <span>{{ t("page.materials.headerRow") }} {{ matchPreview.headerRowIndex || "-" }}</span>
                 <span v-if="matchConfirmed">{{ t("page.materials.matchConfirmed") }}</span>
+                <span v-if="saveNotice" class="match-save-notice">{{ saveNotice }}</span>
               </p>
             </div>
             <div class="match-card-actions">
               <button
                 type="button"
-                class="icon-button quote-shortcut-button"
-                :disabled="!matchPreview || !previewItems.length || isUploading || isSavingDemand || isLoadingDemand"
-                :aria-label="t('page.materials.quoteShortcut')"
-                :title="t('page.materials.quoteShortcut')"
-                @click="quoteMaterialPreview"
-              >
-                {{ t("page.materials.quoteShortcut") }}
-              </button>
-              <button
-                type="button"
                 class="icon-button compare-shortcut-button"
+                :disabled="!matchPreview || !previewItems.length || isDemandActionBusy || isDemandReadonly"
                 :aria-label="t('page.materials.compareShortcut')"
                 :title="t('page.materials.compareShortcut')"
                 @click="openComparisonDetail"
               >
-                {{ t("page.materials.compareShortcut") }}
+                <span v-if="isAutoSavingCompare" class="button-spinner" aria-hidden="true"></span>
+                <template v-else>{{ t("page.materials.compareShortcut") }}</template>
               </button>
               <button
                 type="button"
                 class="icon-button confirm-match-button"
-                :disabled="!matchPreview || !previewItems.length || isUploading || isSavingDemand || isLoadingDemand"
+                :disabled="!matchPreview || !previewItems.length || isDemandActionBusy || isDemandReadonly"
                 :aria-label="t('page.materials.saveDemand')"
                 :title="t('page.materials.saveDemand')"
                 @click="saveDemand"
@@ -712,6 +923,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="icon-button add-button"
+                :disabled="isDemandActionBusy || isDemandReadonly"
                 aria-label="鏂板鐗╂枡"
                 @click="isMaterialSearchOpen = true"
               >
@@ -734,7 +946,6 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <p v-if="saveNotice" class="upload-success">{{ saveNotice }}</p>
           <p v-if="saveError" class="upload-error">{{ t("page.materials.saveFailed") }}: {{ saveError }}</p>
 
           <div class="match-tools">
@@ -782,14 +993,43 @@ onBeforeUnmount(() => {
                     <span class="item-code">{{ firstText(row.impaCode, row.platformCode) }}</span>
                     <strong>{{ itemDisplayName(row) }}</strong>
                     <span>{{ firstText(row.sizeModel) }}</span>
-                    <span>{{ firstText(row.quantity) }}</span>
-                    <span>{{ firstText(row.unit) }}</span>
+                    <label
+                      :class="['match-inline-field', { 'is-invalid': invalidMaterialRowKey === materialRowKey(row) && invalidMaterialField === 'quantity' }]"
+                      @click.stop
+                    >
+                      <input
+                        :value="row.quantity ?? ''"
+                        type="number"
+                        min="0.0001"
+                        step="0.0001"
+                        inputmode="decimal"
+                        :placeholder="t('page.materials.quantityPlaceholder')"
+                        :disabled="isMaterialEditDisabled"
+                        :aria-invalid="invalidMaterialRowKey === materialRowKey(row) && invalidMaterialField === 'quantity'"
+                        @input="updateMaterialRowField(row, 'quantity', ($event.target as HTMLInputElement).value)"
+                        @blur="normalizeMaterialRowField(row, 'quantity')"
+                      />
+                      <small v-if="invalidMaterialRowKey === materialRowKey(row) && invalidMaterialField === 'quantity'">{{ t("page.materials.quantityPositiveRequired") }}</small>
+                    </label>
+                    <label class="match-inline-field" @click.stop>
+                      <select
+                        :value="row.unit ?? ''"
+                        :disabled="isMaterialEditDisabled"
+                        @change="updateMaterialRowField(row, 'unit', ($event.target as HTMLSelectElement).value)"
+                        @blur="normalizeMaterialRowField(row, 'unit')"
+                        >
+                          <option value="">{{ t("page.materials.unitPlaceholder") }}</option>
+                        <option v-for="unit in unitOptions" :key="unit.id || unit.itemCode" :value="unitOptionValue(unit)">
+                          {{ unitDictionaryOptionLabel(unit) }}
+                        </option>
+                      </select>
+                    </label>
                     <span>
                       <b :class="['status-pill', itemStatusClass(row)]">{{ statusLabel(row) }}</b>
                     </span>
                     <span class="item-code">{{ displayedCandidateLabel(row, index) }}</span>
                   </div>
-                  <div v-if="expandedRowKey === rowKey(row, index)" class="match-row-detail" @click.stop>
+                  <div v-if="expandedRowKey === rowKey(row, index)" :class="['match-row-detail', { 'is-readonly-detail': isDemandInComparisonStage }]" @click.stop>
                     <section>
                       <h3>{{ t("page.materials.demandSku") }}</h3>
                       <div class="sku-comparison-table">
@@ -805,7 +1045,7 @@ onBeforeUnmount(() => {
                         </div>
                       </div>
                     </section>
-                    <section>
+                    <section v-if="!isDemandInComparisonStage">
                       <h3>{{ t("page.materials.candidateSku") }}</h3>
                       <div v-if="visibleCandidateEntries(row, index).length" class="candidate-table">
                         <div class="candidate-table-head">
@@ -1038,7 +1278,8 @@ onBeforeUnmount(() => {
   font-weight: 950;
 }
 
-.supply-item input {
+.supply-item input,
+.supply-item select {
   width: 100%;
   height: 32px;
   margin-top: 7px;
@@ -1052,7 +1293,8 @@ onBeforeUnmount(() => {
   outline: none;
 }
 
-.supply-item input.is-invalid {
+.supply-item input.is-invalid,
+.supply-item select.is-invalid {
   border-color: #e5484d;
   box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.12);
   background: #fffafa;
@@ -1062,7 +1304,8 @@ onBeforeUnmount(() => {
   color: #7f98ae;
 }
 
-.supply-item input:focus {
+.supply-item input:focus,
+.supply-item select:focus {
   border-color: #1d72d2;
   box-shadow: 0 0 0 3px rgba(29, 114, 210, 0.12);
 }
@@ -1417,6 +1660,11 @@ onBeforeUnmount(() => {
   text-transform: none;
 }
 
+.match-summary .match-save-notice {
+  color: #047857;
+  margin-left: auto;
+}
+
 .match-card-actions {
   flex: 0 0 auto;
   display: flex;
@@ -1581,8 +1829,8 @@ onBeforeUnmount(() => {
     116px
     minmax(180px, 1.25fr)
     minmax(110px, 0.85fr)
-    72px
-    64px
+    108px
+    86px
     92px
     minmax(170px, 1fr);
   column-gap: 6px;
@@ -1630,6 +1878,65 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.match-row > .match-inline-field {
+  overflow: visible;
+  white-space: normal;
+}
+
+.match-inline-field {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.match-inline-field input,
+.match-inline-field select {
+  width: 100%;
+  height: 32px;
+  box-sizing: border-box;
+  border: 1px solid #b9d4e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #102f4f;
+  font: inherit;
+  font-weight: 800;
+  outline: none;
+  padding: 0 8px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+
+.match-inline-field input:focus,
+.match-inline-field select:focus {
+  border-color: #1d72d2;
+  box-shadow: 0 0 0 3px rgba(29, 114, 210, 0.14);
+}
+
+.match-inline-field input:disabled,
+.match-inline-field select:disabled {
+  background: #f1f6fb;
+  color: #7b8fa4;
+  cursor: not-allowed;
+}
+
+.match-inline-field.is-invalid input,
+.match-inline-field.is-invalid select {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.match-inline-field small {
+  color: #dc2626;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: normal;
 }
 
 .match-row strong {
@@ -1708,6 +2015,10 @@ onBeforeUnmount(() => {
   border-top: 1px solid #d9eaf7;
   background: #f7fbff;
   animation: match-content-in 160ms ease-out;
+}
+
+.match-row-detail.is-readonly-detail {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .match-row-detail section {

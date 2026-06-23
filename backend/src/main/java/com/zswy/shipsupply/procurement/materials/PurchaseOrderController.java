@@ -35,6 +35,14 @@ public class PurchaseOrderController {
         return purchaseOrderService.createFromDemand(authorizationHeader, null, request);
     }
 
+    @PostMapping("/api/procurement/material-demands/{demandId}/discard")
+    public MaterialDemandStatusResponse discardDemand(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long demandId
+    ) {
+        return purchaseOrderService.discardByDemand(authorizationHeader, demandId);
+    }
+
     @GetMapping("/api/procurement/purchase-orders")
     public PurchaseOrderListResponse listBuyerOrders(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
@@ -70,6 +78,14 @@ public class PurchaseOrderController {
         return purchaseOrderService.buyerDetail(authorizationHeader, orderId);
     }
 
+    @PostMapping("/api/procurement/purchase-orders/{orderId}/discard")
+    public MaterialDemandStatusResponse discardPurchaseOrder(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId
+    ) {
+        return purchaseOrderService.discardByPurchaseOrder(authorizationHeader, orderId);
+    }
+
     @GetMapping("/api/supplier/procurement/orders")
     public PurchaseOrderListResponse listSupplierOrders(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
@@ -81,6 +97,14 @@ public class PurchaseOrderController {
         @RequestParam(value = "size", defaultValue = "20") int size
     ) {
         return purchaseOrderService.listSupplier(authorizationHeader, keyword, status, createdFrom, createdTo, page, size);
+    }
+
+    @GetMapping("/api/supplier/procurement/orders/{orderId}")
+    public PurchaseOrderDetailResponse supplierDetail(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId
+    ) {
+        return purchaseOrderService.supplierDetail(authorizationHeader, orderId);
     }
 
     @PostMapping("/api/procurement/purchase-orders/{orderId}/supplier-orders/{supplierOrderId}/confirm")
@@ -101,5 +125,24 @@ public class PurchaseOrderController {
         @RequestBody PurchaseSupplierRejectRequest request
     ) {
         return purchaseOrderService.rejectSupplierOrder(authorizationHeader, orderId, supplierOrderId, request);
+    }
+
+    @PostMapping("/api/procurement/purchase-orders/{orderId}/supplier-orders/{supplierOrderId}/ready")
+    public PurchaseOrderDetailResponse markSupplierReady(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId,
+        @PathVariable Long supplierOrderId
+    ) {
+        return purchaseOrderService.markSupplierReady(authorizationHeader, orderId, supplierOrderId);
+    }
+
+    @PostMapping("/api/procurement/purchase-orders/{orderId}/supplier-orders/{supplierOrderId}/supplied")
+    public PurchaseOrderDetailResponse markSupplierSupplied(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId,
+        @PathVariable Long supplierOrderId,
+        @RequestBody PurchaseSupplierSupplyCompleteRequest request
+    ) {
+        return purchaseOrderService.markSupplierSupplied(authorizationHeader, orderId, supplierOrderId, request);
     }
 }

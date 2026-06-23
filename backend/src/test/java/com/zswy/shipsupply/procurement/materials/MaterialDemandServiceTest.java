@@ -80,6 +80,49 @@ class MaterialDemandServiceTest {
     }
 
     @Test
+    void updatesComparingDemandWithoutLockingQuantityAndUnitEdits() {
+        when(currentUserService.requireActiveCompanyUser("Bearer company-token"))
+            .thenReturn(new CurrentUserContext(10L, 1L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(1L, 101L)).thenReturn(Optional.of(summary(101L, "COMPARING")));
+
+        MaterialDemandSaveResponse response = service.save("Bearer company-token", saveRequest(null, null), 101L);
+
+        assertThat(response.demandId()).isEqualTo(101L);
+        assertThat(response.status()).isEqualTo("COMPARING");
+        verify(materialDemandRepository).updateDemand(eq(101L), eq(1L), eq(10L), any(), any());
+        verify(materialDemandRepository).replaceItems(eq(101L), eq(1L), any());
+    }
+
+    @Test
+    void rejectsSaveWhenItemQuantityIsNotPositive() {
+        when(currentUserService.requireActiveCompanyUser("Bearer company-token"))
+            .thenReturn(new CurrentUserContext(10L, 1L, "ACTIVE", "ACTIVE"));
+
+        assertThatThrownBy(() -> service.save("Bearer company-token", saveRequestWithQuantity("0"), null))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("MATERIAL_DEMAND_ITEM_QUANTITY_INVALID");
+
+        verify(materialDemandRepository, never()).insertDemand(eq(1L), eq(10L), any(), any(), any());
+    }
+
+    @Test
+    void createsDemandWhenApplicationNoIsBlank() {
+        when(currentUserService.requireActiveCompanyUser("Bearer company-token"))
+            .thenReturn(new CurrentUserContext(10L, 1L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.nextDemandNo(1L, LocalDate.of(2026, 6, 5)))
+            .thenReturn("REQ-20260605-001");
+        when(materialDemandRepository.insertDemand(eq(1L), eq(10L), eq("REQ-20260605-001"), any(), any()))
+            .thenReturn(101L);
+
+        MaterialDemandSaveResponse response = service.save("Bearer company-token", saveRequest(null, null, " "), null);
+
+        assertThat(response.demandId()).isEqualTo(101L);
+        ArgumentCaptor<MaterialDemandSaveRequest> requestCaptor = ArgumentCaptor.forClass(MaterialDemandSaveRequest.class);
+        verify(materialDemandRepository).insertDemand(eq(1L), eq(10L), eq("REQ-20260605-001"), requestCaptor.capture(), any());
+        assertThat(requestCaptor.getValue().applicationNo()).isNull();
+    }
+
+    @Test
     void rejectsCrossCompanyDemandUpdate() {
         when(currentUserService.requireActiveCompanyUser("Bearer company-token"))
             .thenReturn(new CurrentUserContext(10L, 1L, "ACTIVE", "ACTIVE"));
@@ -128,11 +171,18 @@ class MaterialDemandServiceTest {
     }
 
     private MaterialDemandSaveRequest saveRequest(Long demandId, String demandNo) {
+        return saveRequest(demandId, demandNo, "APP-001");
+    }
+
+    private MaterialDemandSaveRequest saveRequest(Long demandId, String demandNo, String applicationNo) {
         return new MaterialDemandSaveRequest(
             demandId,
             demandNo,
-            "APP-001",
+            applicationNo,
             "MV BLUE",
+            "ZHOUSHAN",
+            "舟山港",
+            "2026-06-05T09:30",
             "2026-06-05",
             "STCL26SD003-R01.xlsx",
             "DEMAND_INQUIRY",
@@ -145,7 +195,28 @@ class MaterialDemandServiceTest {
         );
     }
 
+    private MaterialDemandSaveRequest saveRequestWithQuantity(String quantity) {
+        return new MaterialDemandSaveRequest(
+            null,
+            null,
+            "APP-001",
+            "MV BLUE",
+            null,
+            null,
+            null,
+            "2026-06-05",
+            "STCL26SD003-R01.xlsx",
+            "DEMAND_INQUIRY",
+            27,
+            List.of(itemWithQuantity(1, "EXACT", quantity, "PCS"))
+        );
+    }
+
     private MaterialDemandItemRequest item(int sequence, String matchResult) {
+        return itemWithQuantity(sequence, matchResult, "2", "PCS");
+    }
+
+    private MaterialDemandItemRequest itemWithQuantity(int sequence, String matchResult, String quantity, String unit) {
         return new MaterialDemandItemRequest(
             "DEMAND_INQUIRY",
             27,
@@ -156,8 +227,8 @@ class MaterialDemandServiceTest {
             "11010" + sequence,
             "COTTON RAG",
             "WHITE",
-            "2",
-            "PCS",
+            quantity,
+            unit,
             "urgent",
             null,
             null,
@@ -191,11 +262,18 @@ class MaterialDemandServiceTest {
     }
 
     private MaterialDemandSummaryResponse summary(Long demandId) {
+        return summary(demandId, "SAVED");
+    }
+
+    private MaterialDemandSummaryResponse summary(Long demandId, String status) {
         return new MaterialDemandSummaryResponse(
             demandId,
             "REQ-20260605-001",
             "APP-001",
             "MV BLUE",
+            "ZHOUSHAN",
+            "舟山港",
+            "2026-06-05T09:30",
             "2026-06-05",
             "STCL26SD003-R01.xlsx",
             "DEMAND_INQUIRY",
@@ -204,7 +282,7 @@ class MaterialDemandServiceTest {
             1,
             1,
             1,
-            "SAVED",
+            status,
             "2026-06-05T10:00:00",
             "2026-06-05T10:05:00"
         );

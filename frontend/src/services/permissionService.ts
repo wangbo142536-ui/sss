@@ -292,6 +292,8 @@ const menuLabelKeysByCode: Record<string, string> = {
   foodProcurementGroup: "nav.foodProcurement",
   ADMIN_MENUS: "nav.menuManagement",
   MENU_MANAGEMENT: "nav.menuManagement",
+  DATA_DICTIONARY: "nav.dataDictionary",
+  DICTIONARIES: "nav.dataDictionary",
   PROCUREMENT_MATERIALS: "nav.requests",
   MATERIALS: "nav.requests",
   STANDARD_LIBRARY_IMPA: "nav.impa",
@@ -314,6 +316,8 @@ const menuLabelKeysByCode: Record<string, string> = {
   COMPARE: "nav.compare",
   COMPARISON: "nav.compare",
   ORDERS: "nav.orders",
+  SUPPLIER_ORDERS: "nav.supplierOrders",
+  SUPPLIER_ORDER_MANAGEMENT: "nav.supplierOrders",
   CREW_SERVICES: "nav.crewServices",
   CREW_SERVICE: "nav.crewServices",
   CREW_MANAGEMENT: "nav.crewServices",
@@ -347,13 +351,15 @@ const menuLabelKeysByRoute: Record<string, string> = {
   "/compare": "nav.compare",
   "/procurement/requests/RFQ-240604/compare": "nav.compare",
   "/orders/new": "nav.orders",
+  "/supplier/orders": "nav.supplierOrders",
   "/crew-services": "nav.crewServices",
   "/delivery-tasks": "nav.delivery",
   "/settlement": "nav.settlements",
   "/settlements": "nav.settlements",
   "/admin/registrations": "nav.registrations",
   "/admin/permissions": "nav.permissions",
-  "/admin/menus": "nav.menuManagement"
+  "/admin/menus": "nav.menuManagement",
+  "/admin/dictionaries": "nav.dataDictionary"
 };
 
 function resolveWorkbenchMenuLabelKey(node: PermissionMenuNode) {
@@ -396,11 +402,13 @@ const basicManagementChildKeys = new Set([
   "ADMIN_PERMISSIONS",
   "ADMIN_MENUS",
   "MENU_MANAGEMENT",
+  "DATA_DICTIONARY",
   "impa",
   "suppliers",
   "registrations",
   "permissions",
-  "menuManagement"
+  "menuManagement",
+  "dataDictionary"
 ]);
 
 const materialProcurementChildKeys = new Set([
@@ -413,11 +421,14 @@ const materialProcurementChildKeys = new Set([
   "COMPARE",
   "COMPARISON",
   "ORDERS",
+  "SUPPLIER_ORDERS",
+  "SUPPLIER_ORDER_MANAGEMENT",
   "requests",
   "inquiries",
   "quotes",
   "compare",
-  "orders"
+  "orders",
+  "supplierOrders"
 ]);
 
 const foodProcurementChildKeys = new Set([

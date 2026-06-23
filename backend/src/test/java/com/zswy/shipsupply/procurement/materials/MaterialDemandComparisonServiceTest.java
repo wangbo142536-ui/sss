@@ -2,6 +2,7 @@ package com.zswy.shipsupply.procurement.materials;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -31,6 +32,9 @@ class MaterialDemandComparisonServiceTest {
     @Mock
     private MaterialSupplierCandidateProvider supplierCandidateProvider;
 
+    @Mock
+    private PurchaseOrderRepository purchaseOrderRepository;
+
     private MaterialDemandComparisonService service;
 
     @BeforeEach
@@ -38,7 +42,8 @@ class MaterialDemandComparisonServiceTest {
         service = new MaterialDemandComparisonService(
             currentUserService,
             materialDemandRepository,
-            supplierCandidateProvider
+            supplierCandidateProvider,
+            purchaseOrderRepository
         );
     }
 
@@ -65,7 +70,9 @@ class MaterialDemandComparisonServiceTest {
 
         assertThat(response.demand().demandId()).isEqualTo(101L);
         assertThat(response.supplyInfo().supplyVessel()).isEqualTo("MV BLUE");
-        assertThat(response.supplyInfo().supplyPort()).isEqualTo("待补充");
+        assertThat(response.supplyInfo().supplyPort()).isEqualTo("舟山港");
+        assertThat(response.supplyInfo().supplyPortCode()).isEqualTo("ZHOUSHAN");
+        assertThat(response.supplyInfo().vesselEta()).isEqualTo("2026-06-16T12:30");
         assertThat(response.supplyInfo().weatherSource()).isEqualTo("STATIC_PLACEHOLDER");
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).candidates()).isEmpty();
@@ -113,6 +120,88 @@ class MaterialDemandComparisonServiceTest {
         assertThat(singleSupplier.suppliers()).hasSize(1);
         assertThat(singleSupplier.suppliers().get(0).supplierName()).isEqualTo("供应商 A");
         assertThat(response.items()).allSatisfy(item -> assertThat(item.singleSupplierCandidate().supplierName()).isEqualTo("供应商 A"));
+        verify(materialDemandRepository).markComparingIfSaved(22L, 101L);
+    }
+
+    @Test
+    void returnsUsdAmountsAndUnitPriceOptionsForCandidates() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "611705", "Flat Nose Plier", "160MM", "14")));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            sku(1L, 24L, "供应商 A", "A-PLIERS-1", "Flat Nose Plier", "611705", "14.00", "99", "ON_SHELF")
+                .withUnitPriceOptions(List.of(
+                    new MaterialSupplierUnitPriceOption("PCS", new BigDecimal("14.00"), new BigDecimal("2.00"), true),
+                    new MaterialSupplierUnitPriceOption("BOX", new BigDecimal("140.00"), new BigDecimal("20.00"), false)
+                ))
+        ));
+
+        MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
+
+        MaterialSupplierCandidate candidate = response.items().get(0).lowestCandidate();
+        assertThat(candidate.selectedUnit()).isEqualTo("PCS");
+        assertThat(candidate.unitPrice()).isEqualByComparingTo("14.00");
+        assertThat(candidate.unitPriceUsd()).isEqualByComparingTo("2.00");
+        assertThat(candidate.lineAmount()).isEqualByComparingTo("196.00");
+        assertThat(candidate.lineAmountUsd()).isEqualByComparingTo("28.00");
+        assertThat(candidate.unitPriceOptions()).extracting(MaterialSupplierUnitPriceOption::unit)
+            .containsExactly("PCS", "BOX");
+        assertThat(response.strategies().get(0).totalAmountUsd()).isEqualByComparingTo("28.00");
+        assertThat(response.strategies().get(0).suppliers().get(0).totalAmountUsd()).isEqualByComparingTo("28.00");
+    }
+
+    @Test
+    void disablesLowestMixedWhenOnlyOneSupplierCanQuote() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(
+            item(201L, "611705", "Flat Nose Plier", "160MM", "3"),
+            item(202L, "611706", "Diagonal Cutting Plier", "180MM", "2")
+        ));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            sku(1L, 24L, "供应商 A", "A-PLIERS-1", "Flat Nose Plier", "611705", "9.00", "99", "ON_SHELF"),
+            sku(2L, 24L, "供应商 A", "A-PLIERS-2", "Diagonal Cutting Plier", "611706", "15.00", "99", "ON_SHELF")
+        ));
+
+        MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
+
+        MaterialDemandComparisonStrategy lowestMixed = response.strategies().get(0);
+        assertThat(lowestMixed.strategyType()).isEqualTo("LOWEST_MIXED");
+        assertThat(lowestMixed.enabled()).isFalse();
+        assertThat(lowestMixed.disabledReason()).isEqualTo("ONLY_ONE_SUPPLIER");
+        assertThat(response.isOrdered()).isFalse();
+        assertThat(response.isDiscarded()).isFalse();
+    }
+
+    @Test
+    void rejectsComparisonForDiscardedDemand() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary("DISCARDED")));
+
+        assertThatThrownBy(() -> service.comparison("Bearer token", 101L))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("MATERIAL_DEMAND_DISCARDED");
+    }
+
+    @Test
+    void returnsSupplierCandidatesForSingleDemandItem() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "611705", "Flat Nose Plier", "160MM", "3")));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            sku(1L, 24L, "供应商 A", "A-PLIERS-1", "Flat Nose Plier", "611705", "9.00", "99", "ON_SHELF"),
+            sku(2L, 25L, "供应商 B", "B-PLIERS-1", "Flat Nose Plier", "611705", "8.00", "99", "ON_SHELF")
+        ));
+
+        List<MaterialSupplierCandidate> candidates = service.itemSupplierCandidates("Bearer token", 101L, 201L);
+
+        assertThat(candidates).hasSize(2);
+        assertThat(candidates.get(0).supplierName()).isEqualTo("供应商 B");
+        assertThat(candidates).allSatisfy(candidate -> assertThat(candidate.shelfStatus()).isEqualTo("ON_SHELF"));
     }
 
     @Test
@@ -133,11 +222,18 @@ class MaterialDemandComparisonServiceTest {
     }
 
     private MaterialDemandSummaryResponse summary() {
+        return summary("SAVED");
+    }
+
+    private MaterialDemandSummaryResponse summary(String status) {
         return new MaterialDemandSummaryResponse(
             101L,
             "REQ-20260616-001",
             "APP-001",
             "MV BLUE",
+            "ZHOUSHAN",
+            "舟山港",
+            "2026-06-16T12:30",
             "2026-06-16",
             "STCL26SG001-R01.xlsx",
             "DEMAND_INQUIRY",
@@ -146,7 +242,7 @@ class MaterialDemandComparisonServiceTest {
             1,
             1,
             0,
-            "SAVED",
+            status,
             "2026-06-16T10:00:00",
             "2026-06-16T10:05:00"
         );

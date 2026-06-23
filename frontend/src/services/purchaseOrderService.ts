@@ -4,9 +4,14 @@ export type PurchaseOrderStatus =
   | "PENDING_SUPPLIER_CONFIRM"
   | "PARTIALLY_CONFIRMED"
   | "PREPARING"
+  | "READY_TO_DELIVER"
+  | "PARTIALLY_READY"
+  | "SUPPLIED"
+  | "PARTIALLY_SUPPLIED"
   | "PARTIALLY_REJECTED"
   | "REJECTED"
   | "CANCELED"
+  | "DISCARDED"
   | string;
 
 export type PurchasePackagingMethod = "UNIFIED_PACKAGING" | "SUPPLIER_PACKAGING" | string;
@@ -19,6 +24,28 @@ export interface PurchaseOrderCreatePayload {
   requiredDeliveryTime?: string;
   defaultPackagingMethod?: PurchasePackagingMethod;
   buyerRemark?: string;
+  selectedItems?: Array<{
+    demandItemId?: number;
+    skuId?: number;
+    supplierCompanyId?: number;
+    supplierName?: string;
+    supplierSkuCode?: string;
+    platformCode?: string;
+    impaCode?: string;
+    productName?: string;
+    specification?: string;
+    quantity?: string;
+    unit?: string;
+    pricingQuantity?: number;
+    unitPrice?: number;
+    unitPriceUsd?: number;
+    currency?: string;
+    amount?: number;
+    amountUsd?: number;
+    selectedUnit?: string;
+    unitMismatchFlag?: boolean;
+    quantityFallbackFlag?: boolean;
+  }>;
 }
 
 export interface PurchaseOrderCreateResponse {
@@ -28,6 +55,7 @@ export interface PurchaseOrderCreateResponse {
   supplierOrderCount: number;
   itemCount: number;
   totalAmount?: number;
+  totalAmountUsd?: number;
   currency?: string;
   redirectTo?: string;
   idempotent?: boolean;
@@ -36,6 +64,7 @@ export interface PurchaseOrderCreateResponse {
 export interface PurchaseOrderSummary {
   purchaseOrderId: number;
   purchaseOrderNo: string;
+  supplierOrderId?: number;
   demandId?: number;
   demandNo?: string;
   applicationNo?: string;
@@ -48,10 +77,15 @@ export interface PurchaseOrderSummary {
   strategyType?: string;
   strategyName?: string;
   supplierCount: number;
+  quotedSupplierCount?: number;
+  totalSupplierCount?: number;
   itemCount: number;
   totalAmount?: number;
+  totalAmountUsd?: number;
   currency?: string;
   status?: PurchaseOrderStatus;
+  packagingMethod?: PurchasePackagingMethod;
+  expectedReadyAt?: string;
   buyerRemark?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -72,7 +106,9 @@ export interface PurchaseOrderItem {
   unit?: string;
   pricingQuantity?: number;
   unitPrice?: number;
+  unitPriceUsd?: number;
   amount?: number;
+  amountUsd?: number;
   currency?: string;
   unitMismatchFlag?: boolean;
   quantityFallbackFlag?: boolean;
@@ -99,6 +135,11 @@ export interface PurchaseSupplierOrder {
   supplierRemark?: string;
   rejectReason?: string;
   confirmedAt?: string;
+  readyAt?: string;
+  suppliedAt?: string;
+  deliveryImageFileId?: string;
+  deliveryImageUrl?: string;
+  deliveryRemark?: string;
   rejectedAt?: string;
   items: PurchaseOrderItem[];
 }
@@ -158,6 +199,12 @@ export interface SupplierConfirmPayload {
 
 export interface SupplierRejectPayload {
   rejectReason: string;
+}
+
+export interface SupplierSupplyCompletePayload {
+  deliveryImageFileId?: string;
+  deliveryImageUrl?: string;
+  deliveryRemark?: string;
 }
 
 const PURCHASE_ORDER_ENDPOINT = "/api/procurement/purchase-orders";
@@ -247,6 +294,7 @@ function normalizeOrderSummary(value: unknown): PurchaseOrderSummary | null {
   return {
     purchaseOrderId,
     purchaseOrderNo: readString(value, "purchaseOrderNo") || readString(value, "orderNo") || "",
+    supplierOrderId: readNumber(value, "supplierOrderId"),
     demandId: readNumber(value, "demandId"),
     demandNo: readString(value, "demandNo"),
     applicationNo: readString(value, "applicationNo"),
@@ -259,10 +307,15 @@ function normalizeOrderSummary(value: unknown): PurchaseOrderSummary | null {
     strategyType: readString(value, "strategyType"),
     strategyName: readString(value, "strategyName"),
     supplierCount: readNumber(value, "supplierCount") ?? readNumber(value, "supplierOrderCount") ?? 0,
+    quotedSupplierCount: readNumber(value, "quotedSupplierCount"),
+    totalSupplierCount: readNumber(value, "totalSupplierCount"),
     itemCount: readNumber(value, "itemCount") ?? 0,
     totalAmount: readNumber(value, "totalAmount"),
+    totalAmountUsd: readNumber(value, "totalAmountUsd"),
     currency: readString(value, "currency"),
     status: readString(value, "status"),
+    packagingMethod: readString(value, "packagingMethod"),
+    expectedReadyAt: readString(value, "expectedReadyAt"),
     buyerRemark: readString(value, "buyerRemark"),
     createdAt: readString(value, "createdAt"),
     updatedAt: readString(value, "updatedAt")
@@ -286,7 +339,9 @@ function normalizeOrderItem(value: unknown): PurchaseOrderItem | null {
     unit: readString(value, "unit"),
     pricingQuantity: readNumber(value, "pricingQuantity"),
     unitPrice: readNumber(value, "unitPrice"),
+    unitPriceUsd: readNumber(value, "unitPriceUsd"),
     amount: readNumber(value, "amount"),
+    amountUsd: readNumber(value, "amountUsd"),
     currency: readString(value, "currency"),
     unitMismatchFlag: readBoolean(value, "unitMismatchFlag"),
     quantityFallbackFlag: readBoolean(value, "quantityFallbackFlag"),
@@ -319,6 +374,11 @@ function normalizeSupplierOrder(value: unknown): PurchaseSupplierOrder | null {
     supplierRemark: readString(value, "supplierRemark"),
     rejectReason: readString(value, "rejectReason"),
     confirmedAt: readString(value, "confirmedAt"),
+    readyAt: readString(value, "readyAt"),
+    suppliedAt: readString(value, "suppliedAt"),
+    deliveryImageFileId: readString(value, "deliveryImageFileId"),
+    deliveryImageUrl: readString(value, "deliveryImageUrl"),
+    deliveryRemark: readString(value, "deliveryRemark"),
     rejectedAt: readString(value, "rejectedAt"),
     items
   };
@@ -385,6 +445,7 @@ function normalizeCreateResponse(payload: unknown): PurchaseOrderCreateResponse 
     supplierOrderCount: readNumber(unwrapped, "supplierOrderCount") ?? readNumber(unwrapped, "supplierCount") ?? 0,
     itemCount: readNumber(unwrapped, "itemCount") ?? 0,
     totalAmount: readNumber(unwrapped, "totalAmount"),
+    totalAmountUsd: readNumber(unwrapped, "totalAmountUsd"),
     currency: readString(unwrapped, "currency"),
     redirectTo: readString(unwrapped, "redirectTo"),
     idempotent: readBoolean(unwrapped, "idempotent")
@@ -409,6 +470,14 @@ export async function getPurchaseOrderDetail(orderId: number | string): Promise<
   return normalizeOrderDetail(await requestPurchaseJson(`${PURCHASE_ORDER_ENDPOINT}/${encodeURIComponent(String(orderId))}`, { method: "GET" }));
 }
 
+export async function getSupplierPurchaseOrderDetail(orderId: number | string): Promise<PurchaseOrderDetail> {
+  return normalizeOrderDetail(await requestPurchaseJson(`${SUPPLIER_ORDER_ENDPOINT}/${encodeURIComponent(String(orderId))}`, { method: "GET" }));
+}
+
+export async function discardPurchaseOrder(orderId: number | string): Promise<unknown> {
+  return requestPurchaseJson(`${PURCHASE_ORDER_ENDPOINT}/${encodeURIComponent(String(orderId))}/discard`, { method: "POST" });
+}
+
 export async function listSupplierPurchaseOrders(query: SupplierOrderListQuery = {}): Promise<PurchaseOrderListResponse> {
   const endpoint = `${SUPPLIER_ORDER_ENDPOINT}${buildQuery(query)}`;
   return normalizeOrderList(await requestPurchaseJson(endpoint, { method: "GET" }));
@@ -426,6 +495,23 @@ export async function confirmSupplierPurchaseOrder(orderId: number | string, sup
 export async function rejectSupplierPurchaseOrder(orderId: number | string, supplierOrderId: number | string, payload: SupplierRejectPayload): Promise<PurchaseOrderDetail> {
   return normalizeOrderDetail(
     await requestPurchaseJson(`${PURCHASE_ORDER_ENDPOINT}/${encodeURIComponent(String(orderId))}/supplier-orders/${encodeURIComponent(String(supplierOrderId))}/reject`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
+  );
+}
+
+export async function markSupplierOrderReady(orderId: number | string, supplierOrderId: number | string): Promise<PurchaseOrderDetail> {
+  return normalizeOrderDetail(
+    await requestPurchaseJson(`${PURCHASE_ORDER_ENDPOINT}/${encodeURIComponent(String(orderId))}/supplier-orders/${encodeURIComponent(String(supplierOrderId))}/ready`, {
+      method: "POST"
+    })
+  );
+}
+
+export async function markSupplierOrderSupplied(orderId: number | string, supplierOrderId: number | string, payload: SupplierSupplyCompletePayload): Promise<PurchaseOrderDetail> {
+  return normalizeOrderDetail(
+    await requestPurchaseJson(`${PURCHASE_ORDER_ENDPOINT}/${encodeURIComponent(String(orderId))}/supplier-orders/${encodeURIComponent(String(supplierOrderId))}/supplied`, {
       method: "POST",
       body: JSON.stringify(payload)
     })

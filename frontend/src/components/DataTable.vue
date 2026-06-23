@@ -52,7 +52,9 @@ const rowIdentifier = (row: T) => {
             :key="column.key"
             :style="{ width: column.width, textAlign: column.align || 'left' }"
           >
-            {{ column.label }}
+            <slot :name="`head-${column.key}`" :column="column">
+              {{ column.label }}
+            </slot>
           </th>
         </tr>
       </thead>

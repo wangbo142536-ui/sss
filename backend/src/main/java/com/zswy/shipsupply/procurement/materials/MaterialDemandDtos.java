@@ -10,6 +10,9 @@ record MaterialDemandSaveRequest(
     String demandNo,
     String applicationNo,
     String vesselName,
+    String supplyPortCode,
+    String supplyPortName,
+    String vesselEta,
     String inquiryDate,
     String sourceFileName,
     String documentType,
@@ -61,6 +64,13 @@ record MaterialDemandSaveResponse(
 ) {
 }
 
+record MaterialDemandStatusResponse(
+    Long demandId,
+    String status,
+    int discardedPurchaseOrderCount
+) {
+}
+
 record MaterialDemandListResponse(
     List<MaterialDemandSummaryResponse> items,
     int page,
@@ -74,6 +84,9 @@ record MaterialDemandSummaryResponse(
     String demandNo,
     String applicationNo,
     String vesselName,
+    String supplyPortCode,
+    String supplyPortName,
+    String vesselEta,
     String inquiryDate,
     String sourceFileName,
     String documentType,

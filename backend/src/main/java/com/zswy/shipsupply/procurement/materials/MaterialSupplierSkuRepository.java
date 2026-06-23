@@ -1,6 +1,7 @@
 package com.zswy.shipsupply.procurement.materials;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Repository;
 public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateProvider {
 
     private static final int MAX_POOL_SIZE = 5000;
+    private static final BigDecimal USD_RATE = new BigDecimal("7");
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -68,7 +70,7 @@ public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateP
             rs.getString("code_status"),
             null,
             null
-        );
+        ).withUnitPriceOptions(unitPriceOptions(skuId, rs.getString("unit"), rs.getString("stock_unit"), rs.getBigDecimal("unit_price")));
     }
 
     private List<MaterialSupplierSkuAttribute> attributes(long skuId) {
@@ -103,6 +105,33 @@ public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateP
             (rs, rowNum) -> new SupplierImage(rs.getString("image_url"), rs.getString("thumbnail_url")),
             skuId
         ).stream().findFirst().orElse(null);
+    }
+
+    private List<MaterialSupplierUnitPriceOption> unitPriceOptions(long skuId, String unit, String stockUnit, BigDecimal fallbackUnitPrice) {
+        List<MaterialSupplierUnitPriceOption> options = jdbcTemplate.query(
+            """
+            SELECT unit, unit_price_cny, unit_price_usd, is_default
+            FROM shop_sku_unit_price
+            WHERE sku_id = ? AND enabled = 1
+            ORDER BY is_default DESC, sort_order ASC, id ASC
+            """,
+            (rs, rowNum) -> new MaterialSupplierUnitPriceOption(
+                rs.getString("unit"),
+                rs.getBigDecimal("unit_price_cny"),
+                rs.getBigDecimal("unit_price_usd"),
+                rs.getBoolean("is_default")
+            ),
+            skuId
+        );
+        if (!options.isEmpty() || fallbackUnitPrice == null) {
+            return options;
+        }
+        return List.of(new MaterialSupplierUnitPriceOption(
+            value(unit, value(stockUnit, null)),
+            fallbackUnitPrice,
+            fallbackUnitPrice.divide(USD_RATE, 4, RoundingMode.HALF_UP),
+            true
+        ));
     }
 
     private String attributeSummary(List<MaterialSupplierSkuAttribute> attributes, String fallback) {

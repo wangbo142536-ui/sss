@@ -36,12 +36,19 @@ public class PurchaseOrderRepository {
     ) {
         return jdbcTemplate.query(
             """
-            SELECT *
+            SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count
             FROM purchase_order
+            po LEFT JOIN (
+              SELECT order_id,
+                     SUM(CASE WHEN COALESCE(subtotal_amount, 0) > 0 THEN 1 ELSE 0 END) AS quoted_supplier_count,
+                     COUNT(*) AS total_supplier_count
+              FROM purchase_order_supplier
+              GROUP BY order_id
+            ) supplier_counts ON supplier_counts.order_id = po.id
             WHERE buyer_company_id = ?
               AND demand_id = ?
               AND strategy_type = ?
-              AND status <> 'CANCELLED'
+              AND status <> 'DISCARDED'
             ORDER BY id DESC
             LIMIT 1
             """,
@@ -50,6 +57,104 @@ public class PurchaseOrderRepository {
             demandId,
             strategyType
         ).stream().findFirst();
+    }
+
+    public Long findFirstActiveOrderIdByDemand(Long buyerCompanyId, Long demandId) {
+        return jdbcTemplate.query(
+            """
+            SELECT id
+            FROM purchase_order
+            WHERE buyer_company_id = ?
+              AND demand_id = ?
+              AND status <> 'DISCARDED'
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (rs, rowNum) -> rs.getLong("id"),
+            buyerCompanyId,
+            demandId
+        ).stream().findFirst().orElse(null);
+    }
+
+    public boolean isOrderDiscarded(Long orderId) {
+        return jdbcTemplate.query(
+            """
+            SELECT status = 'DISCARDED'
+            FROM purchase_order
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (rs, rowNum) -> rs.getBoolean(1),
+            orderId
+        ).stream().findFirst().orElse(false);
+    }
+
+    public int discardByDemand(Long buyerCompanyId, Long demandId, Long userId) {
+        jdbcTemplate.update(
+            """
+            UPDATE material_demand
+            SET status = 'DISCARDED',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ?
+              AND id = ?
+            """,
+            buyerCompanyId,
+            demandId
+        );
+        List<Long> orderIds = jdbcTemplate.query(
+            """
+            SELECT id
+            FROM purchase_order
+            WHERE buyer_company_id = ?
+              AND demand_id = ?
+            """,
+            (rs, rowNum) -> rs.getLong("id"),
+            buyerCompanyId,
+            demandId
+        );
+        int discardedOrders = 0;
+        for (Long orderId : orderIds) {
+            if (discardOrderRows(orderId, userId, buyerCompanyId)) {
+                discardedOrders++;
+            }
+        }
+        return discardedOrders;
+    }
+
+    public PurchaseOrderDiscardResult discardByOrder(Long buyerCompanyId, Long orderId, Long userId) {
+        List<Long> demandIds = jdbcTemplate.query(
+            """
+            SELECT demand_id
+            FROM purchase_order
+            WHERE buyer_company_id = ?
+              AND id = ?
+            LIMIT 1
+            """,
+            (rs, rowNum) -> rs.getLong("demand_id"),
+            buyerCompanyId,
+            orderId
+        );
+        if (demandIds.isEmpty()) {
+            return null;
+        }
+        Long demandId = demandIds.get(0);
+        int discardedOrders = discardByDemand(buyerCompanyId, demandId, userId);
+        return new PurchaseOrderDiscardResult(demandId, discardedOrders);
+    }
+
+    public void markDemandOrdered(Long buyerCompanyId, Long demandId) {
+        jdbcTemplate.update(
+            """
+            UPDATE material_demand
+            SET status = 'ORDERED',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ?
+              AND id = ?
+              AND status <> 'DISCARDED'
+            """,
+            buyerCompanyId,
+            demandId
+        );
     }
 
     public String nextOrderNo(Long buyerCompanyId, LocalDate date) {
@@ -121,7 +226,10 @@ public class PurchaseOrderRepository {
     ) {
         QueryParts query = buyerQuery(buyerCompanyId, keyword, status, supplier, createdFrom, createdTo, deliveryFrom, deliveryTo);
         long total = count("purchase_order po", query);
-        String sql = "SELECT po.* FROM purchase_order po " + query.where()
+        String sql = "SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method FROM purchase_order po "
+            + supplierCountJoin()
+            + packagingMethodJoin()
+            + query.where()
             + " ORDER BY po.created_at DESC, po.id DESC LIMIT ? OFFSET ?";
         List<Object> args = new ArrayList<>(query.args());
         args.add(size);
@@ -133,8 +241,9 @@ public class PurchaseOrderRepository {
     public Optional<PurchaseOrderDetailResponse> findBuyerDetail(Long buyerCompanyId, Long orderId) {
         Optional<PurchaseOrderSummaryResponse> order = jdbcTemplate.query(
             """
-            SELECT *
-            FROM purchase_order
+            SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method
+            FROM purchase_order po
+            """ + supplierCountJoin() + packagingMethodJoin() + """
             WHERE buyer_company_id = ? AND id = ?
             LIMIT 1
             """,
@@ -160,7 +269,8 @@ public class PurchaseOrderRepository {
     ) {
         QueryParts query = supplierQuery(supplierCompanyId, keyword, status, createdFrom, createdTo);
         long total = count("purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id", query);
-        String sql = "SELECT DISTINCT po.* FROM purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id "
+        String sql = "SELECT DISTINCT po.*, pos.id AS supplier_order_id, pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count FROM purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id "
+            + supplierCountJoin()
             + query.where()
             + " ORDER BY po.created_at DESC, po.id DESC LIMIT ? OFFSET ?";
         List<Object> args = new ArrayList<>(query.args());
@@ -247,28 +357,111 @@ public class PurchaseOrderRepository {
         return findSupplierDetail(supplierCompanyId, orderId);
     }
 
-    private Optional<PurchaseOrderDetailResponse> findSupplierDetail(Long supplierCompanyId, Long orderId) {
+    public Optional<PurchaseOrderDetailResponse> markSupplierReady(
+        Long supplierCompanyId,
+        Long userId,
+        Long orderId,
+        Long supplierOrderId
+    ) {
+        Optional<PurchaseSupplierOrderResponse> supplierOrder = supplierOrderForSupplier(orderId, supplierOrderId, supplierCompanyId);
+        if (supplierOrder.isEmpty()) {
+            return Optional.empty();
+        }
+        jdbcTemplate.update(
+            """
+            UPDATE purchase_order_supplier
+            SET status = 'READY_TO_DELIVER',
+                ready_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND order_id = ? AND supplier_company_id = ? AND status = 'PREPARING'
+            """,
+            supplierOrderId,
+            orderId,
+            supplierCompanyId
+        );
+        insertEvent(orderId, supplierOrderId, "SUPPLIER_READY", "Supplier marked ready to deliver", userId, supplierCompanyId);
+        aggregateOrderStatus(orderId);
+        return findSupplierDetail(supplierCompanyId, orderId);
+    }
+
+    public Optional<PurchaseOrderDetailResponse> markSupplierSupplied(
+        Long supplierCompanyId,
+        Long userId,
+        Long orderId,
+        Long supplierOrderId,
+        PurchaseSupplierSupplyCompleteRequest request
+    ) {
+        Optional<PurchaseSupplierOrderResponse> supplierOrder = supplierOrderForSupplier(orderId, supplierOrderId, supplierCompanyId);
+        if (supplierOrder.isEmpty()) {
+            return Optional.empty();
+        }
+        jdbcTemplate.update(
+            """
+            UPDATE purchase_order_supplier
+            SET status = 'SUPPLIED',
+                supplied_at = CURRENT_TIMESTAMP,
+                delivery_image_file_id = ?,
+                delivery_image_url = ?,
+                delivery_remark = ?
+            WHERE id = ? AND order_id = ? AND supplier_company_id = ? AND status = 'READY_TO_DELIVER'
+            """,
+            blankToNull(request.deliveryImageFileId()),
+            blankToNull(request.deliveryImageUrl()),
+            blankToNull(request.deliveryRemark()),
+            supplierOrderId,
+            orderId,
+            supplierCompanyId
+        );
+        insertEvent(orderId, supplierOrderId, "SUPPLIER_SUPPLIED", "Supplier completed delivery", userId, supplierCompanyId);
+        aggregateOrderStatus(orderId);
+        return findSupplierDetail(supplierCompanyId, orderId);
+    }
+
+    public Optional<PurchaseOrderDetailResponse> findSupplierDetail(Long supplierCompanyId, Long orderId) {
         Optional<PurchaseOrderSummaryResponse> order = jdbcTemplate.query(
             """
-            SELECT po.*
+            SELECT po.*, pos.id AS supplier_order_id, pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count
             FROM purchase_order po
+            JOIN purchase_order_supplier pos ON pos.order_id = po.id AND pos.supplier_company_id = ?
+            """ + supplierCountJoin() + """
             WHERE po.id = ?
-              AND EXISTS (
-                SELECT 1
-                FROM purchase_order_supplier pos
-                WHERE pos.order_id = po.id AND pos.supplier_company_id = ?
-              )
             LIMIT 1
             """,
             (rs, rowNum) -> summary(rs),
-            orderId,
-            supplierCompanyId
+            supplierCompanyId,
+            orderId
         ).stream().findFirst();
         return order.map(summary -> new PurchaseOrderDetailResponse(
             summary,
             supplierOrders(orderId, supplierCompanyId),
             events(orderId)
         ));
+    }
+
+    private boolean discardOrderRows(Long orderId, Long userId, Long operatorCompanyId) {
+        int updatedOrders = jdbcTemplate.update(
+            """
+            UPDATE purchase_order
+            SET status = 'DISCARDED',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND status <> 'DISCARDED'
+            """,
+            orderId
+        );
+        if (updatedOrders == 0) {
+            return false;
+        }
+        jdbcTemplate.update(
+            """
+            UPDATE purchase_order_supplier
+            SET status = 'DISCARDED'
+            WHERE order_id = ?
+              AND status <> 'DISCARDED'
+            """,
+            orderId
+        );
+        insertEvent(orderId, null, "DOCUMENT_DISCARDED", "Document discarded", userId, operatorCompanyId);
+        return true;
     }
 
     private long insertMaster(PurchaseOrderDraft draft) {
@@ -279,8 +472,8 @@ public class PurchaseOrderRepository {
                 INSERT INTO purchase_order
                   (order_no, demand_id, demand_no, application_no, buyer_company_id, buyer_company_name,
                    vessel_name, supply_port, vessel_eta, required_delivery_time, strategy_type,
-                   strategy_name, supplier_count, item_count, total_amount, currency, status, buyer_remark, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   strategy_name, supplier_count, item_count, total_amount, total_amount_usd, currency, status, buyer_remark, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 Statement.RETURN_GENERATED_KEYS
             );
@@ -299,10 +492,11 @@ public class PurchaseOrderRepository {
             statement.setInt(13, draft.supplierCount());
             statement.setInt(14, draft.itemCount());
             statement.setBigDecimal(15, draft.totalAmount());
-            statement.setString(16, draft.currency());
-            statement.setString(17, draft.status());
-            statement.setString(18, draft.buyerRemark());
-            statement.setLong(19, draft.createdBy());
+            statement.setBigDecimal(16, draft.totalAmountUsd());
+            statement.setString(17, draft.currency());
+            statement.setString(18, draft.status());
+            statement.setString(19, draft.buyerRemark());
+            statement.setLong(20, draft.createdBy());
             return statement;
         }, keyHolder);
         return keyHolder.getKey().longValue();
@@ -341,8 +535,8 @@ public class PurchaseOrderRepository {
             INSERT INTO purchase_order_item
               (supplier_order_id, order_id, demand_item_id, sku_id, supplier_sku_code, platform_code,
                impa_code, product_name, specification, quantity, unit, pricing_quantity, unit_price,
-               amount, currency, unit_mismatch_flag, quantity_fallback_flag, source_match_type, source_reason)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               unit_price_usd, amount, amount_usd, currency, unit_mismatch_flag, quantity_fallback_flag, source_match_type, source_reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             supplierOrderId,
             orderId,
@@ -357,7 +551,9 @@ public class PurchaseOrderRepository {
             item.unit(),
             item.pricingQuantity(),
             item.unitPrice(),
+            item.unitPriceUsd(),
             item.amount(),
+            item.amountUsd(),
             item.currency(),
             item.unitMismatchFlag() ? 1 : 0,
             item.quantityFallbackFlag() ? 1 : 0,
@@ -402,7 +598,7 @@ public class PurchaseOrderRepository {
             orderId
         );
         jdbcTemplate.update(
-            "UPDATE purchase_order SET status = ?, total_amount = ? WHERE id = ?",
+            "UPDATE purchase_order SET status = ?, total_amount = ?, total_amount_usd = COALESCE(total_amount_usd, 0) WHERE id = ?",
             status,
             total == null ? BigDecimal.ZERO : total,
             orderId
@@ -414,9 +610,25 @@ public class PurchaseOrderRepository {
             return PurchaseOrderService.PENDING_SUPPLIER_CONFIRM;
         }
         boolean allPreparing = statuses.stream().allMatch(PurchaseOrderService.PREPARING::equals);
+        boolean allReady = statuses.stream().allMatch(PurchaseOrderService.READY_TO_DELIVER::equals);
+        boolean allSupplied = statuses.stream().allMatch(PurchaseOrderService.SUPPLIED::equals);
         boolean allRejected = statuses.stream().allMatch(PurchaseOrderService.REJECTED::equals);
         boolean anyPreparing = statuses.stream().anyMatch(PurchaseOrderService.PREPARING::equals);
+        boolean anyReady = statuses.stream().anyMatch(PurchaseOrderService.READY_TO_DELIVER::equals);
+        boolean anySupplied = statuses.stream().anyMatch(PurchaseOrderService.SUPPLIED::equals);
         boolean anyRejected = statuses.stream().anyMatch(PurchaseOrderService.REJECTED::equals);
+        if (allSupplied) {
+            return PurchaseOrderService.SUPPLIED;
+        }
+        if (anySupplied) {
+            return "PARTIALLY_SUPPLIED";
+        }
+        if (allReady) {
+            return PurchaseOrderService.READY_TO_DELIVER;
+        }
+        if (anyReady) {
+            return "PARTIALLY_READY";
+        }
         if (allPreparing) {
             return PurchaseOrderService.PREPARING;
         }
@@ -465,6 +677,11 @@ public class PurchaseOrderRepository {
             rs.getString("supplier_remark"),
             rs.getString("reject_reason"),
             timestampToString(rs.getTimestamp("confirmed_at")),
+            optionalTimestamp(rs, "ready_at"),
+            optionalTimestamp(rs, "supplied_at"),
+            optionalString(rs, "delivery_image_file_id"),
+            optionalString(rs, "delivery_image_url"),
+            optionalString(rs, "delivery_remark"),
             timestampToString(rs.getTimestamp("rejected_at")),
             items(orderId, supplierOrderId)
         );
@@ -536,8 +753,13 @@ public class PurchaseOrderRepository {
                    OR po.demand_no LIKE CONCAT('%', ?, '%')
                    OR po.application_no LIKE CONCAT('%', ?, '%')
                    OR po.vessel_name LIKE CONCAT('%', ?, '%')
+                   OR EXISTS (
+                     SELECT 1 FROM purchase_order_supplier pos_kw
+                     WHERE pos_kw.order_id = po.id AND pos_kw.supplier_name LIKE CONCAT('%', ?, '%')
+                   )
                  )
                 """);
+            args.add(keyword);
             args.add(keyword);
             args.add(keyword);
             args.add(keyword);
@@ -625,10 +847,16 @@ public class PurchaseOrderRepository {
             rs.getString("strategy_type"),
             rs.getString("strategy_name"),
             rs.getInt("supplier_count"),
+            optionalInt(rs, "quoted_supplier_count", rs.getInt("supplier_count")),
+            optionalInt(rs, "total_supplier_count", rs.getInt("supplier_count")),
             rs.getInt("item_count"),
             rs.getBigDecimal("total_amount"),
+            optionalBigDecimal(rs, "total_amount_usd", BigDecimal.ZERO),
             rs.getString("currency"),
             rs.getString("status"),
+            optionalString(rs, "packaging_method"),
+            optionalLong(rs, "supplier_order_id"),
+            optionalTimestamp(rs, "supplier_expected_ready_at"),
             rs.getString("buyer_remark"),
             timestampToString(rs.getTimestamp("created_at")),
             timestampToString(rs.getTimestamp("updated_at"))
@@ -651,7 +879,9 @@ public class PurchaseOrderRepository {
             rs.getString("unit"),
             rs.getBigDecimal("pricing_quantity"),
             rs.getBigDecimal("unit_price"),
+            optionalBigDecimal(rs, "unit_price_usd", null),
             rs.getBigDecimal("amount"),
+            optionalBigDecimal(rs, "amount_usd", null),
             rs.getString("currency"),
             rs.getBoolean("unit_mismatch_flag"),
             rs.getBoolean("quantity_fallback_flag"),
@@ -691,8 +921,77 @@ public class PurchaseOrderRepository {
         return rs.wasNull() ? null : value;
     }
 
+    private int optionalInt(ResultSet rs, String column, int fallback) throws SQLException {
+        try {
+            int value = rs.getInt(column);
+            return rs.wasNull() ? fallback : value;
+        } catch (SQLException ex) {
+            return fallback;
+        }
+    }
+
+    private Long optionalLong(ResultSet rs, String column) throws SQLException {
+        try {
+            long value = rs.getLong(column);
+            return rs.wasNull() ? null : value;
+        } catch (SQLException ex) {
+            return null;
+        }
+    }
+
+    private BigDecimal optionalBigDecimal(ResultSet rs, String column, BigDecimal fallback) throws SQLException {
+        try {
+            BigDecimal value = rs.getBigDecimal(column);
+            return value == null ? fallback : value;
+        } catch (SQLException ex) {
+            return fallback;
+        }
+    }
+
+    private String supplierCountJoin() {
+        return """
+             LEFT JOIN (
+               SELECT order_id,
+                      SUM(CASE WHEN COALESCE(subtotal_amount, 0) > 0 THEN 1 ELSE 0 END) AS quoted_supplier_count,
+                      COUNT(*) AS total_supplier_count
+               FROM purchase_order_supplier
+               GROUP BY order_id
+             ) supplier_counts ON supplier_counts.order_id = po.id
+            """;
+    }
+
+    private String packagingMethodJoin() {
+        return """
+             LEFT JOIN (
+               SELECT order_id,
+                      CASE
+                        WHEN COUNT(DISTINCT COALESCE(NULLIF(packaging_method, ''), 'SUPPLIER_PACKAGING')) > 1 THEN 'MULTIPLE'
+                        ELSE MIN(COALESCE(NULLIF(packaging_method, ''), 'SUPPLIER_PACKAGING'))
+                      END AS packaging_method
+               FROM purchase_order_supplier
+               GROUP BY order_id
+             ) packaging_methods ON packaging_methods.order_id = po.id
+            """;
+    }
+
     private String timestampToString(Timestamp timestamp) {
         return timestamp == null ? null : timestamp.toLocalDateTime().toString();
+    }
+
+    private String optionalTimestamp(ResultSet rs, String column) throws SQLException {
+        try {
+            return timestampToString(rs.getTimestamp(column));
+        } catch (SQLException ex) {
+            return null;
+        }
+    }
+
+    private String optionalString(ResultSet rs, String column) throws SQLException {
+        try {
+            return rs.getString(column);
+        } catch (SQLException ex) {
+            return null;
+        }
     }
 
     private String blankToNull(String value) {

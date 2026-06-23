@@ -24,7 +24,8 @@ export const menuItems: WorkbenchMenuItem[] = [
       { key: "inquiries", labelKey: "nav.inquiries", route: "/inquiries", icon: "IQ", sortOrder: 10, roles: ["admin", "purchaser", "supplier"] },
       { key: "quotes", labelKey: "nav.quotes", route: "/quotes", icon: "QT", sortOrder: 20, roles: ["admin", "purchaser", "supplier"] },
       { key: "compare", labelKey: "nav.compare", route: "/comparison", icon: "CP", sortOrder: 30, roles: ["admin", "purchaser"] },
-      { key: "orders", labelKey: "nav.orders", route: "/orders/new", icon: "PO", sortOrder: 40, roles: ["admin", "purchaser"] }
+      { key: "orders", labelKey: "nav.orders", route: "/orders/new", icon: "PO", sortOrder: 40, roles: ["admin", "purchaser"] },
+      { key: "supplierOrders", labelKey: "nav.supplierOrders", route: "/supplier/orders", icon: "SO", sortOrder: 50, roles: ["supplier"] }
     ]
   },
   {
@@ -63,7 +64,8 @@ export const menuItems: WorkbenchMenuItem[] = [
       { key: "suppliers", labelKey: "nav.suppliers", route: "/suppliers", icon: "SP", sortOrder: 10, roles: ["admin", "purchaser"] },
       { key: "registrations", labelKey: "nav.registrations", route: "/admin/registrations", icon: "RG", sortOrder: 20, roles: ["admin"] },
       { key: "permissions", labelKey: "nav.permissions", route: "/admin/permissions", icon: "PM", sortOrder: 30, roles: ["admin"] },
-      { key: "menuManagement", labelKey: "nav.menuManagement", route: "/admin/menus", icon: "MN", sortOrder: 40, roles: ["admin"] }
+      { key: "menuManagement", labelKey: "nav.menuManagement", route: "/admin/menus", icon: "MN", sortOrder: 40, roles: ["admin"] },
+      { key: "dataDictionary", labelKey: "nav.dataDictionary", route: "/admin/dictionaries", icon: "DD", sortOrder: 50, roles: ["admin"] }
     ]
   }
 ];
