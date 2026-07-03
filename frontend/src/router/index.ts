@@ -61,6 +61,7 @@ export const router = createRouter({
     { path: "/orders/:orderId", name: "order-detail", component: WorkbenchPage, meta: { title: "采购管理", pageKey: "orders" } },
     { path: "/supplier/orders", name: "supplier-orders", component: WorkbenchPage, meta: { title: "供采管理", pageKey: "supplierOrders" } },
     { path: "/supplier/orders/:orderId", name: "supplier-order-detail", component: WorkbenchPage, meta: { title: "供采管理", pageKey: "supplierOrders" } },
+    { path: "/supply-chain-finance", name: "supply-chain-finance", component: WorkbenchPage, meta: { title: "供应链金融", pageKey: "supplyChainFinance" } },
     { path: "/food/inquiries", name: "food-inquiries", component: WorkbenchPage, meta: { title: "伙食询价管理", pageKey: "foodInquiries" } },
     { path: "/food/quotes", name: "food-quotes", component: WorkbenchPage, meta: { title: "伙食报价管理", pageKey: "foodQuotes" } },
     { path: "/food/comparison", name: "food-comparison", component: WorkbenchPage, meta: { title: "伙食比价管理", pageKey: "foodComparisonList" } },

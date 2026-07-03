@@ -86,7 +86,7 @@ DEALLOCATE PREPARE add_supply_port_index_stmt;
 
 INSERT INTO sys_dictionary_type (type_code, type_name, description, sort_order, enabled)
 VALUES
-  ('PORT', '港口', '常用补给港口、到港港口', 10, 1),
+  ('PORT', '港口', '', 10, 1),
   ('UNIT', '单位', '物料、采购、报价常用单位', 30, 1),
   ('CURRENCY', '币种', '报价与订单币种', 40, 1)
 ON DUPLICATE KEY UPDATE

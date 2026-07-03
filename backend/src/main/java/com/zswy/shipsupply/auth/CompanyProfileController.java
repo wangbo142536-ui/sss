@@ -69,5 +69,39 @@ public class CompanyProfileController {
     ) {
         companyProfileService.deleteQualification(authorizationHeader, qualificationId);
     }
+
+    @GetMapping("/contacts")
+    public CompanyContactListResponse contacts(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestParam(value = "status", required = false) String status
+    ) {
+        return companyProfileService.contacts(authorizationHeader, status);
+    }
+
+    @PostMapping("/contacts")
+    public CompanyContactResponse createContact(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestBody CompanyContactSaveRequest request
+    ) {
+        return companyProfileService.createContact(authorizationHeader, request);
+    }
+
+    @PutMapping("/contacts/{contactId}")
+    public CompanyContactResponse updateContact(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long contactId,
+        @RequestBody CompanyContactSaveRequest request
+    ) {
+        return companyProfileService.updateContact(authorizationHeader, contactId, request);
+    }
+
+    @DeleteMapping("/contacts/{contactId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteContact(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long contactId
+    ) {
+        companyProfileService.deleteContact(authorizationHeader, contactId);
+    }
 }
 

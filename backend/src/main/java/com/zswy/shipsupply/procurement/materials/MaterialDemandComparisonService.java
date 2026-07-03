@@ -125,7 +125,7 @@ public class MaterialDemandComparisonService {
         List<MaterialSupplierCandidate> supplierPool
     ) {
         BigDecimal pricingQuantity = parsePositiveQuantity(item.quantity());
-        String pricingQuantityNote = pricingQuantity == null ? "计价数量按 1" : null;
+        String pricingQuantityNote = pricingQuantity == null ? "璁′环鏁伴噺鎸?1" : null;
         BigDecimal safePricingQuantity = pricingQuantity == null ? BigDecimal.ONE : pricingQuantity;
         List<MaterialSupplierCandidate> candidates = supplierCandidates(item, supplierPool, safePricingQuantity);
         MaterialSupplierCandidate lowest = candidates.stream()
@@ -538,12 +538,21 @@ public class MaterialDemandComparisonService {
                 pricingQuantity,
                 pricingQuantityNote,
                 item.unit(),
+                item.remarks(),
                 firstNonBlank(item.supplierItemNo(), item.impaCode(), item.platformCode()),
                 firstNonBlank(item.rawNameSpec(), item.description(), item.productName()),
                 lowestCandidate,
                 singleSupplierCandidate,
                 candidates,
-                emptyReason
+                emptyReason,
+                item.actualQuotePrice(),
+                item.actualQuoteCurrency(),
+                item.quoteMarkupPercent(),
+                item.quoteSupplierSkuId(),
+                item.quoteSelectedUnit(),
+                item.quoteUnitPrice(),
+                item.quoteUnitPriceUsd(),
+                item.quoteStrategyType()
             );
         }
     }

@@ -151,6 +151,88 @@ public class CompanyProfileRepository {
         ).stream().findFirst();
     }
 
+    public List<CompanyContactResponse> listContacts(long companyId, String status) {
+        return jdbcTemplate.query(
+            """
+            SELECT id, company_id, contact_name, contact_phone, contact_email, status, created_at, updated_at
+            FROM company_contact
+            WHERE company_id = ?
+              AND status = ?
+            ORDER BY updated_at DESC, id DESC
+            """,
+            (rs, rowNum) -> contact(rs),
+            companyId,
+            status
+        );
+    }
+
+    public CompanyContactResponse createContact(long companyId, CompanyContactSaveRequest request) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO company_contact
+              (company_id, contact_name, contact_phone, contact_email, status)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            companyId,
+            request.contactName(),
+            request.contactPhone(),
+            request.contactEmail(),
+            value(request.status(), CompanyProfileService.DEFAULT_CONTACT_STATUS)
+        );
+        return listContacts(companyId, value(request.status(), CompanyProfileService.DEFAULT_CONTACT_STATUS)).stream().findFirst().orElseThrow();
+    }
+
+    public Optional<CompanyContactResponse> updateContact(long companyId, long contactId, CompanyContactSaveRequest request) {
+        CompanyContactResponse current = findContact(companyId, contactId).orElse(null);
+        if (current == null) {
+            return Optional.empty();
+        }
+        int updated = jdbcTemplate.update(
+            """
+            UPDATE company_contact
+            SET contact_name = ?,
+                contact_phone = ?,
+                contact_email = ?,
+                status = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND id = ?
+            """,
+            value(request.contactName(), current.contactName()),
+            value(request.contactPhone(), current.contactPhone()),
+            request.contactEmail() == null ? current.contactEmail() : request.contactEmail(),
+            value(request.status(), current.status()),
+            companyId,
+            contactId
+        );
+        return updated == 0 ? Optional.empty() : findContact(companyId, contactId);
+    }
+
+    public boolean softDeleteContact(long companyId, long contactId) {
+        return jdbcTemplate.update(
+            """
+            UPDATE company_contact
+            SET status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND id = ?
+            """,
+            CompanyProfileService.DELETED_CONTACT_STATUS,
+            companyId,
+            contactId
+        ) > 0;
+    }
+
+    public Optional<CompanyContactResponse> findContact(long companyId, long contactId) {
+        return jdbcTemplate.query(
+            """
+            SELECT id, company_id, contact_name, contact_phone, contact_email, status, created_at, updated_at
+            FROM company_contact
+            WHERE company_id = ? AND id = ?
+            """,
+            (rs, rowNum) -> contact(rs),
+            companyId,
+            contactId
+        ).stream().findFirst();
+    }
+
     private EnterpriseProfileResponse profile(ResultSet rs) throws SQLException {
         return new EnterpriseProfileResponse(
             rs.getLong("id"),
@@ -177,6 +259,19 @@ public class CompanyProfileRepository {
             rs.getString("file_type"),
             rs.getString("title"),
             rs.getString("description"),
+            rs.getString("status"),
+            string(rs.getTimestamp("created_at")),
+            string(rs.getTimestamp("updated_at"))
+        );
+    }
+
+    private CompanyContactResponse contact(ResultSet rs) throws SQLException {
+        return new CompanyContactResponse(
+            rs.getLong("id"),
+            rs.getLong("company_id"),
+            rs.getString("contact_name"),
+            rs.getString("contact_phone"),
+            rs.getString("contact_email"),
             rs.getString("status"),
             string(rs.getTimestamp("created_at")),
             string(rs.getTimestamp("updated_at"))

@@ -1,6 +1,7 @@
 package com.zswy.shipsupply.procurement.materials;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -261,6 +262,9 @@ public class PurchaseOrderService {
             firstText(request == null ? null : request.supplyPort(), comparison.demand().supplyPortName(), comparison.demand().supplyPortCode()),
             firstText(request == null ? null : request.vesselEta(), comparison.demand().vesselEta()),
             optionalText(request == null ? null : request.requiredDeliveryTime()),
+            optionalText(request == null ? null : request.deliveryContactName()),
+            optionalText(request == null ? null : request.deliveryContactPhone()),
+            optionalText(request == null ? null : request.deliveryContactEmail()),
             strategyType,
             strategyName(strategyType),
             supplierOrders.size(),
@@ -336,8 +340,12 @@ public class PurchaseOrderService {
         BigDecimal pricingQuantity = pricingQuantity(line);
         BigDecimal unitPrice = selectedUnitPrice(line);
         BigDecimal unitPriceUsd = selectedUnitPriceUsd(line);
-        BigDecimal amount = selectedAmount(line, unitPrice.multiply(pricingQuantity));
-        BigDecimal amountUsd = selectedAmountUsd(line, unitPriceUsd == null ? null : unitPriceUsd.multiply(pricingQuantity));
+        BigDecimal supplierCostAmount = unitPrice.multiply(pricingQuantity);
+        BigDecimal actualQuotePrice = selectedActualQuotePrice(line, unitPrice);
+        BigDecimal amount = selectedQuoteAmount(line, actualQuotePrice.multiply(pricingQuantity));
+        BigDecimal amountUsd = selectedAmountUsd(line, divideUsd(amount));
+        BigDecimal quoteMarkupPercent = selectedQuoteMarkupPercent(line, unitPrice, actualQuotePrice);
+        BigDecimal quoteProfitAmount = amount.subtract(supplierCostAmount);
         String unit = firstText(line.selectedItem() == null ? null : line.selectedItem().selectedUnit(), candidate.selectedUnit(), item.unit());
         return new PurchaseOrderItemDraft(
             supplierOrderNo,
@@ -355,6 +363,10 @@ public class PurchaseOrderService {
             unitPriceUsd,
             amount,
             amountUsd,
+            actualQuotePrice,
+            CNY,
+            quoteMarkupPercent,
+            quoteProfitAmount,
             CNY,
             unitMismatch(item.unit(), unit),
             line.selectedItem() == null && item.pricingQuantityNote() != null,
@@ -380,16 +392,13 @@ public class PurchaseOrderService {
 
     private BigDecimal amount(List<OrderableLine> lines) {
         return lines.stream()
-            .map(line -> selectedAmount(line, selectedUnitPrice(line).multiply(pricingQuantity(line))))
+            .map(line -> selectedQuoteAmount(line, selectedActualQuotePrice(line, selectedUnitPrice(line)).multiply(pricingQuantity(line))))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal amountUsd(List<OrderableLine> lines) {
         return lines.stream()
-            .map(line -> {
-                BigDecimal unitPriceUsd = selectedUnitPriceUsd(line);
-                return selectedAmountUsd(line, unitPriceUsd == null ? BigDecimal.ZERO : unitPriceUsd.multiply(pricingQuantity(line)));
-            })
+            .map(line -> selectedAmountUsd(line, divideUsd(selectedQuoteAmount(line, selectedActualQuotePrice(line, selectedUnitPrice(line)).multiply(pricingQuantity(line))))))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -421,12 +430,57 @@ public class PurchaseOrderService {
         return selected != null && selected.compareTo(BigDecimal.ZERO) >= 0 ? selected : computed;
     }
 
+    private BigDecimal selectedActualQuotePrice(OrderableLine line, BigDecimal supplierUnitPrice) {
+        BigDecimal selected = line.selectedItem() == null ? null : line.selectedItem().actualQuotePrice();
+        if (selected != null && selected.compareTo(BigDecimal.ZERO) > 0) {
+            return selected;
+        }
+        BigDecimal saved = line.item().actualQuotePrice();
+        if (saved != null && saved.compareTo(BigDecimal.ZERO) > 0) {
+            return saved;
+        }
+        BigDecimal markup = selectedQuoteMarkupPercent(line, supplierUnitPrice, null);
+        return supplierUnitPrice.multiply(BigDecimal.ONE.add(markup.divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP)));
+    }
+
+    private BigDecimal selectedQuoteAmount(OrderableLine line, BigDecimal computed) {
+        BigDecimal selected = line.selectedItem() == null ? null : line.selectedItem().actualQuoteAmount();
+        if (selected != null && selected.compareTo(BigDecimal.ZERO) >= 0) {
+            return selected;
+        }
+        return selectedAmount(line, computed);
+    }
+
+    private BigDecimal selectedQuoteMarkupPercent(OrderableLine line, BigDecimal supplierUnitPrice, BigDecimal actualQuotePrice) {
+        BigDecimal selected = line.selectedItem() == null ? null : line.selectedItem().quoteMarkupPercent();
+        if (selected != null && selected.compareTo(BigDecimal.ZERO) >= 0) {
+            return selected;
+        }
+        BigDecimal saved = line.item().quoteMarkupPercent();
+        if (saved != null && saved.compareTo(BigDecimal.ZERO) >= 0) {
+            return saved;
+        }
+        if (actualQuotePrice != null && supplierUnitPrice != null && supplierUnitPrice.compareTo(BigDecimal.ZERO) > 0) {
+            return actualQuotePrice.subtract(supplierUnitPrice)
+                .multiply(new BigDecimal("100"))
+                .divide(supplierUnitPrice, 4, RoundingMode.HALF_UP);
+        }
+        return new BigDecimal("10");
+    }
+
     private BigDecimal selectedAmountUsd(OrderableLine line, BigDecimal computed) {
         BigDecimal selected = line.selectedItem() == null ? null : line.selectedItem().amountUsd();
         if (selected != null && selected.compareTo(BigDecimal.ZERO) >= 0) {
             return selected;
         }
         return computed;
+    }
+
+    private BigDecimal divideUsd(BigDecimal amount) {
+        if (amount == null) {
+            return null;
+        }
+        return amount.divide(new BigDecimal("7"), 4, RoundingMode.HALF_UP);
     }
 
     private boolean unitMismatch(String demandUnit, String stockUnit) {

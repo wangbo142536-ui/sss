@@ -39,10 +39,14 @@ import {
   updateCompanyMemberStatus
 } from "@/services/companyMemberService";
 import {
+  createCompanyContact,
   createCompanyQualification,
+  deleteCompanyContact,
   deleteCompanyQualification,
   getCompanyProfile,
+  listCompanyContacts,
   listCompanyQualifications,
+  updateCompanyContact,
   updateCompanyProfile,
   updateCompanyQualification
 } from "@/services/companyService";
@@ -70,9 +74,13 @@ import {
 } from "@/services/permissionService";
 import {
   discardMaterialDemand,
+  exportMaterialQuoteTemplate,
+  getMaterialDemandDetail,
   getMaterialDemandComparison,
   listMaterialDemandItemSupplierCandidates,
-  listMaterialDemands
+  listMaterialDemands,
+  saveMaterialDemand,
+  saveMaterialComparisonQuotes
 } from "@/services/procurementMaterialService";
 import {
   confirmSupplierPurchaseOrder,
@@ -98,7 +106,7 @@ import type { CompanyMember, CompanyMemberStatus, CompanyRole } from "@/services
 import type { DictionaryItem, DictionaryItemPayload, DictionaryType, DictionaryTypePayload } from "@/services/dataDictionaryService";
 import type { AdminRegistration, AdminUser, PermissionMenuNode, PermissionPoint, PermissionRole } from "@/services/permissionService";
 import type { PurchaseOrderCreatePayload, PurchaseOrderDetail, PurchaseOrderSummary, PurchaseSupplierOrder } from "@/services/purchaseOrderService";
-import type { MaterialComparisonCandidate, MaterialComparisonItem, MaterialComparisonStrategy, MaterialDemandComparisonResponse, MaterialDemandSummary } from "@/types/procurementMaterials";
+import type { MaterialComparisonCandidate, MaterialComparisonItem, MaterialComparisonStrategy, MaterialDemandComparisonResponse, MaterialDemandDetail, MaterialDemandSummary } from "@/types/procurementMaterials";
 import type { ImpaStandardItem, StandardCategoryNode } from "@/types/standardLibrary";
 import type { SkuAttribute, SkuImage, StatusVariant, SupplierSku, TableColumn } from "@/types/workbench";
 
@@ -140,6 +148,22 @@ type SettlementRow = {
   status: string;
   applyDate: string;
   settlementDate: string;
+};
+
+type SupplyChainFinanceStatus = "pending" | "prepaying" | "reviewing" | "funded" | "repaying" | "settled";
+
+type SupplyChainFinanceRow = {
+  purchaseOrderNo: string;
+  vesselName: string;
+  supplierName: string;
+  orderAmount: number;
+  prepaymentAmount: number;
+  financeAmount: number;
+  prepaymentRate: string;
+  loanTerm: string;
+  annualRate: string;
+  status: SupplyChainFinanceStatus;
+  riskLevel: "low" | "medium";
 };
 
 type ShopEditableSpec = {
@@ -275,7 +299,25 @@ type CompanyQualificationRow = {
   updatedAt: string;
 };
 
-type CompareSupplyEditableKey = "vessel" | "port" | "date";
+type CompanyContactRow = {
+  id: string;
+  contactId?: string | number;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  isEditing?: boolean;
+  isNew?: boolean;
+  draft: {
+    contactName: string;
+    contactPhone: string;
+    contactEmail: string;
+  };
+};
+
+type CompareSupplyEditableKey = "vessel" | "inquiryNo" | "materialType" | "currency" | "port" | "date" | "recipientCompany" | "handlerContact";
 
 type CompareSupplierCard = {
   key: string;
@@ -288,7 +330,9 @@ type CompareStrategyCard = {
   key: string;
   label: string;
   matchSummary: string;
-  total: string;
+  costTotal: string;
+  quoteTotal: string;
+  profitTotal: string;
   tone: "green" | "blue";
   suppliers: CompareSupplierCard[];
   enabled: boolean;
@@ -300,6 +344,7 @@ type CompareSkuRow = SupplierSku & {
   supplierName: string;
   demandItemId: string;
   displayNo?: number;
+  unmatched?: boolean;
   sourceSkuCode: string;
   sourceSkuName: string;
   matchedProductCode: string;
@@ -309,10 +354,14 @@ type CompareSkuRow = SupplierSku & {
   quantityMissingFlag?: boolean;
   quantityInvalidFlag?: boolean;
   unit?: string;
+  remarks?: string;
   platformUnit?: string;
   selectedUnit?: string;
   unitPriceUsd?: number;
   subtotalUsd?: number;
+  actualQuotePrice?: number;
+  actualQuoteSubtotal?: number;
+  quoteMarkupPercent?: number;
   unitPriceOptions?: NonNullable<MaterialComparisonCandidate["unitPriceOptions"]>;
   unitMismatchFlag?: boolean;
   quantityFallbackFlag?: boolean;
@@ -337,6 +386,12 @@ const procurementFlowPageKeys = new Set([
 ]);
 const selectedStrategy = ref("LOWEST_MIXED");
 const selectedCompareSupplier = ref<string | null>(null);
+const fallbackDeliveryContactId = "__fallback_delivery_contact__";
+const fallbackDeliveryContact = {
+  contactName: "王经理",
+  contactPhone: "15300800761",
+  contactEmail: ""
+};
 const compareWorkspaceRef = ref<HTMLElement | null>(null);
 const showCompareBackTop = ref(false);
 const compareData = ref<MaterialDemandComparisonResponse | null>(null);
@@ -344,14 +399,29 @@ const compareLoading = ref(false);
 const compareError = ref("");
 const compareSupplyForm = ref<Record<CompareSupplyEditableKey, string>>({
   vessel: t("compare.supply.vesselValue"),
+  inquiryNo: "",
+  materialType: "",
+  currency: "CNY",
   port: t("compare.supply.portValue"),
-  date: t("compare.supply.dateValue")
+  date: t("compare.supply.dateValue"),
+  recipientCompany: "",
+  handlerContact: ""
 });
 const compareSkuKeyword = ref("");
 const comparePreferenceFilters = ref<string[]>([]);
 const selectedCompareRowIds = ref<string[]>([]);
 const compareQuantityInputs = ref<Record<string, string>>({});
 const compareUnitSelections = ref<Record<string, string>>({});
+const compareQuoteMarkupPercent = ref(10);
+const compareQuoteMarkupInputs = ref<Record<string, string>>({});
+const compareQuoteActualPrices = ref<Record<string, string>>({});
+const compareRemarkInputs = ref<Record<string, string>>({});
+const compareSelectionInitialized = ref(false);
+const compareDisplayCurrency = ref<"CNY" | "USD">("CNY");
+const compareQuoteSaving = ref(false);
+const compareQuoteExporting = ref(false);
+const compareQuoteNotice = ref("");
+const compareQuoteError = ref("");
 const expandedCompareRowId = ref("");
 const compareRowReplacements = ref<Record<string, MaterialComparisonCandidate>>({});
 const replacementSku = ref<CompareSkuRow | null>(null);
@@ -367,12 +437,18 @@ const purchaseOrderForm = ref({
   supplyPort: "",
   vesselEta: "",
   requiredDeliveryTime: "",
+  deliveryContactId: "",
+  deliveryContactName: "",
+  deliveryContactPhone: "",
+  deliveryContactEmail: "",
   defaultPackagingMethod: "UNIFIED_PACKAGING",
   buyerRemark: ""
 });
 const purchaseOrderFormErrors = ref({
   supplyPort: "",
   requiredDeliveryTime: "",
+  deliveryContactName: "",
+  deliveryContactPhone: "",
   defaultPackagingMethod: ""
 });
 const purchaseOrders = ref<PurchaseOrderSummary[]>([]);
@@ -428,6 +504,7 @@ const shopImportFileName = ref("");
 const shopImportPending = ref(false);
 const shopProfileLoading = ref(false);
 const companyQualificationLoading = ref(false);
+const companyContactLoading = ref(false);
 const shopSkuListLoading = ref(false);
 const shopLoading = ref(false);
 const shopSaving = ref(false);
@@ -438,7 +515,7 @@ const shopPreviewSkuRows = ref<ShopSkuRow[]>([]);
 const shopSkuRows = ref<ShopSkuRow[]>([]);
 const shopDirtySkuIds = ref<Set<string>>(new Set());
 const expandedShopSkuId = ref("");
-const shopManagementTab = ref<"products" | "qualifications">("products");
+const shopManagementTab = ref<"products" | "qualifications" | "contacts">("products");
 const shopListFullscreen = ref(false);
 const shopProfileForm = ref<ShopProfileForm>({
   shopName: "",
@@ -466,7 +543,9 @@ const shopNoticeKey = ref("");
 const shopNoticeMessage = ref("");
 const shopErrorMessage = ref("");
 const companyQualificationRows = ref<CompanyQualificationRow[]>([]);
+const companyContactRows = ref<CompanyContactRow[]>([]);
 const companyQualificationSaving = ref(false);
+const companyContactSaving = ref(false);
 const companyQualificationUploading = ref(false);
 const companyQualificationFileInput = ref<HTMLInputElement | null>(null);
 const selectedCompanyQualificationRow = ref<CompanyQualificationRow | null>(null);
@@ -740,6 +819,7 @@ const staticPermissionGroups = computed(() => [
     items: [
       { code: "delivery", label: t("nav.delivery") },
       { code: "settlement", label: t("nav.settlements") },
+      { code: "supplyChainFinance", label: t("nav.supplyChainFinance") },
       { code: "crewServices", label: t("nav.crewServices") },
       { code: "registrations", label: t("nav.registrations") },
       { code: "permissions", label: t("nav.permissions") },
@@ -835,10 +915,8 @@ const dictionaryItemForm = ref({
 const dictionaryTypeColumns = computed<TableColumn[]>(() => [
   { key: "typeCode", label: t("dataDictionary.typeCode"), width: "150px" },
   { key: "typeName", label: t("dataDictionary.typeName"), width: "150px" },
-  { key: "description", label: t("dataDictionary.descriptionField") },
   { key: "sortOrder", label: t("dataDictionary.sortOrder"), width: "86px", align: "right" },
-  { key: "enabled", label: t("field.status"), width: "96px", align: "center" },
-  { key: "operation", label: t("common.operation"), width: "148px", align: "center" }
+  { key: "enabled", label: t("field.status"), width: "96px", align: "center" }
 ]);
 const dictionaryItemColumns = computed<TableColumn[]>(() => [
   { key: "itemCode", label: t("dataDictionary.itemCode"), width: "148px" },
@@ -848,8 +926,7 @@ const dictionaryItemColumns = computed<TableColumn[]>(() => [
   { key: "description", label: t("dataDictionary.descriptionField") },
   { key: "sortOrder", label: t("dataDictionary.sortOrder"), width: "82px", align: "right" },
   { key: "enabled", label: t("field.status"), width: "92px", align: "center" },
-  { key: "builtIn", label: t("dataDictionary.builtIn"), width: "92px", align: "center" },
-  { key: "operation", label: t("common.operation"), width: "148px", align: "center" }
+  { key: "builtIn", label: t("dataDictionary.builtIn"), width: "92px", align: "center" }
 ]);
 const dictionaryTypeRows = computed(() => dictionaryTypes.value as unknown as Record<string, unknown>[]);
 const dictionaryItemRows = computed(() => dictionaryItems.value as unknown as Record<string, unknown>[]);
@@ -1082,7 +1159,10 @@ const filterFields = computed<FilterField[]>(() => {
 });
 
 const primaryAction = computed(() => {
-  if (pageKey.value === "suppliers" || pageKey.value === "supplierProducts" || pageKey.value === "permissions" || pageKey.value === "companyMembers") {
+  if (pageKey.value === "supplierProducts") {
+    return { icon: "Plus" as const, label: t("page.supplierProducts.contact.add") };
+  }
+  if (pageKey.value === "suppliers" || pageKey.value === "permissions" || pageKey.value === "companyMembers") {
     return { icon: "Plus" as const, label: t("action.add") };
   }
   if (pageKey.value === "compare") {
@@ -1126,6 +1206,14 @@ const companyQualificationColumns = computed<TableColumn[]>(() => [
   { key: "image", label: t("page.supplierProducts.qualification.image"), width: "96px", align: "center" },
   { key: "updatedAt", label: t("page.supplierProducts.qualification.updatedAt"), width: "140px" },
   { key: "operation", label: t("common.operation"), width: "124px", align: "center" }
+]);
+
+const companyContactColumns = computed<TableColumn[]>(() => [
+  { key: "contactName", label: t("page.supplierProducts.contact.contactName"), width: "180px" },
+  { key: "contactPhone", label: t("page.supplierProducts.contact.contactPhone"), width: "180px" },
+  { key: "contactEmail", label: t("page.supplierProducts.contact.contactEmail"), width: "220px" },
+  { key: "updatedAt", label: t("page.supplierProducts.contact.updatedAt"), width: "140px" },
+  { key: "operation", label: t("common.operation"), width: "156px", align: "center" }
 ]);
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -1367,7 +1455,7 @@ const normalizeShopExistingSnapshot = (value: unknown): ShopExistingSnapshot | u
     impaCode: readShopString(value, "impaCode"),
     stock: readShopNumber(value, "stockQty"),
     leadTimeDays: readShopNumber(value, "leadTimeDays"),
-    deliveryArea: readShopString(value, "deliveryArea"),
+    deliveryArea: normalizeQuestionMojibakeText(readShopString(value, "deliveryArea")),
     imageUrl,
     images,
     monthlySales: readShopNumber(value, "monthlySales"),
@@ -1387,6 +1475,14 @@ const syncShopRowSpecs = (row: ShopSkuRow) => {
 const normalizeEnterpriseNameForDisplay = (value: string) => {
   if (language.value !== "zh-CN") return value;
   return value.replace(/\s*(shop|store|\u5e97\u94fa)$/i, "").trim();
+};
+
+const normalizeQuestionMojibakeText = (value: string, fallback = "") => {
+  const text = value.trim();
+  if (!text) return fallback;
+  const suffix = text.match(/^\?+([A-Za-z])$/)?.[1]?.toUpperCase();
+  if (suffix) return `联系人${suffix}`;
+  return /\?{2,}/.test(text) ? fallback : text;
 };
 
 const normalizeShopProfile = (payload: unknown): ShopProfileForm => {
@@ -1409,9 +1505,9 @@ const normalizeShopProfile = (payload: unknown): ShopProfileForm => {
     mainCategories: readShopStringArray(source, "mainCategories"),
     servicePorts: readShopStringArray(source, "servicePorts"),
     deliveryAreas: readShopStringArray(source, "deliveryAreas"),
-    contactName: readShopString(source, "contactName"),
-    contactPhone: readShopString(source, "contactPhone"),
-    contactEmail: readShopString(source, "contactEmail"),
+    contactName: normalizeQuestionMojibakeText(readShopString(source, "contactName")),
+    contactPhone: normalizeQuestionMojibakeText(readShopString(source, "contactPhone")),
+    contactEmail: normalizeQuestionMojibakeText(readShopString(source, "contactEmail")),
     companyType: readShopString(source, "companyType"),
     status: readShopString(source, "status") || "ACTIVE"
   };
@@ -1462,7 +1558,7 @@ const normalizeShopSku = (value: unknown, options: { preview?: boolean; batchId?
     stock: readShopNumber(value, "stockQty"),
     leadTime: leadTimeDays ? t("page.supplierProducts.leadTimeDays", { days: leadTimeDays }) : "",
     leadTimeDays,
-    deliveryArea: readShopString(value, "deliveryArea"),
+    deliveryArea: normalizeQuestionMojibakeText(readShopString(value, "deliveryArea")),
     thumbnail: imageUrl,
     imageFileId,
     imageUrl,
@@ -1518,6 +1614,32 @@ const normalizeCompanyQualification = (value: unknown): CompanyQualificationRow 
   };
 };
 
+const normalizeCompanyContact = (value: unknown): CompanyContactRow | null => {
+  if (!isPlainRecord(value)) return null;
+  const contactId = value.contactId ?? value.id;
+  const contactName = normalizeQuestionMojibakeText(readShopString(value, "contactName"));
+  const contactPhone = normalizeQuestionMojibakeText(readShopString(value, "contactPhone"));
+  const contactEmail = normalizeQuestionMojibakeText(readShopString(value, "contactEmail"));
+  const rowId = String(contactId || contactName || contactPhone || Math.random());
+  return {
+    id: rowId,
+    contactId: typeof contactId === "string" || typeof contactId === "number" ? contactId : undefined,
+    contactName,
+    contactPhone,
+    contactEmail,
+    status: readShopString(value, "status") || "ACTIVE",
+    createdAt: readShopString(value, "createdAt"),
+    updatedAt: readShopString(value, "updatedAt") || readShopString(value, "createdAt"),
+    isEditing: false,
+    isNew: false,
+    draft: {
+      contactName,
+      contactPhone,
+      contactEmail
+    }
+  };
+};
+
 const filteredShopProductRows = computed(() => {
   const keyword = shopProductKeyword.value.trim().toLowerCase();
   return shopSkuRows.value.filter((row) => {
@@ -1557,6 +1679,7 @@ const unsavedShopSkuRows = computed(() => shopSkuRows.value.filter((row) => !row
 const savedShopSkuRows = computed(() => shopSkuRows.value.filter((row) => row.skuId && !row.isPreview));
 const hasSavedShopSkuRows = computed(() => savedShopSkuRows.value.length > 0);
 const canConfirmShopImport = computed(() => shopPreviewSkuRows.value.length > 0 || unsavedShopSkuRows.value.length > 0 || hasDirtyShopSkuRows.value);
+const activeCompanyContacts = computed(() => companyContactRows.value.filter((row) => row.status !== "DELETED" && row.contactName && row.contactPhone));
 const shopSkuTotalPages = computed(() => Math.max(1, Math.ceil(shopSkuTotal.value / shopSkuPageSize)));
 const shopSkuPageStart = computed(() => (shopSkuTotal.value ? (shopSkuPage.value - 1) * shopSkuPageSize + 1 : 0));
 const shopSkuPageEnd = computed(() => Math.min(shopSkuPage.value * shopSkuPageSize, shopSkuTotal.value));
@@ -1570,6 +1693,8 @@ const getShopCurrencySymbol = (currency: string) => {
   if (normalized === "USD") return "$";
   return "¥";
 };
+
+const isValidContactEmail = (value: string) => !value.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
 
 const getShopCodeStatusFilterValues = (status: string) => {
   if (status === "MATCHED_SUCCESS") return SHOP_MATCHED_CODE_STATUSES;
@@ -1938,6 +2063,16 @@ const loadCompanyQualifications = async () => {
   }
 };
 
+const loadCompanyContacts = async () => {
+  companyContactLoading.value = true;
+  try {
+    const payload = await listCompanyContacts({ status: "ACTIVE" });
+    companyContactRows.value = readShopItems(payload).map((item) => normalizeCompanyContact(item)).filter((item): item is CompanyContactRow => Boolean(item));
+  } finally {
+    companyContactLoading.value = false;
+  }
+};
+
 const loadShopSkuList = async () => {
   const query = buildShopSkuQuery();
   const cacheKey = getShopSkuPageCacheKey(query);
@@ -1969,10 +2104,11 @@ const loadShopWorkspace = async () => {
   shopNoticeMessage.value = "";
   shopSkuPageCache.clear();
   try {
-    await Promise.all([loadShopProfile(), loadCompanyQualifications(), loadShopSkuList()]);
+    await Promise.all([loadShopProfile(), loadCompanyQualifications(), loadCompanyContacts(), loadShopSkuList()]);
   } catch (error) {
     shopErrorMessage.value = getShopErrorText(error);
     companyQualificationRows.value = [];
+    companyContactRows.value = [];
     shopPersistedSkuRows.value = [];
     shopPreviewSkuRows.value = [];
     shopSkuRows.value = [];
@@ -2026,6 +2162,119 @@ const removeCompanyQualification = async (row: CompanyQualificationRow) => {
     shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.qualification.deleteFailed");
   } finally {
     companyQualificationSaving.value = false;
+  }
+};
+
+const addCompanyContact = () => {
+  if (companyContactRows.value.some((row) => row.isNew)) return;
+  companyContactRows.value = [
+    {
+      id: `new-contact-${Date.now()}`,
+      contactName: "",
+      contactPhone: "",
+      contactEmail: "",
+      status: "ACTIVE",
+      createdAt: "",
+      updatedAt: "",
+      isEditing: true,
+      isNew: true,
+      draft: {
+        contactName: "",
+        contactPhone: "",
+        contactEmail: ""
+      }
+    },
+    ...companyContactRows.value
+  ];
+};
+
+const openCompanyContactCreateFromAnyTab = () => {
+  shopManagementTab.value = "contacts";
+  addCompanyContact();
+};
+
+const editCompanyContact = (row: CompanyContactRow) => {
+  row.isEditing = true;
+  row.draft = {
+    contactName: row.contactName,
+    contactPhone: row.contactPhone,
+    contactEmail: row.contactEmail
+  };
+};
+
+const cancelCompanyContactEdit = (row: CompanyContactRow) => {
+  if (row.isNew) {
+    companyContactRows.value = companyContactRows.value.filter((item) => item.id !== row.id);
+    return;
+  }
+  row.isEditing = false;
+  row.draft = {
+    contactName: row.contactName,
+    contactPhone: row.contactPhone,
+    contactEmail: row.contactEmail
+  };
+};
+
+const saveCompanyContact = async (row: CompanyContactRow) => {
+  const draft = row.draft || row;
+  const contactName = draft.contactName.trim();
+  const contactPhone = draft.contactPhone.trim();
+  const contactEmail = draft.contactEmail.trim();
+  if (!contactName) {
+    shopErrorMessage.value = t("page.supplierProducts.contact.nameRequired");
+    return;
+  }
+  if (!contactPhone) {
+    shopErrorMessage.value = t("page.supplierProducts.contact.phoneRequired");
+    return;
+  }
+  if (!isValidContactEmail(contactEmail)) {
+    shopErrorMessage.value = t("page.supplierProducts.contact.emailInvalid");
+    return;
+  }
+  companyContactSaving.value = true;
+  shopErrorMessage.value = "";
+  shopNoticeKey.value = "";
+  try {
+    const payload = {
+      contactName,
+      contactPhone,
+      contactEmail,
+      status: "ACTIVE"
+    };
+    if (row.contactId) {
+      await updateCompanyContact(row.contactId, payload);
+      shopNoticeKey.value = "page.supplierProducts.contact.updated";
+    } else {
+      await createCompanyContact(payload);
+      shopNoticeKey.value = "page.supplierProducts.contact.created";
+    }
+    await loadCompanyContacts();
+  } catch (error) {
+    shopErrorMessage.value = getShopErrorText(error, row.contactId ? "page.supplierProducts.contact.updateFailed" : "page.supplierProducts.contact.createFailed");
+  } finally {
+    companyContactSaving.value = false;
+  }
+};
+
+const removeCompanyContact = async (row: CompanyContactRow) => {
+  if (row.isNew) {
+    companyContactRows.value = companyContactRows.value.filter((item) => item.id !== row.id);
+    return;
+  }
+  if (!row.contactId) return;
+  if (typeof window !== "undefined" && !window.confirm(t("page.supplierProducts.contact.deleteConfirm"))) return;
+
+  companyContactSaving.value = true;
+  shopErrorMessage.value = "";
+  try {
+    await deleteCompanyContact(row.contactId);
+    shopNoticeKey.value = "page.supplierProducts.contact.deleted";
+    await loadCompanyContacts();
+  } catch (error) {
+    shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.contact.deleteFailed");
+  } finally {
+    companyContactSaving.value = false;
   }
 };
 
@@ -2499,18 +2748,15 @@ onUnmounted(() => {
 });
 
 const compareSkuColumns = computed<TableColumn[]>(() => [
-  { key: "selection", label: t("compare.selectColumn"), width: "72px", align: "center" },
-  { key: "sourceSkuCode", label: t("compare.sourceSkuCode"), width: "118px" },
-  { key: "sourceSkuName", label: t("compare.sourceSkuName"), width: "210px" },
-  { key: "matchedProductCode", label: t("compare.matchedProductCode"), width: "118px" },
-  { key: "attributes", label: t("attr.spec"), width: "190px" },
-  { key: "platformUnit", label: t("compare.platformUnit"), width: "84px" },
-  { key: "quantity", label: t("compare.purchaseQuantity"), width: "92px", align: "right" },
-  { key: "unit", label: t("compare.demandUnit"), width: "70px" },
-  { key: "price", label: t("field.price"), width: "102px", align: "right" },
-  { key: "subtotal", label: t("compare.subtotal"), width: "112px", align: "right" },
-  { key: "supplier", label: t("field.supplier"), width: "128px" },
-  { key: "operation", label: t("common.operation"), width: "92px", align: "center" }
+  { key: "selection", label: t("table.index"), width: "72px", align: "center" },
+  { key: "sourceSkuCode", label: t("compare.impaCnCode"), width: "20%" },
+  { key: "quantity", label: t("compare.quantity"), width: "10%", align: "right" },
+  { key: "matchedProductCode", label: t("compare.candidateCode"), width: "20%" },
+  { key: "platformUnit", label: t("compare.candidateUnit"), width: "10%" },
+  { key: "price", label: t("compare.unitPrice"), width: "10%", align: "center" },
+  { key: "subtotal", label: t("compare.subtotal"), width: "10%", align: "center" },
+  { key: "quoteMarkup", label: t("compare.profitPercent"), width: "10%", align: "center" },
+  { key: "actualQuote", label: t("compare.quotePrice"), width: "10%", align: "center" }
 ]);
 
 const purchaseOrderColumns = computed<TableColumn[]>(() => [
@@ -2701,14 +2947,46 @@ const displayCurrencySymbol = (currency?: string | null) => {
 
 const formatDisplayMoney = (amount?: number, currency?: string | null) => {
   if (amount == null || !Number.isFinite(amount)) return "-";
-  return `${displayCurrencySymbol(currency)} ${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `${displayCurrencySymbol(currency)} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-const formatDualMoney = (cny?: number, usd?: number) => `${formatDisplayMoney(cny, "CNY")}\n${formatDisplayMoney(usd, "USD")}`;
 const dualMoneyLines = (cny?: number, usd?: number) => ({
   cny: formatDisplayMoney(cny, "CNY"),
   usd: formatDisplayMoney(usd, "USD")
 });
+
+const CNY_PER_USD = 7;
+
+const ceilMoneyToCents = (value?: number | null) => {
+  if (value == null || !Number.isFinite(value)) return undefined;
+  return Math.ceil((value - Number.EPSILON) * 100) / 100;
+};
+
+const cnyToDisplayCurrencyAmount = (cny?: number, usd?: number): number | undefined => {
+  if (compareDisplayCurrency.value === "USD") {
+    if (usd != null && Number.isFinite(usd)) return usd;
+    return cny != null && Number.isFinite(cny) ? cny / CNY_PER_USD : undefined;
+  }
+  if (cny != null && Number.isFinite(cny)) return cny;
+  return usd != null && Number.isFinite(usd) ? usd * CNY_PER_USD : undefined;
+};
+
+const displayCurrencyAmountToCny = (value?: string | number | null): number | undefined => {
+  const parsed = parseCompareQuantity(value);
+  if (parsed == null) return undefined;
+  return ceilMoneyToCents(compareDisplayCurrency.value === "USD" ? parsed * CNY_PER_USD : parsed);
+};
+
+const formatCompareMoney = (cny?: number, usd?: number) =>
+  formatDisplayMoney(cnyToDisplayCurrencyAmount(cny, usd), compareDisplayCurrency.value);
+
+const compareDisplayCurrencySymbol = computed(() => (compareDisplayCurrency.value === "USD" ? "$" : "¥"));
+
+const compareMoneyInputValue = (cny?: number, usd?: number) => {
+  const value = cnyToDisplayCurrencyAmount(cny, usd);
+  const rounded = ceilMoneyToCents(value);
+  return rounded == null || !Number.isFinite(rounded) ? "" : rounded.toFixed(2);
+};
 
 const normalizeCompareText = (value?: string | number | null) => {
   if (value == null) return "";
@@ -2767,6 +3045,14 @@ const parseCompareQuantity = (value?: string | number | null) => {
   return Number.isFinite(quantity) && quantity > 0 ? quantity : undefined;
 };
 
+const parseCompareNonNegative = (value?: string | number | null) => {
+  const text = normalizeCompareText(value);
+  if (!text) return undefined;
+  const normalized = text.replace(/,/g, "");
+  const number = Number(normalized);
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+};
+
 const isCompareRowOrderable = (row: CompareSkuRow) => row.price > 0 && row.pricingQuantity != null && Number.isFinite(row.pricingQuantity) && row.pricingQuantity > 0;
 
 const compareCandidateToRow = (item: MaterialComparisonItem, candidate: MaterialComparisonCandidate, candidateIndex: number, strategyKey: string): CompareSkuRow => {
@@ -2782,8 +3068,14 @@ const compareCandidateToRow = (item: MaterialComparisonItem, candidate: Material
   const unitPriceUsd = selectedUnitOption?.unitPriceUsd ?? candidate.unitPriceUsd;
   const sourceQuantity = normalizeCompareText(item.quantity);
   const quantityText = compareQuantityInputs.value[demandLineKey] ?? sourceQuantity;
+  const remarks = compareRemarkInputs.value[demandLineKey] ?? normalizeCompareText(item.remarks);
   const pricingQuantity = parseCompareQuantity(quantityText);
   const quantityMissing = !sourceQuantity;
+  const rowMarkup = parseCompareNonNegative(compareQuoteMarkupInputs.value[demandLineKey]);
+  const markupPercent = rowMarkup ?? compareQuoteMarkupPercent.value;
+  const actualQuoteText = compareQuoteActualPrices.value[demandLineKey] ?? "";
+  const actualQuotePrice = ceilMoneyToCents(parseCompareQuantity(actualQuoteText) ?? (price > 0 ? price * (1 + markupPercent / 100) : undefined));
+  const actualQuoteSubtotal = actualQuotePrice != null && pricingQuantity ? ceilMoneyToCents(actualQuotePrice * pricingQuantity) : undefined;
   const rowId = `${strategyKey}:${selectedCompareSupplier.value || "strategy"}:${demandLineKey}:${candidateIndex}`;
   const attributes: SkuAttribute[] = [
     { key: "spec", labelKey: "attr.spec", value: specText || "-" },
@@ -2800,6 +3092,7 @@ const compareCandidateToRow = (item: MaterialComparisonItem, candidate: Material
     matchedProductCode: normalizeCompareText(candidate.impaCode) || normalizeCompareText(candidate.platformCode) || normalizeCompareText(item.impaCode) || normalizeCompareText(item.platformCode) || "-",
     rowNo: item.rowNo,
     quantity: quantityText,
+    remarks,
     pricingQuantity,
     unit: normalizeCompareText(item.unit),
     platformUnit: selectedUnit || "-",
@@ -2810,8 +3103,11 @@ const compareCandidateToRow = (item: MaterialComparisonItem, candidate: Material
     quantityMissingFlag: quantityMissing,
     quantityInvalidFlag: !pricingQuantity,
     quantityFallbackFlag: Boolean(item.pricingQuantityNote && !quantityText),
-    subtotal: price > 0 && pricingQuantity ? price * pricingQuantity : 0,
-    subtotalUsd: unitPriceUsd != null && unitPriceUsd > 0 && pricingQuantity ? unitPriceUsd * pricingQuantity : undefined,
+    subtotal: actualQuoteSubtotal ?? 0,
+    subtotalUsd: actualQuoteSubtotal != null ? actualQuoteSubtotal / 7 : undefined,
+    actualQuotePrice,
+    actualQuoteSubtotal,
+    quoteMarkupPercent: markupPercent,
     candidate,
     lowestPrice: compareItemLowestPrice(item),
     matchType: candidate.matchType,
@@ -2830,28 +3126,136 @@ const compareCandidateToRow = (item: MaterialComparisonItem, candidate: Material
   };
 };
 
+const compareUnmatchedItemToRow = (item: MaterialComparisonItem, itemIndex: number, strategyKey: string): CompareSkuRow => {
+  const demandLineKey = compareDemandItemKey(item, itemIndex);
+  const quantityText = compareQuantityInputs.value[demandLineKey] ?? normalizeCompareText(item.quantity);
+  const remarks = compareRemarkInputs.value[demandLineKey] ?? normalizeCompareText(item.remarks);
+  return {
+    id: `${strategyKey}:unmatched:${demandLineKey}`,
+    supplierKey: `${strategyKey}:unmatched`,
+    supplierName: "-",
+    demandItemId: demandLineKey,
+    unmatched: true,
+    sourceSkuCode: normalizeCompareText(item.sourceSkuCode) || normalizeCompareText(item.impaCode) || normalizeCompareText(item.platformCode) || "-",
+    sourceSkuName: normalizeCompareText(item.sourceSkuName) || normalizeCompareText(item.productName) || normalizeCompareText(item.description) || "-",
+    matchedProductCode: "-",
+    rowNo: item.rowNo,
+    quantity: quantityText,
+    remarks,
+    pricingQuantity: parseCompareQuantity(quantityText),
+    unit: normalizeCompareText(item.unit),
+    platformUnit: "-",
+    selectedUnit: "",
+    unitPriceOptions: [],
+    quantityMissingFlag: !normalizeCompareText(item.quantity),
+    quantityInvalidFlag: !parseCompareQuantity(quantityText),
+    quantityFallbackFlag: Boolean(item.pricingQuantityNote && !quantityText),
+    subtotal: 0,
+    actualQuotePrice: undefined,
+    actualQuoteSubtotal: undefined,
+    quoteMarkupPercent: compareQuoteMarkupPercent.value,
+    candidate: {} as MaterialComparisonCandidate,
+    lowestPrice: undefined,
+    matchType: "UNMATCHED",
+    reason: item.emptyReason,
+    thumbnail: "",
+    images: [],
+    name: "-",
+    itemNo: "-",
+    impaCode: normalizeCompareText(item.impaCode) || normalizeCompareText(item.platformCode) || "-",
+    supplier: "-",
+    price: 0,
+    currency: "CNY",
+    stock: 0,
+    status: "danger",
+    attributes: [
+      { key: "spec", labelKey: "attr.spec", value: normalizeCompareText(item.specification) || "-" },
+      { key: "reason", labelKey: "page.materials.reason", value: normalizeCompareText(item.emptyReason) || "-" }
+    ]
+  };
+};
+
+const compareRowsForStrategy = (strategyKey: string): CompareSkuRow[] => {
+  if (!compareData.value) return [];
+  return compareData.value.items.flatMap((item, itemIndex) => {
+    const candidate = strategyKey === "SINGLE_SUPPLIER" ? item.singleSupplierCandidate : item.lowestCandidate;
+    return candidate ? [compareCandidateToRow(item, candidate, itemIndex * 1000, strategyKey)] : [];
+  });
+};
+
+const demandItemIdFromCompareRowId = (rowId: string) => {
+  const parts = rowId.split(":");
+  return parts.length >= 2 ? parts[parts.length - 2] : "";
+};
+
+const selectedCompareDemandItemIds = computed(() =>
+  new Set(selectedCompareRowIds.value.map(demandItemIdFromCompareRowId).filter(Boolean))
+);
+
 const compareStrategyCards = computed<CompareStrategyCard[]>(() =>
-  (compareData.value?.strategies ?? []).map((strategy) => ({
-    key: strategy.strategyType,
-    label: strategy.strategyName || (strategy.strategyType === "SINGLE_SUPPLIER" ? t("compare.singleSupplier") : t("compare.lowestMixed")),
-    matchSummary: `${strategy.matchedCount}/${strategy.totalCount}`,
-    total: formatDualMoney(strategy.totalAmount, strategy.totalAmountUsd),
-    tone: strategy.strategyType === "SINGLE_SUPPLIER" ? "blue" : "green",
-    enabled: strategy.enabled !== false,
-    disabledReason: strategy.disabledReason,
-    suppliers: strategy.suppliers.map((supplier, supplierIndex) => ({
-      key: compareSupplierKey(strategy, supplier, supplierIndex),
-      supplier: normalizeCompareText(supplier.supplierName) || "-",
-      skuCount: supplier.matchedCount ?? supplier.skuCount ?? 0,
-      amount: formatDualMoney(supplier.totalAmount ?? supplier.amount, supplier.totalAmountUsd)
-    }))
-  }))
+  (compareData.value?.strategies ?? []).map((strategy) => {
+    const rows = compareRowsForStrategy(strategy.strategyType);
+    const selectedIds = selectedCompareDemandItemIds.value;
+    const rowsForTotals = selectedIds.size ? rows.filter((row) => selectedIds.has(String(row.demandItemId)) && isCompareRowOrderable(row)) : rows;
+    const costAmount = rowsForTotals.reduce((sum, row) => {
+      const quantity = row.pricingQuantity && Number.isFinite(row.pricingQuantity) ? row.pricingQuantity : 0;
+      const price = Number.isFinite(row.price) ? row.price : 0;
+      return sum + price * quantity;
+    }, 0);
+    const costAmountUsd = rowsForTotals.reduce((sum, row) => {
+      const quantity = row.pricingQuantity && Number.isFinite(row.pricingQuantity) ? row.pricingQuantity : 0;
+      const price = row.unitPriceUsd != null && Number.isFinite(row.unitPriceUsd) ? row.unitPriceUsd : 0;
+      return sum + price * quantity;
+    }, 0);
+    const quoteAmount = rowsForTotals.reduce((sum, row) => sum + (Number.isFinite(row.subtotal) ? row.subtotal : 0), 0);
+    const quoteAmountUsd = rowsForTotals.reduce((sum, row) => sum + (row.subtotalUsd != null && Number.isFinite(row.subtotalUsd) ? row.subtotalUsd : 0), 0);
+    const profitAmount = Math.max(0, quoteAmount - costAmount);
+    const profitAmountUsd = Math.max(0, quoteAmountUsd - costAmountUsd);
+    return {
+      key: strategy.strategyType,
+      label: strategy.strategyName || (strategy.strategyType === "SINGLE_SUPPLIER" ? t("compare.singleSupplier") : t("compare.lowestMixed")),
+      matchSummary: `${rowsForTotals.length}/${strategy.totalCount}`,
+      costTotal: formatCompareMoney(costAmount, costAmountUsd),
+      quoteTotal: formatCompareMoney(quoteAmount, quoteAmountUsd),
+      profitTotal: formatCompareMoney(profitAmount, profitAmountUsd),
+      tone: strategy.strategyType === "SINGLE_SUPPLIER" ? "blue" : "green",
+      enabled: strategy.enabled !== false,
+      disabledReason: strategy.disabledReason,
+      suppliers: strategy.suppliers.map((supplier, supplierIndex) => {
+        const supplierRows = rowsForTotals.filter((row) => sameCompareSupplier(row.candidate, supplier));
+        const supplierCostAmount = supplierRows.reduce((sum, row) => {
+          const quantity = row.pricingQuantity && Number.isFinite(row.pricingQuantity) ? row.pricingQuantity : 0;
+          const price = Number.isFinite(row.price) ? row.price : 0;
+          return sum + price * quantity;
+        }, 0);
+        const supplierCostAmountUsd = supplierRows.reduce((sum, row) => {
+          const quantity = row.pricingQuantity && Number.isFinite(row.pricingQuantity) ? row.pricingQuantity : 0;
+          const price = row.unitPriceUsd != null && Number.isFinite(row.unitPriceUsd) ? row.unitPriceUsd : 0;
+          return sum + price * quantity;
+        }, 0);
+        return {
+          key: compareSupplierKey(strategy, supplier, supplierIndex),
+          supplier: normalizeCompareText(supplier.supplierName) || "-",
+          skuCount: supplierRows.length,
+          amount: formatCompareMoney(
+            supplierCostAmount,
+            supplierCostAmountUsd
+          )
+        };
+      })
+    };
+  })
 );
 
 const compareSupplyEditableFields = computed<Array<{ key: CompareSupplyEditableKey; label: string; inputType: string }>>(() => [
   { key: "vessel", label: t("compare.supply.vessel"), inputType: "text" },
+  { key: "inquiryNo", label: t("filter.inquiryNo"), inputType: "text" },
+  { key: "materialType", label: t("page.materials.materialType"), inputType: "text" },
+  { key: "currency", label: t("page.materials.currency"), inputType: "text" },
   { key: "port", label: t("compare.supply.port"), inputType: "text" },
-  { key: "date", label: t("compare.supply.date"), inputType: "date" }
+  { key: "date", label: t("compare.supply.date"), inputType: "datetime" },
+  { key: "recipientCompany", label: t("page.materials.recipientCompany"), inputType: "text" },
+  { key: "handlerContact", label: t("page.materials.handlerContact"), inputType: "text" }
 ]);
 
 const compareWeatherInfo = computed(() => ({
@@ -2877,24 +3281,28 @@ const activeCompareSupplierKeys = computed(() =>
 const compareSkuRows = computed<CompareSkuRow[]>(() => {
   if (!compareData.value || !activeCompareStrategy.value) return [];
   const strategyKey = activeCompareStrategy.value.key;
+  if (selectedCompareSupplier.value) {
+    return compareRowsForStrategy(strategyKey).filter((row) => row.supplierKey === selectedCompareSupplier.value);
+  }
   return compareData.value.items.flatMap((item, itemIndex) => {
     let candidates: MaterialComparisonCandidate[] = [];
     const replacement = item.demandItemId != null ? compareRowReplacements.value[String(item.demandItemId)] : undefined;
-    if (selectedCompareSupplier.value) {
-      candidates = item.candidates.filter((candidate, candidateIndex) => candidateSupplierKey(strategyKey, candidate, candidateIndex) === selectedCompareSupplier.value);
-    } else if (strategyKey === "SINGLE_SUPPLIER") {
+    if (strategyKey === "SINGLE_SUPPLIER") {
       candidates = item.singleSupplierCandidate ? [item.singleSupplierCandidate] : [];
     } else {
       candidates = item.lowestCandidate ? [item.lowestCandidate] : [];
     }
     if (replacement && !selectedCompareSupplier.value) candidates = [replacement];
+    if (!candidates.length) return [compareUnmatchedItemToRow(item, itemIndex, strategyKey)];
     return candidates.map((candidate, candidateIndex) => compareCandidateToRow(item, candidate, itemIndex * 1000 + candidateIndex, strategyKey));
   });
 });
 
 const compareFilteredSkus = computed<CompareSkuRow[]>(() =>
   compareSkuRows.value.filter((row) => {
-    const supplierMatches = activeCompareSupplierKeys.value.length === 0 || activeCompareSupplierKeys.value.includes(row.supplierKey);
+    const supplierMatches = row.unmatched
+      ? !selectedCompareSupplier.value
+      : activeCompareSupplierKeys.value.length === 0 || activeCompareSupplierKeys.value.includes(row.supplierKey);
     const keyword = compareSkuKeyword.value.trim().toLowerCase();
     const keywordMatches =
       !keyword ||
@@ -2903,6 +3311,16 @@ const compareFilteredSkus = computed<CompareSkuRow[]>(() =>
     return supplierMatches && keywordMatches && priceMatches;
   }).map((row, index) => ({ ...row, displayNo: index + 1 }))
 );
+
+const compareSkuRowClass = (row: Record<string, unknown>) => {
+  const compareRow = row as unknown as CompareSkuRow;
+  const isOrderable = isCompareRowOrderable(compareRow);
+  const isSelected = selectedCompareRowIds.value.includes(compareRow.id);
+  return {
+    "is-compare-unmatched": Boolean(row.unmatched),
+    "is-compare-deselected": isOrderable && !isSelected
+  };
+};
 
 const filteredReplacementCandidates = computed(() => {
   const keyword = replacementSearchKeyword.value.trim().toLowerCase();
@@ -2925,7 +3343,7 @@ const filteredReplacementCandidates = computed(() => {
 const purchaseOrderRows = computed(() =>
   purchaseOrders.value.map((row) => ({
     ...row,
-    sourceNo: row.demandNo || "-",
+    sourceNo: row.inquiryNo || row.demandNo || "-",
     supplierQuoteRatio: `${row.quotedSupplierCount ?? row.supplierCount ?? 0}/${row.totalSupplierCount ?? row.supplierCount ?? 0}`
   })) as unknown as Record<string, unknown>[]
 );
@@ -2933,7 +3351,7 @@ const purchaseOrderRows = computed(() =>
 const supplierPurchaseOrderRows = computed(() =>
   supplierPurchaseOrders.value.map((row) => ({
     ...row,
-    sourceNo: row.demandNo || "-",
+    sourceNo: row.inquiryNo || row.demandNo || "-",
     supplyMeta: [row.supplyPort, row.vesselEta ? formatDemandDateTime(row.vesselEta) : ""].filter(Boolean).join(" / ") || "-"
   })) as unknown as Record<string, unknown>[]
 );
@@ -2971,6 +3389,8 @@ type SelectedPurchaseItem = NonNullable<PurchaseOrderCreatePayload["selectedItem
   currency: string;
   amount: number;
   amountUsd?: number;
+  costAmount: number;
+  costAmountUsd?: number;
 };
 
 const buildSelectedPurchaseItem = (row: CompareSkuRow): SelectedPurchaseItem | null => {
@@ -2981,7 +3401,9 @@ const buildSelectedPurchaseItem = (row: CompareSkuRow): SelectedPurchaseItem | n
   if (!Number.isFinite(skuId) || skuId <= 0) return null;
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) return null;
   if (!Number.isFinite(pricingQuantity) || pricingQuantity <= 0) return null;
-  const amount = Number.isFinite(row.subtotal) ? row.subtotal : unitPrice * pricingQuantity;
+  const costAmount = unitPrice * pricingQuantity;
+  const costAmountUsd = row.unitPriceUsd != null && Number.isFinite(row.unitPriceUsd) ? row.unitPriceUsd * pricingQuantity : undefined;
+  const amount = Number.isFinite(row.subtotal) ? row.subtotal : costAmount;
   const selectedUnit = normalizeCompareText(row.selectedUnit) || normalizeCompareText(row.platformUnit) || normalizeCompareText(row.unit);
   return {
     rowId: row.id,
@@ -3001,9 +3423,14 @@ const buildSelectedPurchaseItem = (row: CompareSkuRow): SelectedPurchaseItem | n
     pricingQuantity,
     unitPrice,
     unitPriceUsd: row.unitPriceUsd,
+    actualQuotePrice: row.actualQuotePrice,
+    actualQuoteAmount: amount,
+    quoteMarkupPercent: row.quoteMarkupPercent,
     currency: row.candidate.currency || row.currency || "CNY",
     amount,
     amountUsd: row.subtotalUsd,
+    costAmount,
+    costAmountUsd,
     unitMismatchFlag: row.unitMismatchFlag,
     quantityFallbackFlag: row.quantityFallbackFlag
   };
@@ -3016,17 +3443,20 @@ const selectedCompareOrderableRows = computed(() =>
   compareSkuRows.value.filter((row) => selectedComparePurchaseItems.value.some((item) => item.rowId === row.id))
 );
 const selectedCompareExcludedCount = computed(() => Math.max((compareData.value?.items.length ?? 0) - selectedComparePurchaseItems.value.length, 0));
+const selectedCompareTotalSkuCount = computed(() => compareData.value?.items.length ?? 0);
 const selectedCompareSupplierCount = computed(() => new Set(selectedComparePurchaseItems.value.map((item) => item.supplierKey)).size);
 const selectedCompareOrderAmount = computed(() => selectedComparePurchaseItems.value.reduce((sum, item) => sum + (Number.isFinite(item.amount) ? item.amount : 0), 0));
 const selectedCompareOrderAmountUsd = computed(() => selectedComparePurchaseItems.value.reduce((sum, item) => sum + (item.amountUsd != null && Number.isFinite(item.amountUsd) ? item.amountUsd : 0), 0));
+const selectedCompareCostAmount = computed(() => selectedComparePurchaseItems.value.reduce((sum, item) => sum + (Number.isFinite(item.costAmount) ? item.costAmount : 0), 0));
+const selectedCompareCostAmountUsd = computed(() => selectedComparePurchaseItems.value.reduce((sum, item) => sum + (item.costAmountUsd != null && Number.isFinite(item.costAmountUsd) ? item.costAmountUsd : 0), 0));
 const selectedCompareSupplierSummaries = computed(() => {
   const map = new Map<string, { supplier: string; count: number; amount: number; amountUsd: number; currency: string }>();
   selectedComparePurchaseItems.value.forEach((item) => {
     const key = item.supplierKey || item.supplierName;
     const current = map.get(key) ?? { supplier: item.supplierName || "-", count: 0, amount: 0, amountUsd: 0, currency: item.currency || "CNY" };
     current.count += 1;
-    current.amount += Number.isFinite(item.amount) ? item.amount : 0;
-    current.amountUsd += item.amountUsd != null && Number.isFinite(item.amountUsd) ? item.amountUsd : 0;
+    current.amount += Number.isFinite(item.costAmount) ? item.costAmount : 0;
+    current.amountUsd += item.costAmountUsd != null && Number.isFinite(item.costAmountUsd) ? item.costAmountUsd : 0;
     map.set(key, current);
   });
   return [...map.values()];
@@ -3034,9 +3464,7 @@ const selectedCompareSupplierSummaries = computed(() => {
 const selectedCompareOrderNotices = computed(() => {
   const notices: string[] = [];
   const quantityFallbackCount = selectedComparePurchaseItems.value.filter((item) => item.quantityFallbackFlag).length;
-  const unitMismatchCount = selectedComparePurchaseItems.value.filter((item) => item.unitMismatchFlag).length;
   if (quantityFallbackCount) notices.push(t("purchaseOrder.dialog.pricingQuantityFallback", { count: quantityFallbackCount }));
-  if (unitMismatchCount) notices.push(t("purchaseOrder.dialog.unitPendingConfirm", { count: unitMismatchCount }));
   return notices;
 });
 
@@ -3091,6 +3519,14 @@ const updateCompareQuantity = (row: CompareSkuRow, value: string) => {
   }
 };
 
+const updateCompareRemark = (row: CompareSkuRow, value: string) => {
+  if (isCompareReadonly.value || !row.demandItemId) return;
+  compareRemarkInputs.value = {
+    ...compareRemarkInputs.value,
+    [row.demandItemId]: value
+  };
+};
+
 const updateCompareUnit = (row: CompareSkuRow, value: string) => {
   if (isCompareReadonly.value || !row.demandItemId) return;
   compareUnitSelections.value = {
@@ -3101,13 +3537,150 @@ const updateCompareUnit = (row: CompareSkuRow, value: string) => {
   window.setTimeout(syncCompareSelectedRows, 0);
 };
 
+const updateCompareActualQuote = (row: CompareSkuRow, value: string) => {
+  if (isCompareReadonly.value || !row.demandItemId) return;
+  const cnyValue = displayCurrencyAmountToCny(value);
+  compareQuoteActualPrices.value = {
+    ...compareQuoteActualPrices.value,
+    [row.demandItemId]: cnyValue == null ? value : String(cnyValue)
+  };
+};
+
+const updateCompareGlobalMarkup = (value: string) => {
+  const markup = parseCompareNonNegative(value);
+  compareQuoteMarkupPercent.value = markup ?? 0;
+  compareQuoteMarkupInputs.value = {};
+  compareQuoteActualPrices.value = {};
+};
+
+const updateCompareMarkup = (row: CompareSkuRow, value: string) => {
+  if (isCompareReadonly.value || !row.demandItemId) return;
+  compareQuoteMarkupInputs.value = {
+    ...compareQuoteMarkupInputs.value,
+    [row.demandItemId]: value
+  };
+  const { [row.demandItemId]: _removed, ...rest } = compareQuoteActualPrices.value;
+  compareQuoteActualPrices.value = rest;
+};
+
+const quotePayloadItems = () =>
+  compareSkuRows.value
+    .map((row) => {
+      const selected = selectedCompareRowIds.value.includes(row.id) && isCompareRowOrderable(row) && row.actualQuotePrice != null && Number.isFinite(row.actualQuotePrice) && row.actualQuotePrice > 0;
+      return {
+      demandItemId: row.demandItemId,
+      skuId: selected ? row.candidate.skuId : undefined,
+      selectedUnit: selected ? row.selectedUnit : undefined,
+      quantity: row.quantity,
+      remarks: row.remarks ?? "",
+      unitPrice: selected ? row.price : undefined,
+      unitPriceUsd: selected ? row.unitPriceUsd : undefined,
+      actualQuotePrice: selected ? ceilMoneyToCents(row.actualQuotePrice) : undefined,
+      quoteMarkupPercent: selected ? row.quoteMarkupPercent : undefined,
+      currency: selected ? "CNY" : undefined
+      };
+    });
+
+const splitCompareHandlerContact = () => {
+  const text = compareSupplyForm.value.handlerContact.trim();
+  if (!text) return { handlerName: "", handlerEmail: "" };
+  const parts = text.split(/[\/,，;；\s]+/).map((part) => part.trim()).filter(Boolean);
+  const emailIndex = parts.findIndex((part) => part.includes("@"));
+  return {
+    handlerName: parts.filter((_, index) => index !== emailIndex).join(" "),
+    handlerEmail: emailIndex >= 0 ? parts[emailIndex] : ""
+  };
+};
+
+const mergeCompareEditedItems = (items: MaterialDemandDetail["items"]) =>
+  items.map((item, index) => {
+    const itemRecord = item as MaterialDemandDetail["items"][number] & { itemId?: number };
+    const key = String(itemRecord.itemId ?? item.sourceRowNumber ?? item.sequence ?? index);
+    const quantity = compareQuantityInputs.value[key];
+    return {
+      ...item,
+      quantity: quantity == null ? item.quantity : quantity
+    };
+  });
+
+const saveCompareMainInfo = async () => {
+  if (!compareDemandId.value || !compareData.value?.demand) return;
+  const detail = await getMaterialDemandDetail(compareDemandId.value);
+  const handler = splitCompareHandlerContact();
+  await saveMaterialDemand({
+    demandId: detail.demand.demandId,
+    demandNo: detail.demand.demandNo,
+    applicationNo: detail.demand.applicationNo,
+    inquiryNo: compareSupplyForm.value.inquiryNo.trim() || detail.demand.inquiryNo,
+    materialType: compareSupplyForm.value.materialType.trim() || detail.demand.materialType,
+    currency: compareSupplyForm.value.currency.trim() || detail.demand.currency,
+    recipientCompany: compareSupplyForm.value.recipientCompany.trim() || detail.demand.recipientCompany,
+    handlerName: handler.handlerName || detail.demand.handlerName,
+    handlerEmail: handler.handlerEmail || detail.demand.handlerEmail,
+    vesselName: compareSupplyForm.value.vessel.trim() || detail.demand.vesselName,
+    supplyPortCode: detail.demand.supplyPortCode,
+    supplyPortName: compareSupplyForm.value.port.trim() || detail.demand.supplyPortName,
+    vesselEta: compareSupplyForm.value.date.trim() || detail.demand.vesselEta,
+    inquiryDate: detail.demand.inquiryDate,
+    sourceFileName: detail.demand.sourceFileName,
+    sourceFileId: detail.demand.sourceFileId,
+    documentType: detail.demand.documentType,
+    headerRowIndex: detail.demand.headerRowIndex,
+    items: mergeCompareEditedItems(detail.items)
+  });
+};
+
+const saveCompareQuotePrices = async () => {
+  if (!compareDemandId.value || isCompareReadonly.value) return false;
+  compareQuoteError.value = "";
+  compareQuoteNotice.value = "";
+  const items = quotePayloadItems();
+  if (!items.length) {
+    compareQuoteError.value = t("compare.noQuoteItems");
+    return false;
+  }
+  compareQuoteSaving.value = true;
+  try {
+    await saveMaterialComparisonQuotes(compareDemandId.value, {
+      strategyType: activeCompareStrategy.value?.key,
+      markupPercent: compareQuoteMarkupPercent.value,
+      items
+    });
+    await loadCompareWorkspace();
+    return true;
+  } catch (error) {
+    compareQuoteError.value = error instanceof Error && error.message ? error.message : t("compare.quoteSaveFailed");
+    return false;
+  } finally {
+    compareQuoteSaving.value = false;
+  }
+};
+
+const exportCompareQuotePrices = async () => {
+  if (!compareDemandId.value || isCompareReadonly.value) return;
+  compareQuoteExporting.value = true;
+  compareQuoteError.value = "";
+  try {
+    const saved = await saveCompareQuotePrices();
+    if (!saved) return;
+    await exportMaterialQuoteTemplate(compareDemandId.value);
+  } catch (error) {
+    compareQuoteError.value = error instanceof Error && error.message ? error.message : t("compare.quoteExportFailed");
+  } finally {
+    compareQuoteExporting.value = false;
+  }
+};
+
 watch(
   () => compareSkuRows.value.map((row) => row.id).join("|"),
   () => {
     if (!compareSkuRows.value.length) return;
     const current = new Set(compareSkuRows.value.map((row) => row.id));
     selectedCompareRowIds.value = selectedCompareRowIds.value.filter((id) => current.has(id));
-    if (!selectedCompareRowIds.value.length && !isCompareReadonly.value) syncCompareSelectedRows();
+    if (!compareSelectionInitialized.value && !selectedCompareRowIds.value.length && !isCompareReadonly.value) {
+      syncCompareSelectedRows();
+      compareSelectionInitialized.value = true;
+    }
   }
 );
 
@@ -3288,7 +3861,10 @@ const loadCompareWorkspace = async () => {
   replacementSearchKeyword.value = "";
   compareRowReplacements.value = {};
   selectedCompareRowIds.value = [];
+  compareSelectionInitialized.value = false;
   compareQuantityInputs.value = {};
+  compareRemarkInputs.value = {};
+  compareQuoteMarkupInputs.value = {};
   expandedCompareRowId.value = "";
   comparePreferenceFilters.value = comparePreferenceFilters.value.filter((item) => item === "priceLow");
   if (!currentDemandId) {
@@ -3300,15 +3876,46 @@ const loadCompareWorkspace = async () => {
     const response = await getMaterialDemandComparison(currentDemandId);
     compareData.value = response;
     compareQuantityInputs.value = Object.fromEntries(response.items.map((item, index) => [compareDemandItemKey(item, index), normalizeCompareText(item.quantity)]));
+    compareRemarkInputs.value = Object.fromEntries(response.items.map((item, index) => [compareDemandItemKey(item, index), normalizeCompareText(item.remarks)]));
+    const savedMarkup = response.items.find((item) => item.quoteMarkupPercent != null)?.quoteMarkupPercent;
+    const defaultMarkup = savedMarkup ?? compareQuoteMarkupPercent.value;
+    compareQuoteMarkupPercent.value = defaultMarkup;
+    compareQuoteMarkupInputs.value = Object.fromEntries(
+      response.items
+        .map((item, index) => [compareDemandItemKey(item, index), item.quoteMarkupPercent == null || item.quoteMarkupPercent === defaultMarkup ? "" : String(item.quoteMarkupPercent)] as const)
+        .filter(([, value]) => value)
+    );
+    compareQuoteActualPrices.value = Object.fromEntries(
+      response.items
+        .map((item, index) => {
+          const key = compareDemandItemKey(item, index);
+          const candidate = item.lowestCandidate ?? item.singleSupplierCandidate ?? item.candidates[0];
+          const expected = candidate?.unitPrice == null ? undefined : ceilMoneyToCents(candidate.unitPrice * (1 + (item.quoteMarkupPercent ?? defaultMarkup) / 100));
+          const saved = item.actualQuotePrice == null ? undefined : ceilMoneyToCents(item.actualQuotePrice);
+          return [key, saved != null && expected != null && Math.abs(saved - expected) > 0.01 ? String(saved) : ""] as const;
+        })
+        .filter(([, value]) => value)
+    );
     compareUnitSelections.value = {};
+    selectedStrategy.value = response.strategies.find((strategy) => strategy.enabled !== false)?.strategyType || response.strategies[0]?.strategyType || "LOWEST_MIXED";
+    const savedQuoteItemIds = new Set(response.items.filter((item) => item.actualQuotePrice != null).map((item, index) => compareDemandItemKey(item, index)));
+    const rowsAfterLoad = compareSkuRows.value;
+    selectedCompareRowIds.value = savedQuoteItemIds.size
+      ? rowsAfterLoad.filter((row) => savedQuoteItemIds.has(String(row.demandItemId)) && isCompareRowOrderable(row)).map((row) => row.id)
+      : rowsAfterLoad.filter(isCompareRowOrderable).map((row) => row.id);
+    compareSelectionInitialized.value = true;
     const supplyInfo = response.supplyInfo;
+    const handlerContact = [response.demand?.handlerName, response.demand?.handlerEmail].filter(Boolean).join(" / ");
     compareSupplyForm.value = {
       vessel: normalizeCompareText(supplyInfo?.vesselName) || normalizeCompareText(response.demand?.vesselName) || "",
+      inquiryNo: normalizeCompareText(response.demand?.inquiryNo) || normalizeCompareText(response.demand?.demandNo) || "",
+      materialType: normalizeCompareText(response.demand?.materialType) || "",
+      currency: normalizeCompareText(response.demand?.currency) || "CNY",
       port: normalizeCompareText(supplyInfo?.supplyPort) || normalizeCompareText(supplyInfo?.port) || t("compare.supply.portPending"),
-      date: normalizeCompareText(supplyInfo?.supplyDate) || normalizeCompareText(supplyInfo?.inquiryDate) || normalizeCompareText(response.demand?.inquiryDate) || ""
+      date: normalizeCompareText(supplyInfo?.supplyDate) || normalizeCompareText(supplyInfo?.inquiryDate) || normalizeCompareText(response.demand?.vesselEta) || normalizeCompareText(response.demand?.inquiryDate) || "",
+      recipientCompany: normalizeCompareText(response.demand?.recipientCompany) || "",
+      handlerContact
     };
-    selectedStrategy.value = response.strategies.find((strategy) => strategy.enabled !== false)?.strategyType || response.strategies[0]?.strategyType || "LOWEST_MIXED";
-    window.setTimeout(syncCompareSelectedRows, 0);
   } catch (error) {
     if (error instanceof ApiError && error.status) {
       compareError.value = `${error.status} ${error.message || t("compare.loadFailed")}`;
@@ -3327,14 +3934,47 @@ const clearPurchaseOrderFormError = (key: keyof typeof purchaseOrderFormErrors.v
   purchaseOrderFormErrors.value = { ...purchaseOrderFormErrors.value, [key]: "" };
 };
 
+const applyPurchaseOrderContact = (contact: CompanyContactRow | null) => {
+  purchaseOrderForm.value.deliveryContactId = contact?.contactId ? String(contact.contactId) : "";
+  purchaseOrderForm.value.deliveryContactName = contact?.contactName || "";
+  purchaseOrderForm.value.deliveryContactPhone = contact?.contactPhone || "";
+  purchaseOrderForm.value.deliveryContactEmail = contact?.contactEmail || "";
+  purchaseOrderFormErrors.value = {
+    ...purchaseOrderFormErrors.value,
+    deliveryContactName: "",
+    deliveryContactPhone: ""
+  };
+};
+
+const handlePurchaseOrderContactChange = () => {
+  const contactId = purchaseOrderForm.value.deliveryContactId;
+  if (contactId === fallbackDeliveryContactId) {
+    purchaseOrderForm.value.deliveryContactName = fallbackDeliveryContact.contactName;
+    purchaseOrderForm.value.deliveryContactPhone = fallbackDeliveryContact.contactPhone;
+    purchaseOrderForm.value.deliveryContactEmail = fallbackDeliveryContact.contactEmail;
+    purchaseOrderFormErrors.value = {
+      ...purchaseOrderFormErrors.value,
+      deliveryContactName: "",
+      deliveryContactPhone: ""
+    };
+    return;
+  }
+  const contact = activeCompanyContacts.value.find((item) => String(item.contactId || item.id) === contactId) || null;
+  applyPurchaseOrderContact(contact);
+};
+
 const validatePurchaseOrderForm = () => {
   const errors = {
     supplyPort: "",
     requiredDeliveryTime: "",
+    deliveryContactName: "",
+    deliveryContactPhone: "",
     defaultPackagingMethod: ""
   };
   if (!purchaseOrderForm.value.supplyPort.trim()) errors.supplyPort = t("purchaseOrder.error.supplyPortRequired");
   if (!purchaseOrderForm.value.requiredDeliveryTime.trim()) errors.requiredDeliveryTime = t("purchaseOrder.error.requiredDeliveryTimeRequired");
+  if (!purchaseOrderForm.value.deliveryContactName.trim()) errors.deliveryContactName = t("purchaseOrder.error.deliveryContactNameRequired");
+  if (!purchaseOrderForm.value.deliveryContactPhone.trim()) errors.deliveryContactPhone = t("purchaseOrder.error.deliveryContactPhoneRequired");
   if (!purchaseOrderForm.value.defaultPackagingMethod.trim()) errors.defaultPackagingMethod = t("purchaseOrder.error.defaultPackagingMethodRequired");
   purchaseOrderFormErrors.value = errors;
   return !Object.values(errors).some(Boolean);
@@ -3345,12 +3985,14 @@ const formatDateTimePickerDisplay = (value?: string | null) => {
   return text ? text.replace("T", " ").slice(0, 16) : "";
 };
 
-const openPurchaseOrderDialog = () => {
+const openPurchaseOrderDialog = async () => {
   purchaseOrderNotice.value = "";
   purchaseOrderError.value = "";
   purchaseOrderFormErrors.value = {
     supplyPort: "",
     requiredDeliveryTime: "",
+    deliveryContactName: "",
+    deliveryContactPhone: "",
     defaultPackagingMethod: ""
   };
   if (!compareDemandId.value) {
@@ -3365,10 +4007,22 @@ const openPurchaseOrderDialog = () => {
     purchaseOrderError.value = t("purchaseOrder.error.noOrderableItems");
     return;
   }
+  if (!companyContactRows.value.length) {
+    try {
+      await loadCompanyContacts();
+    } catch {
+      companyContactRows.value = [];
+    }
+  }
+  const defaultContact = activeCompanyContacts.value.find((item) => item.contactName === fallbackDeliveryContact.contactName) || null;
   purchaseOrderForm.value = {
     supplyPort: compareSupplyForm.value.port || "",
     vesselEta: compareSupplyForm.value.date || normalizeCompareText(compareData.value?.supplyInfo?.vesselEta) || "",
     requiredDeliveryTime: "",
+    deliveryContactId: defaultContact?.contactId ? String(defaultContact.contactId) : fallbackDeliveryContactId,
+    deliveryContactName: defaultContact?.contactName || fallbackDeliveryContact.contactName,
+    deliveryContactPhone: defaultContact?.contactPhone || fallbackDeliveryContact.contactPhone,
+    deliveryContactEmail: defaultContact?.contactEmail || fallbackDeliveryContact.contactEmail,
     defaultPackagingMethod: "UNIFIED_PACKAGING",
     buyerRemark: ""
   };
@@ -3396,6 +4050,7 @@ const submitPurchaseOrder = async () => {
   purchaseOrderError.value = "";
   purchaseOrderNotice.value = "";
   try {
+    await saveCompareMainInfo();
     const selectedItems = selectedComparePurchaseItems.value.map((item) => ({
       demandItemId: item.demandItemId,
       skuId: item.skuId,
@@ -3424,6 +4079,9 @@ const submitPurchaseOrder = async () => {
       supplyPort: purchaseOrderForm.value.supplyPort,
       vesselEta: purchaseOrderForm.value.vesselEta,
       requiredDeliveryTime: purchaseOrderForm.value.requiredDeliveryTime,
+      deliveryContactName: purchaseOrderForm.value.deliveryContactName,
+      deliveryContactPhone: purchaseOrderForm.value.deliveryContactPhone,
+      deliveryContactEmail: purchaseOrderForm.value.deliveryContactEmail,
       defaultPackagingMethod: purchaseOrderForm.value.defaultPackagingMethod,
       buyerRemark: purchaseOrderForm.value.buyerRemark,
       selectedItems
@@ -3616,6 +4274,95 @@ const settlementColumns = computed<TableColumn[]>(() => [
   { key: "operation", label: t("common.operation"), width: "82px", align: "center" }
 ]);
 
+const supplyChainFinanceColumns = computed<TableColumn[]>(() => [
+  { key: "purchaseOrderNo", label: t("page.supplyChainFinance.field.purchaseOrderNo"), width: "150px" },
+  { key: "vesselName", label: t("page.supplyChainFinance.field.vesselName"), width: "136px" },
+  { key: "supplierName", label: t("page.supplyChainFinance.field.supplierName"), width: "180px" },
+  { key: "orderAmount", label: t("page.supplyChainFinance.field.orderAmount"), width: "122px", align: "right" },
+  { key: "prepaymentAmount", label: t("page.supplyChainFinance.field.prepaymentAmount"), width: "122px", align: "right" },
+  { key: "financeAmount", label: t("page.supplyChainFinance.field.financeAmount"), width: "122px", align: "right" },
+  { key: "prepaymentRate", label: t("page.supplyChainFinance.field.prepaymentRate"), width: "90px", align: "right" },
+  { key: "loanTerm", label: t("page.supplyChainFinance.field.loanTerm"), width: "90px" },
+  { key: "annualRate", label: t("page.supplyChainFinance.field.annualRate"), width: "82px", align: "right" },
+  { key: "status", label: t("page.supplyChainFinance.field.status"), width: "112px", align: "center" }
+]);
+
+const supplyChainFinanceMetrics = computed(() => [
+  { label: t("page.supplyChainFinance.metric.financeableAmount"), value: formatDisplayMoney(3200000, "CNY"), note: t("page.supplyChainFinance.metric.financeableAmountNote") },
+  { label: t("page.supplyChainFinance.metric.lockedPrepayment"), value: formatDisplayMoney(640000, "CNY"), note: t("page.supplyChainFinance.metric.lockedPrepaymentNote") },
+  { label: t("page.supplyChainFinance.metric.applyingLoan"), value: formatDisplayMoney(1880000, "CNY"), note: t("page.supplyChainFinance.metric.applyingLoanNote") },
+  { label: t("page.supplyChainFinance.metric.repaymentBalance"), value: formatDisplayMoney(680000, "CNY"), note: t("page.supplyChainFinance.metric.repaymentBalanceNote") }
+]);
+
+const supplyChainFinanceRows = computed<SupplyChainFinanceRow[]>(() => [
+  {
+    purchaseOrderNo: "PO-20260630-001",
+    vesselName: "PACIFIC HARVEST",
+    supplierName: "供货商A",
+    orderAmount: 1000000,
+    prepaymentAmount: 200000,
+    financeAmount: 800000,
+    prepaymentRate: "20%",
+    loanTerm: "60 天",
+    annualRate: "6.8%",
+    status: "reviewing",
+    riskLevel: "low"
+  },
+  {
+    purchaseOrderNo: "PO-20260630-002",
+    vesselName: "BLUE PORT",
+    supplierName: "供货商B",
+    orderAmount: 760000,
+    prepaymentAmount: 152000,
+    financeAmount: 608000,
+    prepaymentRate: "20%",
+    loanTerm: "45 天",
+    annualRate: "6.5%",
+    status: "prepaying",
+    riskLevel: "medium"
+  },
+  {
+    purchaseOrderNo: "PO-20260630-003",
+    vesselName: "ZHONG WAI YUN 6",
+    supplierName: "供货商C",
+    orderAmount: 1440000,
+    prepaymentAmount: 288000,
+    financeAmount: 1152000,
+    prepaymentRate: "20%",
+    loanTerm: "90 天",
+    annualRate: "7.2%",
+    status: "funded",
+    riskLevel: "low"
+  }
+]);
+
+const supplyChainFinanceTimeline = computed(() => [
+  { label: t("page.supplyChainFinance.timeline.orderConfirmed"), value: "2026-06-30 09:20" },
+  { label: t("page.supplyChainFinance.timeline.prepaymentLocked"), value: formatDisplayMoney(200000, "CNY") },
+  { label: t("page.supplyChainFinance.timeline.financeReview"), value: t("page.supplyChainFinance.statusReviewing") },
+  { label: t("page.supplyChainFinance.timeline.fundedToSupplier"), value: formatDisplayMoney(800000, "CNY") },
+  { label: t("page.supplyChainFinance.timeline.repaymentDue"), value: "2026-08-29" }
+]);
+
+const supplyChainFinanceStatusLabel = (status: SupplyChainFinanceStatus) => {
+  const keys: Record<SupplyChainFinanceStatus, string> = {
+    pending: "page.supplyChainFinance.statusPending",
+    prepaying: "page.supplyChainFinance.statusPrepaying",
+    reviewing: "page.supplyChainFinance.statusReviewing",
+    funded: "page.supplyChainFinance.statusFunded",
+    repaying: "page.supplyChainFinance.statusRepaying",
+    settled: "page.supplyChainFinance.statusSettled"
+  };
+  return t(keys[status]);
+};
+
+const supplyChainFinanceStatusVariant = (status: SupplyChainFinanceStatus): StatusVariant => {
+  if (status === "settled" || status === "funded") return "success";
+  if (status === "reviewing" || status === "repaying") return "info";
+  if (status === "prepaying") return "warning";
+  return "neutral";
+};
+
 const procurementFlowTitleKey = computed(() => {
   const keys: Record<string, string> = {
     inquiries: "nav.inquiries",
@@ -3694,6 +4441,10 @@ const openSimpleDetail = (title: string, subtitle = "") => {
 };
 
 const runAction = () => {
+  if (pageKey.value === "supplierProducts") {
+    openCompanyContactCreateFromAnyTab();
+    return;
+  }
   loading.value = true;
   window.setTimeout(() => {
     loading.value = false;
@@ -5392,7 +6143,7 @@ watch(selectedAdminUserId, () => {
           <p v-if="shopNoticeMessage" class="permission-static-notice">{{ shopNoticeMessage }}</p>
           <p v-if="shopNoticeKey" class="permission-static-notice">{{ t(shopNoticeKey) }}</p>
 
-          <div :class="['shop-list-card', { 'is-section-fullscreen': shopListFullscreen }]" :aria-busy="shopSkuListLoading || companyQualificationLoading">
+          <div :class="['shop-list-card', { 'is-section-fullscreen': shopListFullscreen }]" :aria-busy="shopSkuListLoading || companyQualificationLoading || companyContactLoading">
             <div class="shop-management-bar">
               <div class="shop-management-tabs" role="tablist">
                 <button type="button" :class="{ active: shopManagementTab === 'products' }" role="tab" :aria-selected="shopManagementTab === 'products'" @click="shopManagementTab = 'products'">
@@ -5401,9 +6152,12 @@ watch(selectedAdminUserId, () => {
                 <button type="button" :class="{ active: shopManagementTab === 'qualifications' }" role="tab" :aria-selected="shopManagementTab === 'qualifications'" @click="shopManagementTab = 'qualifications'">
                   {{ t("page.supplierProducts.qualification.title") }}
                 </button>
+                <button type="button" :class="{ active: shopManagementTab === 'contacts' }" role="tab" :aria-selected="shopManagementTab === 'contacts'" @click="shopManagementTab = 'contacts'">
+                  {{ t("page.supplierProducts.contact.title") }}
+                </button>
               </div>
               <div v-if="shopManagementTab === 'products'" class="toolbar-icon-actions">
-                <IconButton icon="Plus" :label="t('page.supplierProducts.actionAddSku')" @click="showShopPendingNotice" />
+                <IconButton icon="Plus" :label="t('page.supplierProducts.contact.add')" @click="openCompanyContactCreateFromAnyTab" />
                 <IconButton class="shop-bulk-shelf-button is-on" icon="Check" :label="t('page.supplierProducts.actionAllOnShelf')" :disabled="!hasSavedShopSkuRows || shopSaving" @click="updateAllShopShelfStatus('ON_SHELF')" />
                 <IconButton class="shop-bulk-shelf-button is-off" icon="Ban" :label="t('page.supplierProducts.actionAllOffShelf')" :disabled="!hasSavedShopSkuRows || shopSaving" @click="updateAllShopShelfStatus('OFF_SHELF')" />
                 <IconButton icon="Upload" :label="t('page.supplierProducts.importButton')" @click="openShopImportPicker" />
@@ -5411,9 +6165,13 @@ watch(selectedAdminUserId, () => {
                 <IconButton :icon="shopListFullscreen ? 'Minimize2' : 'Maximize2'" :label="shopListFullscreen ? t('page.supplierProducts.exitSectionFullscreen') : t('page.supplierProducts.enterSectionFullscreen')" @click="toggleShopListFullscreen" />
                 <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="shopSkuListLoading" @click="refreshShopSkuList" />
               </div>
-              <div v-else class="toolbar-icon-actions">
+              <div v-else-if="shopManagementTab === 'qualifications'" class="toolbar-icon-actions">
                 <IconButton icon="Plus" :label="t('page.supplierProducts.qualification.add')" @click="openCompanyQualificationCreate" />
                 <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="companyQualificationLoading" @click="loadCompanyQualifications" />
+              </div>
+              <div v-else class="toolbar-icon-actions">
+                <IconButton icon="Plus" :label="t('page.supplierProducts.contact.add')" :disabled="companyContactSaving" @click="addCompanyContact" />
+                <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="companyContactLoading" @click="loadCompanyContacts" />
               </div>
             </div>
             <input ref="shopImportInput" type="file" accept=".xlsx,.xls,.csv" hidden @change="handleShopImportFile" />
@@ -5938,12 +6696,14 @@ watch(selectedAdminUserId, () => {
             <div v-for="item in compareSupplyEditableFields" :key="item.key" class="is-editable">
               <dt>{{ item.label }}</dt>
               <dd>
-                <input v-model="compareSupplyForm[item.key]" :type="item.inputType" :disabled="isCompareReadonly" />
+                <StableDateTimeInput
+                  v-if="item.inputType === 'datetime'"
+                  v-model="compareSupplyForm[item.key]"
+                  :placeholder="item.label"
+                  :disabled="isCompareReadonly"
+                />
+                <input v-else v-model="compareSupplyForm[item.key]" :type="item.inputType" :disabled="isCompareReadonly" />
               </dd>
-            </div>
-            <div :class="['compare-weather-card', `is-${compareWeatherTone}`]">
-              <dt>{{ compareWeatherInfo.label }}</dt>
-              <dd>{{ compareWeatherInfo.value }}</dd>
             </div>
           </dl>
         </article>
@@ -5964,10 +6724,16 @@ watch(selectedAdminUserId, () => {
               <template v-for="(strategy, index) in compareStrategyCards" :key="strategy.key">
                 <article :class="['strategy-choice', `is-${strategy.tone}`, { active: selectedStrategy === strategy.key, 'is-disabled': !strategy.enabled, 'is-readonly': isCompareReadonly }]">
                   <button type="button" class="strategy-choice-main" :disabled="!strategy.enabled || isCompareReadonly" @click="selectCompareStrategy(strategy.key)">
-                    <span>{{ strategy.label }}</span>
-                    <div class="strategy-total-stack">
+                    <span class="strategy-title-stack">
+                      <strong>{{ strategy.label }}</strong>
+                    </span>
+                    <div class="strategy-count-stack">
                       <strong>{{ strategy.matchSummary }}</strong>
-                      <em>{{ strategy.total }}</em>
+                    </div>
+                    <div class="strategy-total-stack">
+                      <em>{{ t("compare.costAmount") }} {{ strategy.costTotal }}</em>
+                      <em>{{ t("compare.quoteTotal") }} {{ strategy.quoteTotal }}</em>
+                      <em>{{ t("compare.profitAmount") }} {{ strategy.profitTotal }}</em>
                     </div>
                   </button>
                   <ul class="strategy-supplier-list">
@@ -5980,7 +6746,6 @@ watch(selectedAdminUserId, () => {
                       >
                         <span>{{ supplier.supplier }}</span>
                         <span class="strategy-supplier-meta">
-                          <em>{{ t("compare.supplierAmount.skuCount", { count: supplier.skuCount }) }}</em>
                           <strong>{{ supplier.amount }}</strong>
                         </span>
                       </button>
@@ -6020,12 +6785,71 @@ watch(selectedAdminUserId, () => {
                 {{ t("compare.qualityFirst") }}
               </button>
             </div>
+            <label class="compare-markup-field">
+              <span>{{ t("compare.quoteMarkupPercent") }}</span>
+              <input :value="compareQuoteMarkupPercent" type="text" inputmode="decimal" :disabled="isCompareReadonly" @input="updateCompareGlobalMarkup(($event.target as HTMLInputElement).value)" />
+            </label>
+            <div class="compare-currency-switch" role="group" :aria-label="t('compare.currencySwitch')">
+              <button type="button" :class="{ active: compareDisplayCurrency === 'CNY' }" @click="compareDisplayCurrency = 'CNY'">¥</button>
+              <button type="button" :class="{ active: compareDisplayCurrency === 'USD' }" @click="compareDisplayCurrency = 'USD'">$</button>
+            </div>
             <div class="toolbar-icon-actions">
               <IconButton icon="RefreshCw" :label="t('action.refresh')" :disabled="compareLoading" @click="loadCompareWorkspace" />
+              <IconButton icon="Save" :label="t('compare.saveQuote')" :disabled="compareLoading || compareQuoteSaving || isCompareReadonly || !selectedCompareOrderableRows.length" @click="saveCompareQuotePrices" />
+              <IconButton icon="Download" :label="t('compare.exportQuote')" :disabled="compareLoading || compareQuoteExporting || isCompareReadonly || !selectedCompareOrderableRows.length" @click="exportCompareQuotePrices" />
               <IconButton v-if="compareData?.existingPurchaseOrderId" icon="Eye" :label="t('action.viewDetail')" @click="router.push(`/orders/${compareData.existingPurchaseOrderId}`)" />
               <IconButton icon="Send" :label="t('purchaseOrder.action.confirmOrder')" variant="primary" :disabled="compareLoading || isCompareReadonly || !selectedCompareOrderableRows.length" @click="openPurchaseOrderDialog" />
             </div>
+            <div v-show="shopManagementTab === 'contacts'" class="shop-management-pane">
+            <DataTable :columns="companyContactColumns" :rows="companyContactRows" row-key="id" :empty-label="t('page.supplierProducts.contact.empty')">
+              <template #cell-contactName="{ row }">
+                <input
+                  v-if="row.isEditing"
+                  v-model="row.draft.contactName"
+                  class="shop-edit-control"
+                  :placeholder="t('page.supplierProducts.contact.namePlaceholder')"
+                  @click.stop
+                />
+                <span v-else>{{ row.contactName || "-" }}</span>
+              </template>
+              <template #cell-contactPhone="{ row }">
+                <input
+                  v-if="row.isEditing"
+                  v-model="row.draft.contactPhone"
+                  class="shop-edit-control"
+                  :placeholder="t('page.supplierProducts.contact.phonePlaceholder')"
+                  @click.stop
+                />
+                <span v-else>{{ row.contactPhone || "-" }}</span>
+              </template>
+              <template #cell-contactEmail="{ row }">
+                <input
+                  v-if="row.isEditing"
+                  v-model="row.draft.contactEmail"
+                  class="shop-edit-control"
+                  :placeholder="t('page.supplierProducts.contact.emailPlaceholder')"
+                  @click.stop
+                />
+                <span v-else>{{ row.contactEmail || "-" }}</span>
+              </template>
+              <template #cell-updatedAt="{ value }">{{ value || "-" }}</template>
+              <template #cell-operation="{ row }">
+                <div class="icon-action-row">
+                  <IconButton v-if="row.isEditing" icon="Save" :label="t('common.save')" :loading="companyContactSaving" @click.stop="saveCompanyContact(row)" />
+                  <IconButton v-if="row.isEditing" icon="X" :label="t('common.cancel')" :disabled="companyContactSaving" @click.stop="cancelCompanyContactEdit(row)" />
+                  <IconButton v-if="!row.isEditing" icon="Pencil" :label="t('action.edit')" :disabled="companyContactSaving" @click.stop="editCompanyContact(row)" />
+                  <IconButton icon="Trash2" :label="t('action.delete')" variant="danger" :disabled="companyContactSaving" @click.stop="removeCompanyContact(row)" />
+                </div>
+              </template>
+            </DataTable>
+            <div v-if="companyContactLoading" class="shop-panel-loading" role="status" aria-live="polite">
+              <span class="loading-spinner" aria-hidden="true"></span>
+              <strong>{{ t("common.loading") }}</strong>
+            </div>
+            </div>
           </div>
+          <p v-if="compareQuoteNotice" class="inline-success">{{ compareQuoteNotice }}</p>
+          <p v-if="compareQuoteError" class="inline-error">{{ compareQuoteError }}</p>
           <p v-if="purchaseOrderNotice" class="inline-success">{{ purchaseOrderNotice }}</p>
           <p v-if="purchaseOrderError" class="inline-error">{{ purchaseOrderError }}</p>
 
@@ -6037,6 +6861,7 @@ watch(selectedAdminUserId, () => {
             :show-index="false"
             row-key="id"
             row-interactive
+            :row-class="compareSkuRowClass"
             :expanded-row-key="expandedCompareRowId"
             @row-click="(row) => { expandedCompareRowId = expandedCompareRowId === String(row.id) ? '' : String(row.id); }"
           >
@@ -6058,24 +6883,25 @@ watch(selectedAdminUserId, () => {
                 <span>{{ row.displayNo || "-" }}</span>
               </label>
             </template>
-            <template #cell-sourceSkuCode="{ value }">
-              <strong class="compare-impa-code">{{ value }}</strong>
+            <template #cell-sourceSkuCode="{ row, value }">
+              <span class="compare-two-line-cell">
+                <strong>{{ value || "-" }}</strong>
+                <small>{{ row.sourceSkuName || "-" }}</small>
+              </span>
             </template>
-            <template #cell-sourceSkuName="{ value }">
-              <span class="compact-cell-text">{{ value || "-" }}</span>
-            </template>
-            <template #cell-matchedProductCode="{ value }">
-              <strong class="compare-impa-code">{{ value }}</strong>
-            </template>
-            <template #cell-attributes="{ row }">
-              <AttributeSummary :attributes="row.attributes" @detail="openAttributes(row)" />
+            <template #cell-matchedProductCode="{ row }">
+              <span class="compare-two-line-cell">
+                <strong>{{ row.matchedProductCode || "-" }}</strong>
+                <small>{{ row.name || "-" }}</small>
+              </span>
             </template>
             <template #cell-platformUnit="{ row }">
+              <span v-if="row.unmatched">-</span>
               <select
-                v-if="row.unitPriceOptions?.length"
+                v-else-if="row.unitPriceOptions?.length"
                 class="compare-unit-select"
                 :value="row.selectedUnit || row.platformUnit"
-                :disabled="isCompareReadonly || row.unitPriceOptions.length <= 1"
+                :disabled="isCompareReadonly"
                 @click.stop
                 @change="updateCompareUnit(row, ($event.target as HTMLSelectElement).value)"
               >
@@ -6086,36 +6912,60 @@ watch(selectedAdminUserId, () => {
               <span v-else>{{ row.platformUnit || "-" }}</span>
             </template>
             <template #cell-quantity="{ row }">
-              <label class="compare-quantity-field" :class="{ 'is-invalid': row.quantityInvalidFlag }" @click.stop>
+              <span class="compare-two-line-cell compare-two-line-cell--right">
+                <label class="compare-quantity-field" :class="{ 'is-invalid': row.quantityInvalidFlag }" @click.stop>
+                  <input
+                    :value="row.quantity"
+                    type="text"
+                    inputmode="decimal"
+                    :placeholder="t('compare.quantityPlaceholder')"
+                    :disabled="isCompareReadonly"
+                    @input="updateCompareQuantity(row, ($event.target as HTMLInputElement).value)"
+                  />
+                </label>
+                <small>{{ row.unit || "-" }}</small>
+              </span>
+            </template>
+            <template #cell-price="{ row }">
+              <span v-if="row.unmatched">-</span>
+              <span v-else-if="row.price > 0" class="money-stack money-stack--single">
+                <strong>{{ formatCompareMoney(row.price, row.unitPriceUsd) }}</strong>
+              </span>
+              <span v-else>-</span>
+              <small v-if="!row.unmatched" class="price-source">{{ row.id === "SKU-150203" ? t("status.formalQuote") : t("status.dailyPrice") }}</small>
+            </template>
+            <template #cell-quoteMarkup="{ row }">
+              <span v-if="row.unmatched">-</span>
+              <label v-else class="compare-markup-inline-field" @click.stop>
                 <input
-                  :value="row.quantity"
+                  :value="row.quoteMarkupPercent ?? ''"
+                  type="text"
+                  inputmode="decimal"
+                  :disabled="isCompareReadonly || !isCompareRowOrderable(row)"
+                  @input="updateCompareMarkup(row, ($event.target as HTMLInputElement).value)"
+                />
+              </label>
+            </template>
+            <template #cell-actualQuote="{ row }">
+              <span v-if="row.unmatched">-</span>
+              <label v-else class="compare-actual-quote-field" @click.stop>
+                <span>{{ compareDisplayCurrencySymbol }}</span>
+                <input
+                  :value="compareMoneyInputValue(row.actualQuotePrice)"
                   type="number"
                   min="0.0001"
                   step="0.0001"
                   inputmode="decimal"
-                  :placeholder="t('compare.quantityPlaceholder')"
-                  :disabled="isCompareReadonly"
-                  @input="updateCompareQuantity(row, ($event.target as HTMLInputElement).value)"
+                  :placeholder="t('compare.actualQuotePrice')"
+                  :disabled="isCompareReadonly || !isCompareRowOrderable(row)"
+                  @input="updateCompareActualQuote(row, ($event.target as HTMLInputElement).value)"
                 />
-                <small v-if="row.quantityMissingFlag && !row.quantity">{{ t("compare.quantityMissingManual") }}</small>
-                <small v-else-if="row.quantityInvalidFlag">{{ t("compare.quantityInvalid") }}</small>
               </label>
             </template>
-            <template #cell-unit="{ row }">
-              {{ row.unit || "-" }}
-            </template>
-            <template #cell-price="{ row }">
-              <span v-if="row.price > 0" class="money-stack">
-                <strong>{{ dualMoneyLines(row.price, row.unitPriceUsd).cny }}</strong>
-                <small>{{ dualMoneyLines(row.price, row.unitPriceUsd).usd }}</small>
-              </span>
-              <span v-else>-</span>
-              <small class="price-source">{{ row.id === "SKU-150203" ? t("status.formalQuote") : t("status.dailyPrice") }}</small>
-            </template>
             <template #cell-subtotal="{ row }">
-              <span v-if="row.subtotal > 0" class="money-stack">
-                <strong>{{ dualMoneyLines(row.subtotal, row.subtotalUsd).cny }}</strong>
-                <small>{{ dualMoneyLines(row.subtotal, row.subtotalUsd).usd }}</small>
+              <span v-if="row.unmatched">-</span>
+              <span v-else-if="row.subtotal > 0" class="money-stack money-stack--single">
+                <strong>{{ formatCompareMoney(row.subtotal, row.subtotalUsd) }}</strong>
               </span>
               <span v-else>-</span>
             </template>
@@ -6137,19 +6987,29 @@ watch(selectedAdminUserId, () => {
                     <div class="sku-comparison-row">
                       <span>{{ t("compare.sourceSkuCode") }}</span>
                       <strong>{{ row.sourceSkuCode || "-" }}</strong>
-                      <em>{{ row.matchedProductCode || "-" }}</em>
+                      <em>{{ row.unmatched ? "-" : row.matchedProductCode || "-" }}</em>
                     </div>
                     <div class="sku-comparison-row">
                       <span>{{ t("compare.sourceSkuName") }}</span>
                       <strong>{{ row.sourceSkuName || "-" }}</strong>
-                      <em>{{ row.name || "-" }}</em>
+                      <em>{{ row.unmatched ? "-" : row.name || "-" }}</em>
                     </div>
                     <div class="sku-comparison-row">
                       <span>{{ t("attr.spec") }}</span>
                       <strong>{{ row.quantity || "-" }} / {{ row.unit || "-" }}</strong>
-                      <em>{{ row.attributes?.[0]?.value || "-" }}</em>
+                      <em>{{ row.unmatched ? "-" : row.attributes?.[0]?.value || "-" }}</em>
                     </div>
                   </div>
+                </section>
+                <section class="compare-row-remark-panel">
+                  <h3>{{ t("compare.remarks") }}</h3>
+                  <textarea
+                    :value="row.remarks || ''"
+                    rows="5"
+                    :placeholder="t('compare.remarksPlaceholder')"
+                    :disabled="isCompareReadonly"
+                    @input="updateCompareRemark(row, ($event.target as HTMLTextAreaElement).value)"
+                  ></textarea>
                 </section>
               </section>
             </template>
@@ -6203,7 +7063,23 @@ watch(selectedAdminUserId, () => {
               </div>
               <div>
                 <span>{{ t("purchaseOrder.field.sourceNo") }}</span>
-                <strong>{{ [purchaseOrderDetail.order.demandNo, purchaseOrderDetail.order.applicationNo].filter(Boolean).join(" / ") || "-" }}</strong>
+                <strong>{{ purchaseOrderDetail.order.inquiryNo || purchaseOrderDetail.order.demandNo || "-" }}</strong>
+              </div>
+              <div>
+                <span>{{ t("purchaseOrder.field.materialType") }}</span>
+                <strong>{{ purchaseOrderDetail.order.materialType || "-" }}</strong>
+              </div>
+              <div>
+                <span>{{ t("purchaseOrder.field.demandCurrency") }}</span>
+                <strong>{{ purchaseOrderDetail.order.demandCurrency || purchaseOrderDetail.order.currency || "-" }}</strong>
+              </div>
+              <div>
+                <span>{{ t("purchaseOrder.field.recipientCompany") }}</span>
+                <strong>{{ purchaseOrderDetail.order.recipientCompany || "-" }}</strong>
+              </div>
+              <div>
+                <span>{{ t("purchaseOrder.field.handlerContact") }}</span>
+                <strong>{{ [purchaseOrderDetail.order.handlerName, purchaseOrderDetail.order.handlerEmail].filter(Boolean).join(" / ") || "-" }}</strong>
               </div>
               <div>
                 <span>{{ t("purchaseOrder.field.vesselName") }}</span>
@@ -6220,6 +7096,18 @@ watch(selectedAdminUserId, () => {
               <div>
                 <span>{{ t("purchaseOrder.field.requiredDeliveryTime") }}</span>
                 <strong>{{ purchaseOrderDetail.order.requiredDeliveryTime || "-" }}</strong>
+              </div>
+              <div>
+                <span>{{ t("purchaseOrder.field.deliveryContactName") }}</span>
+                <strong>{{ purchaseOrderDetail.order.deliveryContactName || "-" }}</strong>
+              </div>
+              <div>
+                <span>{{ t("purchaseOrder.field.deliveryContactPhone") }}</span>
+                <strong>{{ purchaseOrderDetail.order.deliveryContactPhone || "-" }}</strong>
+              </div>
+              <div>
+                <span>{{ t("purchaseOrder.field.deliveryContactEmail") }}</span>
+                <strong>{{ purchaseOrderDetail.order.deliveryContactEmail || "-" }}</strong>
               </div>
               <div v-if="purchaseOrderWorkspaceMode === 'buyer'">
                 <span>{{ t("purchaseOrder.field.strategy") }}</span>
@@ -6416,6 +7304,92 @@ watch(selectedAdminUserId, () => {
         </template>
       </ExpandablePanel>
 
+      <ExpandablePanel v-else-if="pageKey === 'supplyChainFinance'" :show-header="false" class="inquiry-management-panel supply-chain-finance-panel">
+        <div class="inquiry-management-heading">
+          <div>
+            <strong>{{ t("page.supplyChainFinance.title") }}</strong>
+            <span>{{ t("page.supplyChainFinance.subtitle") }}</span>
+          </div>
+          <p>{{ t("page.supplyChainFinance.staticNotice") }}</p>
+        </div>
+
+        <div class="supply-finance-metrics">
+          <article v-for="metric in supplyChainFinanceMetrics" :key="metric.label" class="metric-card supply-finance-metric-card">
+            <span>{{ metric.label }}</span>
+            <strong>{{ metric.value }}</strong>
+            <small>{{ metric.note }}</small>
+          </article>
+        </div>
+
+        <section class="supply-finance-layout">
+          <article class="work-card supply-finance-split-card">
+            <div class="supply-finance-section-head">
+              <div>
+                <h2>{{ t("page.supplyChainFinance.splitTitle") }}</h2>
+                <p>{{ t("page.supplyChainFinance.splitSubtitle") }}</p>
+              </div>
+              <StatusBadge :label="t('page.supplyChainFinance.statusReviewing')" variant="info" />
+            </div>
+
+            <div class="supply-finance-total">
+              <span>{{ t("page.supplyChainFinance.orderAmount") }}</span>
+              <strong>{{ formatDisplayMoney(1000000, "CNY") }}</strong>
+            </div>
+            <div class="supply-finance-ratio" aria-hidden="true">
+              <span class="is-prepayment" />
+              <span class="is-loan" />
+            </div>
+            <div class="supply-finance-split-grid">
+              <div>
+                <span>{{ t("page.supplyChainFinance.prepayment") }}</span>
+                <strong>{{ formatDisplayMoney(200000, "CNY") }}</strong>
+                <small>{{ t("page.supplyChainFinance.prepaymentRate") }} 20%</small>
+              </div>
+              <div>
+                <span>{{ t("page.supplyChainFinance.financeLoan") }}</span>
+                <strong>{{ formatDisplayMoney(800000, "CNY") }}</strong>
+                <small>{{ t("page.supplyChainFinance.loanRate") }} 80%</small>
+              </div>
+            </div>
+          </article>
+
+          <article class="work-card supply-finance-plan-card">
+            <div class="supply-finance-section-head">
+              <div>
+                <h2>{{ t("page.supplyChainFinance.repaymentPlan") }}</h2>
+                <p>{{ t("page.supplyChainFinance.riskLevel") }}：{{ t("page.supplyChainFinance.riskLow") }}</p>
+              </div>
+            </div>
+            <div class="timeline supply-finance-timeline">
+              <div v-for="item in supplyChainFinanceTimeline" :key="item.label">
+                <strong>{{ item.label }}</strong>
+                <span>{{ item.value }}</span>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="work-card supply-finance-table-card">
+          <div class="supply-finance-section-head">
+            <div>
+              <h2>{{ t("page.supplyChainFinance.financeOrders") }}</h2>
+              <p>{{ t("page.supplyChainFinance.orderAmount") }} = {{ t("page.supplyChainFinance.prepayment") }} + {{ t("page.supplyChainFinance.financeLoan") }}</p>
+            </div>
+          </div>
+          <DataTable :columns="supplyChainFinanceColumns" :rows="supplyChainFinanceRows" row-key="purchaseOrderNo">
+            <template #cell-orderAmount="{ value }">{{ formatDisplayMoney(Number(value), "CNY") }}</template>
+            <template #cell-prepaymentAmount="{ value }">{{ formatDisplayMoney(Number(value), "CNY") }}</template>
+            <template #cell-financeAmount="{ value }">{{ formatDisplayMoney(Number(value), "CNY") }}</template>
+            <template #cell-status="{ row }">
+              <StatusBadge
+                :label="supplyChainFinanceStatusLabel(row.status as SupplyChainFinanceStatus)"
+                :variant="supplyChainFinanceStatusVariant(row.status as SupplyChainFinanceStatus)"
+              />
+            </template>
+          </DataTable>
+        </section>
+      </ExpandablePanel>
+
       <ExpandablePanel v-else-if="pageKey === 'settlements'" :show-header="false" class="inquiry-management-panel">
         <FilterToolbar :fields="filterFields" @search="runAction" @reset="runAction" @refresh="runAction" @export="runAction" />
         <p class="static-list-note">{{ t("page.settlements.staticNotice") }}</p>
@@ -6528,28 +7502,18 @@ watch(selectedAdminUserId, () => {
             <div class="dictionary-grid">
               <section class="dictionary-card">
                 <div class="dictionary-card-header">
-                  <strong>{{ t("dataDictionary.typeList") }}</strong>
-                  <label class="list-search-field dictionary-search">
-                    <span class="list-search-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24">
-                        <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
-                      </svg>
-                    </span>
-                    <input v-model="dictionaryTypeKeyword" type="search" :placeholder="t('dataDictionary.typePlaceholder')" @keyup.enter="loadDictionaryTypes" />
-                  </label>
-                </div>
-                <div class="dictionary-form">
-                  <input v-model="dictionaryTypeForm.typeCode" :disabled="Boolean(editingDictionaryTypeCode)" type="text" :placeholder="t('dataDictionary.typeCode')" />
-                  <input v-model="dictionaryTypeForm.typeName" type="text" :placeholder="t('dataDictionary.typeName')" />
-                  <input v-model="dictionaryTypeForm.description" type="text" :placeholder="t('dataDictionary.descriptionField')" />
-                  <input v-model.number="dictionaryTypeForm.sortOrder" type="number" min="0" step="10" :placeholder="t('dataDictionary.sortOrder')" />
-                  <label class="menu-management-switch">
-                    <input v-model="dictionaryTypeForm.enabled" type="checkbox" />
-                    <span>{{ dictionaryTypeForm.enabled ? t("dataDictionary.enabled") : t("dataDictionary.disabled") }}</span>
-                  </label>
-                  <div class="dictionary-form-actions">
-                    <IconButton icon="X" :label="t('action.clear')" @click="resetDictionaryTypeForm" />
-                    <IconButton icon="Save" :label="editingDictionaryTypeCode ? t('dataDictionary.editType') : t('dataDictionary.newType')" variant="primary" :loading="dictionarySaving" @click="saveDictionaryTypeDraft" />
+                  <strong>类型</strong>
+                  <div class="dictionary-card-tools">
+                    <label class="list-search-field dictionary-search">
+                      <span class="list-search-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                          <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
+                        </svg>
+                      </span>
+                      <input v-model="dictionaryTypeKeyword" type="search" :placeholder="t('dataDictionary.typePlaceholder')" @keyup.enter="loadDictionaryTypes" />
+                    </label>
+                    <IconButton icon="Search" :label="t('action.search')" @click="loadDictionaryTypes" />
+                    <IconButton icon="X" :label="t('action.clear')" @click="dictionaryTypeKeyword = ''; loadDictionaryTypes()" />
                   </div>
                 </div>
                 <DataTable :columns="dictionaryTypeColumns" :rows="dictionaryTypeRows" row-key="typeCode" :expanded-row-key="selectedDictionaryTypeCode" @row-click="selectDictionaryType">
@@ -6559,45 +7523,27 @@ watch(selectedAdminUserId, () => {
                   <template #cell-description="{ value }">
                     {{ formatEmpty(String(value || "")) }}
                   </template>
-                  <template #cell-operation="{ row }">
-                    <div class="icon-action-row">
-                      <IconButton icon="Pencil" :label="t('action.edit')" @click.stop="editDictionaryType(row)" />
-                      <IconButton icon="Ban" :label="t('dataDictionary.deleteType')" @click.stop="disableDictionaryType(row)" />
-                    </div>
-                  </template>
                 </DataTable>
               </section>
 
               <section class="dictionary-card dictionary-items-card">
                 <div class="dictionary-card-header">
-                  <strong>{{ t("dataDictionary.itemList") }} 路 {{ selectedDictionaryTypeCode || "-" }}</strong>
-                  <label class="list-search-field dictionary-search">
-                    <span class="list-search-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24">
-                        <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
-                      </svg>
-                    </span>
-                    <input v-model="dictionaryItemKeyword" type="search" :placeholder="t('dataDictionary.itemPlaceholder')" @keyup.enter="loadDictionaryItems(selectedDictionaryTypeCode)" />
-                  </label>
+                  <strong>详情</strong>
+                  <div class="dictionary-card-tools">
+                    <label class="list-search-field dictionary-search">
+                      <span class="list-search-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                          <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
+                        </svg>
+                      </span>
+                      <input v-model="dictionaryItemKeyword" type="search" :placeholder="t('dataDictionary.itemPlaceholder')" @keyup.enter="loadDictionaryItems(selectedDictionaryTypeCode)" />
+                    </label>
+                    <IconButton icon="Search" :label="t('action.search')" :disabled="!selectedDictionaryTypeCode" @click="loadDictionaryItems(selectedDictionaryTypeCode)" />
+                    <IconButton icon="X" :label="t('action.clear')" :disabled="!selectedDictionaryTypeCode" @click="dictionaryItemKeyword = ''; loadDictionaryItems(selectedDictionaryTypeCode)" />
+                  </div>
                 </div>
                 <p v-if="!selectedDictionaryTypeCode" class="empty-state compact">{{ t("dataDictionary.selectTypeFirst") }}</p>
                 <template v-else>
-                  <div class="dictionary-form dictionary-item-form">
-                    <input v-model="dictionaryItemForm.itemCode" type="text" :placeholder="t('dataDictionary.itemCode')" />
-                    <input v-model="dictionaryItemForm.itemName" type="text" :placeholder="t('dataDictionary.itemName')" />
-                    <input v-model="dictionaryItemForm.itemValue" type="text" :placeholder="t('dataDictionary.itemValue')" />
-                    <input v-model="dictionaryItemForm.itemNameEn" type="text" :placeholder="t('dataDictionary.itemNameEn')" />
-                    <input v-model="dictionaryItemForm.description" type="text" :placeholder="t('dataDictionary.descriptionField')" />
-                    <input v-model.number="dictionaryItemForm.sortOrder" type="number" min="0" step="10" :placeholder="t('dataDictionary.sortOrder')" />
-                    <label class="menu-management-switch">
-                      <input v-model="dictionaryItemForm.enabled" type="checkbox" />
-                      <span>{{ dictionaryItemForm.enabled ? t("dataDictionary.enabled") : t("dataDictionary.disabled") }}</span>
-                    </label>
-                    <div class="dictionary-form-actions">
-                      <IconButton icon="X" :label="t('action.clear')" @click="resetDictionaryItemForm" />
-                      <IconButton icon="Save" :label="editingDictionaryItemId ? t('dataDictionary.editItem') : t('dataDictionary.newItem')" variant="primary" :loading="dictionarySaving" @click="saveDictionaryItemDraft" />
-                    </div>
-                  </div>
                   <DataTable :columns="dictionaryItemColumns" :rows="dictionaryItemRows" row-key="id">
                     <template #cell-itemValue="{ value }">{{ formatEmpty(String(value || "")) }}</template>
                     <template #cell-itemNameEn="{ value }">{{ formatEmpty(String(value || "")) }}</template>
@@ -6607,12 +7553,6 @@ watch(selectedAdminUserId, () => {
                     </template>
                     <template #cell-builtIn="{ value }">
                       <StatusBadge :label="value ? t('dataDictionary.builtIn') : t('dataDictionary.custom')" :variant="value ? 'info' : 'neutral'" />
-                    </template>
-                    <template #cell-operation="{ row }">
-                      <div class="icon-action-row">
-                        <IconButton icon="Pencil" :label="t('action.edit')" @click.stop="editDictionaryItem(row)" />
-                        <IconButton icon="Ban" :label="t('dataDictionary.deleteItem')" @click.stop="disableDictionaryItem(row)" />
-                      </div>
                     </template>
                   </DataTable>
                 </template>
@@ -6948,18 +7888,17 @@ watch(selectedAdminUserId, () => {
                   <strong>{{ selectedCompareSupplierCount }}</strong>
                 </div>
                 <div>
+                  <span>{{ t("purchaseOrder.dialog.totalSkuCount") }}</span>
+                  <strong>{{ selectedCompareTotalSkuCount }}</strong>
+                </div>
+                <div>
                   <span>{{ t("purchaseOrder.dialog.orderableCount") }}</span>
                   <strong>{{ selectedComparePurchaseItems.length }}</strong>
                 </div>
                 <div>
-                  <span>{{ t("purchaseOrder.dialog.excludedCount") }}</span>
-                  <strong>{{ selectedCompareExcludedCount }}</strong>
-                </div>
-                <div>
                   <span>{{ t("purchaseOrder.field.totalAmount") }}</span>
-                  <strong class="money-stack">
-                    <span>{{ dualMoneyLines(selectedCompareOrderAmount, selectedCompareOrderAmountUsd).cny }}</span>
-                    <small>{{ dualMoneyLines(selectedCompareOrderAmount, selectedCompareOrderAmountUsd).usd }}</small>
+                  <strong class="money-stack money-stack--single">
+                    <span>{{ formatCompareMoney(selectedCompareCostAmount, selectedCompareCostAmountUsd) }}</span>
                   </strong>
                 </div>
               </section>
@@ -6967,7 +7906,7 @@ watch(selectedAdminUserId, () => {
                 <strong>{{ t("purchaseOrder.dialog.supplierSubtotal") }}</strong>
                 <div>
                   <span v-for="supplier in selectedCompareSupplierSummaries" :key="supplier.supplier">
-                    {{ supplier.supplier }} · {{ t("compare.supplierAmount.skuCount", { count: supplier.count }) }} · {{ formatDualMoney(supplier.amount, supplier.amountUsd) }}
+                    {{ supplier.supplier }} · {{ t("compare.supplierAmount.skuCount", { count: supplier.count }) }} · {{ formatCompareMoney(supplier.amount, supplier.amountUsd) }}
                   </span>
                 </div>
               </section>
@@ -6997,7 +7936,20 @@ watch(selectedAdminUserId, () => {
                     :placeholder="t('purchaseOrder.placeholder.vesselEta')"
                     :disabled="purchaseOrderCreating"
                   />
-                  <small class="field-hint">{{ formatDateTimePickerDisplay(purchaseOrderForm.vesselEta) || t("purchaseOrder.placeholder.vesselEta") }}</small>
+                </label>
+                <label>
+                  <span>{{ t("purchaseOrder.field.packagingMethod") }}</span>
+                  <select
+                    v-model="purchaseOrderForm.defaultPackagingMethod"
+                    :class="{ 'is-invalid': purchaseOrderFormErrors.defaultPackagingMethod }"
+                    :aria-invalid="Boolean(purchaseOrderFormErrors.defaultPackagingMethod)"
+                    :disabled="purchaseOrderCreating"
+                    @change="clearPurchaseOrderFormError('defaultPackagingMethod')"
+                  >
+                    <option value="UNIFIED_PACKAGING">{{ t("purchaseOrder.packaging.UNIFIED_PACKAGING") }}</option>
+                    <option value="SUPPLIER_PACKAGING">{{ t("purchaseOrder.packaging.SUPPLIER_PACKAGING") }}</option>
+                  </select>
+                  <small v-if="purchaseOrderFormErrors.defaultPackagingMethod">{{ purchaseOrderFormErrors.defaultPackagingMethod }}</small>
                 </label>
                 <label>
                   <span>{{ t("purchaseOrder.field.requiredDeliveryTime") }}</span>
@@ -7012,24 +7964,40 @@ watch(selectedAdminUserId, () => {
                     @input="clearPurchaseOrderFormError('requiredDeliveryTime')"
                   />
                   <small v-if="purchaseOrderFormErrors.requiredDeliveryTime">{{ purchaseOrderFormErrors.requiredDeliveryTime }}</small>
-                  <small v-else class="field-hint">{{ formatDateTimePickerDisplay(purchaseOrderForm.requiredDeliveryTime) || t("purchaseOrder.placeholder.requiredDeliveryTime") }}</small>
                 </label>
                 <label>
-                  <span>{{ t("purchaseOrder.field.defaultPackagingMethod") }}</span>
-                  <select
-                    v-model="purchaseOrderForm.defaultPackagingMethod"
-                    :class="{ 'is-invalid': purchaseOrderFormErrors.defaultPackagingMethod }"
-                    :aria-invalid="Boolean(purchaseOrderFormErrors.defaultPackagingMethod)"
-                    :disabled="purchaseOrderCreating"
-                    @change="clearPurchaseOrderFormError('defaultPackagingMethod')"
-                  >
-                    <option value="UNIFIED_PACKAGING">{{ t("purchaseOrder.packaging.UNIFIED_PACKAGING") }}</option>
-                    <option value="SUPPLIER_PACKAGING">{{ t("purchaseOrder.packaging.SUPPLIER_PACKAGING") }}</option>
+                  <span>{{ t("purchaseOrder.field.deliveryContact") }}</span>
+                  <select v-model="purchaseOrderForm.deliveryContactId" :disabled="purchaseOrderCreating" @change="handlePurchaseOrderContactChange">
+                    <option :value="fallbackDeliveryContactId">{{ fallbackDeliveryContact.contactName }} / {{ fallbackDeliveryContact.contactPhone }}</option>
+                    <option v-for="contact in activeCompanyContacts" :key="contact.id" :value="String(contact.contactId || contact.id)">
+                      {{ contact.contactName }} / {{ contact.contactPhone }}
+                    </option>
                   </select>
-                  <small v-if="purchaseOrderFormErrors.defaultPackagingMethod">{{ purchaseOrderFormErrors.defaultPackagingMethod }}</small>
                 </label>
-                <label class="span-2">
-                  <span>{{ t("purchaseOrder.field.buyerRemark") }}</span>
+                <label>
+                  <span>{{ t("purchaseOrder.field.deliveryContactPhone") }}</span>
+                  <input
+                    v-model="purchaseOrderForm.deliveryContactPhone"
+                    type="text"
+                    :placeholder="t('purchaseOrder.placeholder.deliveryContactPhone')"
+                    :class="{ 'is-invalid': purchaseOrderFormErrors.deliveryContactPhone }"
+                    :aria-invalid="Boolean(purchaseOrderFormErrors.deliveryContactPhone)"
+                    :disabled="purchaseOrderCreating"
+                    @input="clearPurchaseOrderFormError('deliveryContactPhone')"
+                  />
+                  <small v-if="purchaseOrderFormErrors.deliveryContactPhone">{{ purchaseOrderFormErrors.deliveryContactPhone }}</small>
+                </label>
+                <label>
+                  <span>{{ t("purchaseOrder.field.deliveryContactEmail") }}</span>
+                  <input
+                    v-model="purchaseOrderForm.deliveryContactEmail"
+                    type="email"
+                    :placeholder="t('purchaseOrder.placeholder.deliveryContactEmail')"
+                    :disabled="purchaseOrderCreating"
+                  />
+                </label>
+                <label class="span-2 purchase-order-remark-field">
+                  <span>{{ t("purchaseOrder.field.deliveryAddress") }}</span>
                   <textarea v-model="purchaseOrderForm.buyerRemark" rows="3" :placeholder="t('purchaseOrder.placeholder.buyerRemark')" :disabled="purchaseOrderCreating"></textarea>
                 </label>
               </section>
@@ -7157,9 +8125,8 @@ watch(selectedAdminUserId, () => {
                   <span>{{ candidate.productName || candidate.supplierSkuCode || "-" }}</span>
                   <small>{{ replacementCandidateSpecText(candidate) }}</small>
                   <small>{{ candidate.supplierName || "-" }}</small>
-                  <b v-if="candidate.unitPrice != null" class="money-stack">
-                    <span>{{ dualMoneyLines(candidate.unitPrice, candidate.unitPriceUsd).cny }}</span>
-                    <small>{{ dualMoneyLines(candidate.unitPrice, candidate.unitPriceUsd).usd }}</small>
+                  <b v-if="candidate.unitPrice != null" class="money-stack money-stack--single">
+                    <span>{{ formatCompareMoney(candidate.unitPrice, candidate.unitPriceUsd) }}</span>
                   </b>
                   <b v-else>-</b>
                 </button>

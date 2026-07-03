@@ -36,9 +36,16 @@ public class PurchaseOrderRepository {
     ) {
         return jdbcTemplate.query(
             """
-            SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count
-            FROM purchase_order
-            po LEFT JOIN (
+            SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count,
+                   md.inquiry_no AS source_inquiry_no,
+                   md.material_type AS source_material_type,
+                   md.currency AS source_currency,
+                   md.recipient_company AS source_recipient_company,
+                   md.handler_name AS source_handler_name,
+                   md.handler_email AS source_handler_email
+            FROM purchase_order po
+            LEFT JOIN material_demand md ON md.id = po.demand_id
+            LEFT JOIN (
               SELECT order_id,
                      SUM(CASE WHEN COALESCE(subtotal_amount, 0) > 0 THEN 1 ELSE 0 END) AS quoted_supplier_count,
                      COUNT(*) AS total_supplier_count
@@ -48,7 +55,7 @@ public class PurchaseOrderRepository {
             WHERE buyer_company_id = ?
               AND demand_id = ?
               AND strategy_type = ?
-              AND status <> 'DISCARDED'
+              AND po.status <> 'DISCARDED'
             ORDER BY id DESC
             LIMIT 1
             """,
@@ -226,7 +233,10 @@ public class PurchaseOrderRepository {
     ) {
         QueryParts query = buyerQuery(buyerCompanyId, keyword, status, supplier, createdFrom, createdTo, deliveryFrom, deliveryTo);
         long total = count("purchase_order po", query);
-        String sql = "SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method FROM purchase_order po "
+        String sql = "SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method, "
+            + "md.inquiry_no AS source_inquiry_no, md.material_type AS source_material_type, md.currency AS source_currency, "
+            + "md.recipient_company AS source_recipient_company, md.handler_name AS source_handler_name, md.handler_email AS source_handler_email "
+            + "FROM purchase_order po LEFT JOIN material_demand md ON md.id = po.demand_id "
             + supplierCountJoin()
             + packagingMethodJoin()
             + query.where()
@@ -241,10 +251,17 @@ public class PurchaseOrderRepository {
     public Optional<PurchaseOrderDetailResponse> findBuyerDetail(Long buyerCompanyId, Long orderId) {
         Optional<PurchaseOrderSummaryResponse> order = jdbcTemplate.query(
             """
-            SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method
+            SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method,
+                   md.inquiry_no AS source_inquiry_no,
+                   md.material_type AS source_material_type,
+                   md.currency AS source_currency,
+                   md.recipient_company AS source_recipient_company,
+                   md.handler_name AS source_handler_name,
+                   md.handler_email AS source_handler_email
             FROM purchase_order po
+            LEFT JOIN material_demand md ON md.id = po.demand_id
             """ + supplierCountJoin() + packagingMethodJoin() + """
-            WHERE buyer_company_id = ? AND id = ?
+            WHERE po.buyer_company_id = ? AND po.id = ?
             LIMIT 1
             """,
             (rs, rowNum) -> summary(rs),
@@ -269,7 +286,12 @@ public class PurchaseOrderRepository {
     ) {
         QueryParts query = supplierQuery(supplierCompanyId, keyword, status, createdFrom, createdTo);
         long total = count("purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id", query);
-        String sql = "SELECT DISTINCT po.*, pos.id AS supplier_order_id, pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count FROM purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id "
+        String sql = "SELECT DISTINCT po.*, pos.id AS supplier_order_id, pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method, "
+            + "supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, "
+            + "md.inquiry_no AS source_inquiry_no, md.material_type AS source_material_type, md.currency AS source_currency, "
+            + "md.recipient_company AS source_recipient_company, md.handler_name AS source_handler_name, md.handler_email AS source_handler_email "
+            + "FROM purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id "
+            + "LEFT JOIN material_demand md ON md.id = po.demand_id "
             + supplierCountJoin()
             + query.where()
             + " ORDER BY po.created_at DESC, po.id DESC LIMIT ? OFFSET ?";
@@ -419,9 +441,18 @@ public class PurchaseOrderRepository {
     public Optional<PurchaseOrderDetailResponse> findSupplierDetail(Long supplierCompanyId, Long orderId) {
         Optional<PurchaseOrderSummaryResponse> order = jdbcTemplate.query(
             """
-            SELECT po.*, pos.id AS supplier_order_id, pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count
+            SELECT po.*, pos.id AS supplier_order_id, pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method,
+                   supplier_counts.quoted_supplier_count,
+                   supplier_counts.total_supplier_count,
+                   md.inquiry_no AS source_inquiry_no,
+                   md.material_type AS source_material_type,
+                   md.currency AS source_currency,
+                   md.recipient_company AS source_recipient_company,
+                   md.handler_name AS source_handler_name,
+                   md.handler_email AS source_handler_email
             FROM purchase_order po
             JOIN purchase_order_supplier pos ON pos.order_id = po.id AND pos.supplier_company_id = ?
+            LEFT JOIN material_demand md ON md.id = po.demand_id
             """ + supplierCountJoin() + """
             WHERE po.id = ?
             LIMIT 1
@@ -471,9 +502,10 @@ public class PurchaseOrderRepository {
                 """
                 INSERT INTO purchase_order
                   (order_no, demand_id, demand_no, application_no, buyer_company_id, buyer_company_name,
-                   vessel_name, supply_port, vessel_eta, required_delivery_time, strategy_type,
+                   vessel_name, supply_port, vessel_eta, required_delivery_time,
+                   delivery_contact_name, delivery_contact_phone, delivery_contact_email, strategy_type,
                    strategy_name, supplier_count, item_count, total_amount, total_amount_usd, currency, status, buyer_remark, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 Statement.RETURN_GENERATED_KEYS
             );
@@ -487,16 +519,19 @@ public class PurchaseOrderRepository {
             statement.setString(8, draft.supplyPort());
             statement.setString(9, draft.vesselEta());
             statement.setString(10, draft.requiredDeliveryTime());
-            statement.setString(11, draft.strategyType());
-            statement.setString(12, draft.strategyName());
-            statement.setInt(13, draft.supplierCount());
-            statement.setInt(14, draft.itemCount());
-            statement.setBigDecimal(15, draft.totalAmount());
-            statement.setBigDecimal(16, draft.totalAmountUsd());
-            statement.setString(17, draft.currency());
-            statement.setString(18, draft.status());
-            statement.setString(19, draft.buyerRemark());
-            statement.setLong(20, draft.createdBy());
+            statement.setString(11, draft.deliveryContactName());
+            statement.setString(12, draft.deliveryContactPhone());
+            statement.setString(13, draft.deliveryContactEmail());
+            statement.setString(14, draft.strategyType());
+            statement.setString(15, draft.strategyName());
+            statement.setInt(16, draft.supplierCount());
+            statement.setInt(17, draft.itemCount());
+            statement.setBigDecimal(18, draft.totalAmount());
+            statement.setBigDecimal(19, draft.totalAmountUsd());
+            statement.setString(20, draft.currency());
+            statement.setString(21, draft.status());
+            statement.setString(22, draft.buyerRemark());
+            statement.setLong(23, draft.createdBy());
             return statement;
         }, keyHolder);
         return keyHolder.getKey().longValue();
@@ -535,8 +570,9 @@ public class PurchaseOrderRepository {
             INSERT INTO purchase_order_item
               (supplier_order_id, order_id, demand_item_id, sku_id, supplier_sku_code, platform_code,
                impa_code, product_name, specification, quantity, unit, pricing_quantity, unit_price,
-               unit_price_usd, amount, amount_usd, currency, unit_mismatch_flag, quantity_fallback_flag, source_match_type, source_reason)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               unit_price_usd, amount, amount_usd, actual_quote_price, actual_quote_currency, quote_markup_percent,
+               quote_profit_amount, currency, unit_mismatch_flag, quantity_fallback_flag, source_match_type, source_reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             supplierOrderId,
             orderId,
@@ -554,6 +590,10 @@ public class PurchaseOrderRepository {
             item.unitPriceUsd(),
             item.amount(),
             item.amountUsd(),
+            item.actualQuotePrice(),
+            item.actualQuoteCurrency(),
+            item.quoteMarkupPercent(),
+            item.quoteProfitAmount(),
             item.currency(),
             item.unitMismatchFlag() ? 1 : 0,
             item.quantityFallbackFlag() ? 1 : 0,
@@ -838,12 +878,21 @@ public class PurchaseOrderRepository {
             rs.getLong("demand_id"),
             rs.getString("demand_no"),
             rs.getString("application_no"),
+            optionalString(rs, "source_inquiry_no"),
+            optionalString(rs, "source_material_type"),
+            optionalString(rs, "source_currency"),
+            optionalString(rs, "source_recipient_company"),
+            optionalString(rs, "source_handler_name"),
+            optionalString(rs, "source_handler_email"),
             rs.getLong("buyer_company_id"),
             rs.getString("buyer_company_name"),
             rs.getString("vessel_name"),
             rs.getString("supply_port"),
             rs.getString("vessel_eta"),
             rs.getString("required_delivery_time"),
+            optionalString(rs, "delivery_contact_name"),
+            optionalString(rs, "delivery_contact_phone"),
+            optionalString(rs, "delivery_contact_email"),
             rs.getString("strategy_type"),
             rs.getString("strategy_name"),
             rs.getInt("supplier_count"),
@@ -882,6 +931,10 @@ public class PurchaseOrderRepository {
             optionalBigDecimal(rs, "unit_price_usd", null),
             rs.getBigDecimal("amount"),
             optionalBigDecimal(rs, "amount_usd", null),
+            optionalBigDecimal(rs, "actual_quote_price", null),
+            safeString(rs, "actual_quote_currency"),
+            optionalBigDecimal(rs, "quote_markup_percent", null),
+            optionalBigDecimal(rs, "quote_profit_amount", null),
             rs.getString("currency"),
             rs.getBoolean("unit_mismatch_flag"),
             rs.getBoolean("quantity_fallback_flag"),
@@ -945,6 +998,14 @@ public class PurchaseOrderRepository {
             return value == null ? fallback : value;
         } catch (SQLException ex) {
             return fallback;
+        }
+    }
+
+    private String safeString(ResultSet rs, String column) throws SQLException {
+        try {
+            return rs.getString(column);
+        } catch (SQLException ex) {
+            return null;
         }
     }
 

@@ -22,6 +22,9 @@ export interface PurchaseOrderCreatePayload {
   supplyPort?: string;
   vesselEta?: string;
   requiredDeliveryTime?: string;
+  deliveryContactName?: string;
+  deliveryContactPhone?: string;
+  deliveryContactEmail?: string;
   defaultPackagingMethod?: PurchasePackagingMethod;
   buyerRemark?: string;
   selectedItems?: Array<{
@@ -42,6 +45,9 @@ export interface PurchaseOrderCreatePayload {
     currency?: string;
     amount?: number;
     amountUsd?: number;
+    actualQuotePrice?: number;
+    actualQuoteAmount?: number;
+    quoteMarkupPercent?: number;
     selectedUnit?: string;
     unitMismatchFlag?: boolean;
     quantityFallbackFlag?: boolean;
@@ -68,12 +74,21 @@ export interface PurchaseOrderSummary {
   demandId?: number;
   demandNo?: string;
   applicationNo?: string;
+  inquiryNo?: string;
+  materialType?: string;
+  demandCurrency?: string;
+  recipientCompany?: string;
+  handlerName?: string;
+  handlerEmail?: string;
   buyerCompanyId?: number;
   buyerCompanyName?: string;
   vesselName?: string;
   supplyPort?: string;
   vesselEta?: string;
   requiredDeliveryTime?: string;
+  deliveryContactName?: string;
+  deliveryContactPhone?: string;
+  deliveryContactEmail?: string;
   strategyType?: string;
   strategyName?: string;
   supplierCount: number;
@@ -109,6 +124,10 @@ export interface PurchaseOrderItem {
   unitPriceUsd?: number;
   amount?: number;
   amountUsd?: number;
+  actualQuotePrice?: number;
+  actualQuoteCurrency?: string;
+  quoteMarkupPercent?: number;
+  quoteProfitAmount?: number;
   currency?: string;
   unitMismatchFlag?: boolean;
   quantityFallbackFlag?: boolean;
@@ -298,12 +317,21 @@ function normalizeOrderSummary(value: unknown): PurchaseOrderSummary | null {
     demandId: readNumber(value, "demandId"),
     demandNo: readString(value, "demandNo"),
     applicationNo: readString(value, "applicationNo"),
+    inquiryNo: readString(value, "inquiryNo"),
+    materialType: readString(value, "materialType"),
+    demandCurrency: readString(value, "demandCurrency"),
+    recipientCompany: readString(value, "recipientCompany"),
+    handlerName: readString(value, "handlerName"),
+    handlerEmail: readString(value, "handlerEmail"),
     buyerCompanyId: readNumber(value, "buyerCompanyId"),
     buyerCompanyName: readString(value, "buyerCompanyName"),
     vesselName: readString(value, "vesselName"),
     supplyPort: readString(value, "supplyPort"),
     vesselEta: readString(value, "vesselEta"),
     requiredDeliveryTime: readString(value, "requiredDeliveryTime"),
+    deliveryContactName: readString(value, "deliveryContactName"),
+    deliveryContactPhone: readString(value, "deliveryContactPhone"),
+    deliveryContactEmail: readString(value, "deliveryContactEmail"),
     strategyType: readString(value, "strategyType"),
     strategyName: readString(value, "strategyName"),
     supplierCount: readNumber(value, "supplierCount") ?? readNumber(value, "supplierOrderCount") ?? 0,
@@ -342,6 +370,10 @@ function normalizeOrderItem(value: unknown): PurchaseOrderItem | null {
     unitPriceUsd: readNumber(value, "unitPriceUsd"),
     amount: readNumber(value, "amount"),
     amountUsd: readNumber(value, "amountUsd"),
+    actualQuotePrice: readNumber(value, "actualQuotePrice"),
+    actualQuoteCurrency: readString(value, "actualQuoteCurrency"),
+    quoteMarkupPercent: readNumber(value, "quoteMarkupPercent"),
+    quoteProfitAmount: readNumber(value, "quoteProfitAmount"),
     currency: readString(value, "currency"),
     unitMismatchFlag: readBoolean(value, "unitMismatchFlag"),
     quantityFallbackFlag: readBoolean(value, "quantityFallbackFlag"),

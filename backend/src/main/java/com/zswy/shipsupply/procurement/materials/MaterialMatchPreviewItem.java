@@ -35,6 +35,8 @@ public record MaterialMatchPreviewItem(
     String matchResult,
     String matchResultName,
     String reason,
+    String validationStatus,
+    String validationReason,
     boolean hasImage,
     Integer imageIndex,
     String imageAnchor,

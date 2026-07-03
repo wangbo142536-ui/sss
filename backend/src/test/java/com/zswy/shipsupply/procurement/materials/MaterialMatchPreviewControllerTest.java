@@ -68,6 +68,8 @@ class MaterialMatchPreviewControllerTest {
                 "SIMILAR",
                 "Similar Match",
                 "NAME_SPEC_MATCH",
+                "ABNORMAL",
+                "CODE_MISSING",
                 true,
                 1,
                 "sheet1!R2C1",

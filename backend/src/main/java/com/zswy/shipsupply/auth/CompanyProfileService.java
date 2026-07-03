@@ -1,5 +1,7 @@
 package com.zswy.shipsupply.auth;
 
+import java.util.regex.Pattern;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,6 +12,9 @@ public class CompanyProfileService {
 
     static final String DEFAULT_QUALIFICATION_STATUS = "SUBMITTED";
     static final String DELETED_QUALIFICATION_STATUS = "DELETED";
+    static final String DEFAULT_CONTACT_STATUS = "ACTIVE";
+    static final String DELETED_CONTACT_STATUS = "DELETED";
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final CurrentUserService currentUserService;
     private final CompanyProfileRepository companyProfileRepository;
@@ -65,6 +70,35 @@ public class CompanyProfileService {
         }
     }
 
+    public CompanyContactListResponse contacts(String authorizationHeader, String status) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        return new CompanyContactListResponse(companyProfileRepository.listContacts(currentUser.companyId(), contactStatus(status)));
+    }
+
+    @Transactional
+    public CompanyContactResponse createContact(String authorizationHeader, CompanyContactSaveRequest request) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        return companyProfileRepository.createContact(currentUser.companyId(), validateContact(request, true));
+    }
+
+    @Transactional
+    public CompanyContactResponse updateContact(String authorizationHeader, Long contactId, CompanyContactSaveRequest request) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (contactId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_ID_REQUIRED: contact id required");
+        }
+        return companyProfileRepository.updateContact(currentUser.companyId(), contactId, validateContact(request, false))
+            .orElseThrow(CompanyProfileService::contactNotFound);
+    }
+
+    @Transactional
+    public void deleteContact(String authorizationHeader, Long contactId) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (contactId == null || !companyProfileRepository.softDeleteContact(currentUser.companyId(), contactId)) {
+            throw contactNotFound();
+        }
+    }
+
     private CompanyQualificationSaveRequest validateQualification(CompanyQualificationSaveRequest request, boolean requireFile) {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "QUALIFICATION_REQUIRED: qualification required");
@@ -92,6 +126,35 @@ public class CompanyProfileService {
         return blank(status) ? null : status.trim().toUpperCase(java.util.Locale.ROOT);
     }
 
+    private CompanyContactSaveRequest validateContact(CompanyContactSaveRequest request, boolean requireValues) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_REQUIRED: contact required");
+        }
+        if (blank(request.contactName())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_NAME_REQUIRED: contact name required");
+        }
+        if (blank(request.contactPhone())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_PHONE_REQUIRED: contact phone required");
+        }
+        if (!blank(request.contactEmail()) && !EMAIL_PATTERN.matcher(request.contactEmail().trim()).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_EMAIL_INVALID: contact email invalid");
+        }
+        return new CompanyContactSaveRequest(
+            trim(request.contactName()),
+            trim(request.contactPhone()),
+            trim(request.contactEmail()),
+            normalizeContactStatus(request.status())
+        );
+    }
+
+    private String contactStatus(String status) {
+        return blank(status) ? DEFAULT_CONTACT_STATUS : status.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private String normalizeContactStatus(String status) {
+        return blank(status) ? null : status.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
     private String normalizeCode(String value) {
         return blank(value) ? null : value.trim().toUpperCase(java.util.Locale.ROOT);
     }
@@ -109,6 +172,10 @@ public class CompanyProfileService {
 
     private static ResponseStatusException qualificationNotFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "QUALIFICATION_NOT_FOUND: qualification not found or access denied");
+    }
+
+    private static ResponseStatusException contactNotFound() {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "CONTACT_NOT_FOUND: contact not found or access denied");
     }
 
     private boolean blank(String value) {

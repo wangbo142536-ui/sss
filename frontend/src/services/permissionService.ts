@@ -108,6 +108,7 @@ const fallbackPermissions: PermissionPoint[] = [
   { code: "foodOrders:view", labelKey: "nav.foodOrders", groupKey: "permission.group.page" },
   { code: "delivery:manage", labelKey: "nav.delivery", groupKey: "permission.group.action" },
   { code: "settlements:archive", labelKey: "nav.settlements", groupKey: "permission.group.action" },
+  { code: "supply-chain-finance:view", labelKey: "nav.supplyChainFinance", groupKey: "permission.group.page" },
   { code: "crewServices:view", labelKey: "nav.crewServices", groupKey: "permission.group.page" },
   { code: "admin:registrations", labelKey: "nav.registrations", groupKey: "permission.group.admin" },
   { code: "admin:roles", labelKey: "permission.rolePermission", groupKey: "permission.group.admin" },
@@ -326,6 +327,8 @@ const menuLabelKeysByCode: Record<string, string> = {
   SETTLEMENT: "nav.settlements",
   SETTLEMENTS: "nav.settlements",
   SETTLEMENT_MANAGEMENT: "nav.settlements",
+  SUPPLY_CHAIN_FINANCE: "nav.supplyChainFinance",
+  supplyChainFinance: "nav.supplyChainFinance",
   ADMIN_REGISTRATIONS: "nav.registrations",
   ADMIN_PERMISSION: "nav.permissions",
   ADMIN_PERMISSIONS: "nav.permissions"
@@ -356,6 +359,7 @@ const menuLabelKeysByRoute: Record<string, string> = {
   "/delivery-tasks": "nav.delivery",
   "/settlement": "nav.settlements",
   "/settlements": "nav.settlements",
+  "/supply-chain-finance": "nav.supplyChainFinance",
   "/admin/registrations": "nav.registrations",
   "/admin/permissions": "nav.permissions",
   "/admin/menus": "nav.menuManagement",
@@ -486,6 +490,19 @@ function groupWorkbenchChildren(
 
 function groupBasicManagementMenus(items: WorkbenchMenuItem[]) {
   items = filterHiddenWorkbenchMenus(items);
+  if (!items.some((item) => item.key === "supplyChainFinance" || item.route === "/supply-chain-finance")) {
+    items = [
+      ...items,
+      {
+        key: "supplyChainFinance",
+        labelKey: "nav.supplyChainFinance",
+        route: "/supply-chain-finance",
+        icon: "SCF",
+        sortOrder: 105,
+        roles: ["admin", "purchaser", "finance"]
+      }
+    ];
+  }
   items = groupWorkbenchChildren(items, ["MATERIAL_PROCUREMENT", "MATERIAL_PROCUREMENT_GROUP", "materialProcurement", "materialProcurementGroup"], materialProcurementChildKeys, {
     key: "materialProcurement",
     labelKey: "nav.materialProcurement",

@@ -64,10 +64,11 @@ public class MaterialDemandRepository {
             PreparedStatement statement = connection.prepareStatement(
                 """
                 INSERT INTO material_demand
-                  (company_id, created_by, updated_by, demand_no, application_no, vessel_name,
-                   supply_port_code, supply_port_name, vessel_eta, inquiry_date, source_file_name, document_type, header_row_index, sku_count, exact_count,
+                  (company_id, created_by, updated_by, demand_no, application_no, inquiry_no,
+                   material_type, currency, recipient_company, handler_name, handler_email, vessel_name,
+                   supply_port_code, supply_port_name, vessel_eta, inquiry_date, source_file_name, source_file_id, document_type, header_row_index, sku_count, exact_count,
                    similar_count, unmatched_count, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SAVED')
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SAVED')
                 """,
                 Statement.RETURN_GENERATED_KEYS
             );
@@ -76,18 +77,25 @@ public class MaterialDemandRepository {
             statement.setLong(3, userId);
             statement.setString(4, demandNo);
             statement.setString(5, request.applicationNo());
-            statement.setString(6, request.vesselName());
-            statement.setString(7, request.supplyPortCode());
-            statement.setString(8, request.supplyPortName());
-            statement.setString(9, request.vesselEta());
-            statement.setObject(10, LocalDate.parse(request.inquiryDate()));
-            statement.setString(11, request.sourceFileName());
-            statement.setString(12, request.documentType());
-            statement.setInt(13, request.headerRowIndex());
-            statement.setInt(14, stats.skuCount());
-            statement.setInt(15, stats.exactCount());
-            statement.setInt(16, stats.similarCount());
-            statement.setInt(17, stats.unmatchedCount());
+            statement.setString(6, request.inquiryNo());
+            statement.setString(7, request.materialType());
+            statement.setString(8, request.currency());
+            statement.setString(9, request.recipientCompany());
+            statement.setString(10, request.handlerName());
+            statement.setString(11, request.handlerEmail());
+            statement.setString(12, request.vesselName());
+            statement.setString(13, request.supplyPortCode());
+            statement.setString(14, request.supplyPortName());
+            statement.setString(15, request.vesselEta());
+            statement.setObject(16, LocalDate.parse(request.inquiryDate()));
+            statement.setString(17, request.sourceFileName());
+            statement.setString(18, request.sourceFileId());
+            statement.setString(19, request.documentType());
+            statement.setInt(20, request.headerRowIndex());
+            statement.setInt(21, stats.skuCount());
+            statement.setInt(22, stats.exactCount());
+            statement.setInt(23, stats.similarCount());
+            statement.setInt(24, stats.unmatchedCount());
             return statement;
         }, keyHolder);
         return keyHolder.getKey().longValue();
@@ -105,12 +113,19 @@ public class MaterialDemandRepository {
             UPDATE material_demand
             SET updated_by = ?,
                 application_no = ?,
+                inquiry_no = ?,
+                material_type = ?,
+                currency = ?,
+                recipient_company = ?,
+                handler_name = ?,
+                handler_email = ?,
                 vessel_name = ?,
                 supply_port_code = ?,
                 supply_port_name = ?,
                 vessel_eta = ?,
                 inquiry_date = ?,
                 source_file_name = ?,
+                source_file_id = ?,
                 document_type = ?,
                 header_row_index = ?,
                 sku_count = ?,
@@ -122,12 +137,19 @@ public class MaterialDemandRepository {
             """,
             userId,
             request.applicationNo(),
+            request.inquiryNo(),
+            request.materialType(),
+            request.currency(),
+            request.recipientCompany(),
+            request.handlerName(),
+            request.handlerEmail(),
             request.vesselName(),
             request.supplyPortCode(),
             request.supplyPortName(),
             request.vesselEta(),
             LocalDate.parse(request.inquiryDate()),
             request.sourceFileName(),
+            request.sourceFileId(),
             request.documentType(),
             request.headerRowIndex(),
             stats.skuCount(),
@@ -150,9 +172,11 @@ public class MaterialDemandRepository {
                    description, size_model, quantity, unit, remarks, supplier_item_no,
                    raw_name_spec, price, packing, stock, selected_impa_code,
                    candidate_impa_code, candidate_name_cn, candidate_name_en,
-                   candidate_spec, match_result, match_result_name, reason, has_image,
-                   image_index, image_anchor, candidates_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   candidate_spec, match_result, match_result_name, reason, validation_status, validation_reason, has_image,
+                   image_index, image_anchor, candidates_json, actual_quote_price,
+                   actual_quote_currency, quote_markup_percent, quote_supplier_sku_id,
+                   quote_selected_unit, quote_unit_price, quote_unit_price_usd, quote_strategy_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 demandId,
                 companyId,
@@ -181,10 +205,20 @@ public class MaterialDemandRepository {
                 item.matchResult(),
                 item.matchResultName(),
                 item.reason(),
+                item.validationStatus(),
+                item.validationReason(),
                 item.hasImage() ? 1 : 0,
                 item.imageIndex(),
                 item.imageAnchor(),
-                json(candidateSnapshot(item))
+                json(candidateSnapshot(item)),
+                item.actualQuotePrice(),
+                item.actualQuoteCurrency(),
+                item.quoteMarkupPercent(),
+                item.quoteSupplierSkuId(),
+                item.quoteSelectedUnit(),
+                item.quoteUnitPrice(),
+                item.quoteUnitPriceUsd(),
+                item.quoteStrategyType()
             );
         }
     }
@@ -282,6 +316,7 @@ public class MaterialDemandRepository {
                 ? IS NULL
                 OR demand_no LIKE CONCAT('%', ?, '%')
                 OR application_no LIKE CONCAT('%', ?, '%')
+                OR inquiry_no LIKE CONCAT('%', ?, '%')
                 OR vessel_name LIKE CONCAT('%', ?, '%')
                 OR supply_port_name LIKE CONCAT('%', ?, '%')
                 OR source_file_name LIKE CONCAT('%', ?, '%')
@@ -297,6 +332,7 @@ public class MaterialDemandRepository {
             dateFrom,
             dateTo,
             dateTo,
+            keyword,
             keyword,
             keyword,
             keyword,
@@ -323,6 +359,83 @@ public class MaterialDemandRepository {
         );
     }
 
+    public int updateComparisonQuotes(
+        long companyId,
+        long demandId,
+        MaterialComparisonQuoteSaveRequest request
+    ) {
+        if (request == null || request.items() == null) {
+            return 0;
+        }
+        jdbcTemplate.update(
+            """
+            UPDATE material_demand_item
+            SET actual_quote_price = NULL,
+                actual_quote_currency = NULL,
+                quote_markup_percent = NULL,
+                quote_supplier_sku_id = NULL,
+                quote_selected_unit = NULL,
+                quote_unit_price = NULL,
+                quote_unit_price_usd = NULL,
+                quote_strategy_type = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND demand_id = ?
+            """,
+            companyId,
+            demandId
+        );
+        int saved = 0;
+        for (MaterialComparisonQuoteItemRequest item : request.items()) {
+            if (item == null || item.demandItemId() == null) {
+                continue;
+            }
+            jdbcTemplate.update(
+                """
+                UPDATE material_demand_item
+                SET quantity = COALESCE(?, quantity),
+                    remarks = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE company_id = ? AND demand_id = ? AND id = ?
+                """,
+                optionalText(item.quantity()),
+                optionalText(item.remarks()),
+                companyId,
+                demandId,
+                item.demandItemId()
+            );
+            if (item.actualQuotePrice() == null) {
+                continue;
+            }
+            saved += jdbcTemplate.update(
+                """
+                UPDATE material_demand_item
+                SET actual_quote_price = ?,
+                    actual_quote_currency = ?,
+                    quote_markup_percent = ?,
+                    quote_supplier_sku_id = ?,
+                    quote_selected_unit = ?,
+                    quote_unit_price = ?,
+                    quote_unit_price_usd = ?,
+                    quote_strategy_type = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE company_id = ? AND demand_id = ? AND id = ?
+                """,
+                item.actualQuotePrice(),
+                optionalText(item.currency()),
+                item.quoteMarkupPercent() == null ? request.markupPercent() : item.quoteMarkupPercent(),
+                item.skuId(),
+                optionalText(item.selectedUnit()),
+                item.unitPrice(),
+                item.unitPriceUsd(),
+                optionalText(request.strategyType()),
+                companyId,
+                demandId,
+                item.demandItemId()
+            );
+        }
+        return saved;
+    }
+
     private long count(long companyId, String keyword, String status, LocalDate dateFrom, LocalDate dateTo) {
         Long total = jdbcTemplate.queryForObject(
             """
@@ -336,6 +449,7 @@ public class MaterialDemandRepository {
                 ? IS NULL
                 OR demand_no LIKE CONCAT('%', ?, '%')
                 OR application_no LIKE CONCAT('%', ?, '%')
+                OR inquiry_no LIKE CONCAT('%', ?, '%')
                 OR vessel_name LIKE CONCAT('%', ?, '%')
                 OR supply_port_name LIKE CONCAT('%', ?, '%')
                 OR source_file_name LIKE CONCAT('%', ?, '%')
@@ -349,6 +463,7 @@ public class MaterialDemandRepository {
             dateFrom,
             dateTo,
             dateTo,
+            keyword,
             keyword,
             keyword,
             keyword,
@@ -369,12 +484,19 @@ public class MaterialDemandRepository {
             rs.getLong("id"),
             rs.getString("demand_no"),
             rs.getString("application_no"),
+            safeString(rs, "inquiry_no"),
+            safeString(rs, "material_type"),
+            safeString(rs, "currency"),
+            safeString(rs, "recipient_company"),
+            safeString(rs, "handler_name"),
+            safeString(rs, "handler_email"),
             rs.getString("vessel_name"),
             safeString(rs, "supply_port_code"),
             safeString(rs, "supply_port_name"),
             safeString(rs, "vessel_eta"),
             inquiryDate == null ? null : inquiryDate.toString(),
             rs.getString("source_file_name"),
+            safeString(rs, "source_file_id"),
             rs.getString("document_type"),
             rs.getInt("header_row_index"),
             rs.getInt("sku_count"),
@@ -416,9 +538,19 @@ public class MaterialDemandRepository {
             rs.getString("match_result"),
             rs.getString("match_result_name"),
             rs.getString("reason"),
+            safeString(rs, "validation_status"),
+            safeString(rs, "validation_reason"),
             rs.getBoolean("has_image"),
             nullableInt(rs, "image_index"),
             rs.getString("image_anchor"),
+            rs.getBigDecimal("actual_quote_price"),
+            safeString(rs, "actual_quote_currency"),
+            rs.getBigDecimal("quote_markup_percent"),
+            nullableLong(rs, "quote_supplier_sku_id"),
+            safeString(rs, "quote_selected_unit"),
+            rs.getBigDecimal("quote_unit_price"),
+            rs.getBigDecimal("quote_unit_price_usd"),
+            safeString(rs, "quote_strategy_type"),
             candidateSnapshot,
             candidateSnapshot
         );
@@ -469,6 +601,11 @@ public class MaterialDemandRepository {
         return rs.wasNull() ? null : value;
     }
 
+    private Long nullableLong(ResultSet rs, String columnName) throws SQLException {
+        long value = rs.getLong(columnName);
+        return rs.wasNull() ? null : value;
+    }
+
     private String timestampToString(Timestamp timestamp) {
         if (timestamp == null) {
             return null;
@@ -482,5 +619,9 @@ public class MaterialDemandRepository {
         } catch (SQLException ex) {
             return null;
         }
+    }
+
+    private String optionalText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

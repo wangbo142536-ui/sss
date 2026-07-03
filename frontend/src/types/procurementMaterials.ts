@@ -1,6 +1,7 @@
 export type MaterialDocumentType = "DEMAND_INQUIRY" | "SUPPLIER_QUOTATION" | "UNKNOWN" | string;
 
 export type MaterialMatchResult = "EXACT" | "SIMILAR" | "UNMATCHED" | string;
+export type MaterialValidationStatus = "MATCHED" | "ABNORMAL" | string;
 
 export interface MaterialMatchCandidate {
   impaCode?: string;
@@ -81,9 +82,19 @@ export interface MaterialMatchPreviewItem {
   matchResult?: MaterialMatchResult;
   matchResultName?: string;
   reason?: string;
+  validationStatus?: MaterialValidationStatus;
+  validationReason?: string;
   hasImage?: boolean;
   imageIndex?: number;
   imageAnchor?: string;
+  actualQuotePrice?: number;
+  actualQuoteCurrency?: string;
+  quoteMarkupPercent?: number;
+  quoteSupplierSkuId?: number;
+  quoteSelectedUnit?: string;
+  quoteUnitPrice?: number;
+  quoteUnitPriceUsd?: number;
+  quoteStrategyType?: string;
   candidateSnapshot?: MaterialMatchCandidate[];
   candidates?: MaterialMatchCandidate[];
   supplierCandidates?: MaterialSupplierCandidate[];
@@ -92,6 +103,19 @@ export interface MaterialMatchPreviewItem {
 export interface MaterialMatchPreviewResponse {
   documentType: MaterialDocumentType;
   sourceFormat?: string;
+  sourceFileId?: string;
+  sourceFileName?: string;
+  inquiryNo?: string;
+  requestNo?: string;
+  vesselName?: string;
+  materialType?: string;
+  currency?: string;
+  suggestedPort?: string;
+  eta?: string;
+  recipientCompany?: string;
+  handlerName?: string;
+  handlerEmail?: string;
+  rawHeaderFields?: Record<string, string>;
   headerRowIndex: number;
   totalRows: number;
   exactCount: number;
@@ -104,12 +128,19 @@ export interface MaterialDemandSummary {
   demandId: number;
   demandNo: string;
   applicationNo?: string;
+  inquiryNo?: string;
+  materialType?: string;
+  currency?: string;
+  recipientCompany?: string;
+  handlerName?: string;
+  handlerEmail?: string;
   vesselName?: string;
   supplyPortCode?: string;
   supplyPortName?: string;
   vesselEta?: string;
   inquiryDate?: string;
   sourceFileName?: string;
+  sourceFileId?: string;
   documentType?: MaterialDocumentType;
   headerRowIndex?: number;
   skuCount: number;
@@ -137,12 +168,19 @@ export interface MaterialDemandSavePayload {
   demandId?: number;
   demandNo?: string;
   applicationNo?: string;
+  inquiryNo?: string;
+  materialType?: string;
+  currency?: string;
+  recipientCompany?: string;
+  handlerName?: string;
+  handlerEmail?: string;
   vesselName?: string;
   supplyPortCode?: string;
   supplyPortName?: string;
   vesselEta?: string;
   inquiryDate?: string;
   sourceFileName?: string;
+  sourceFileId?: string;
   documentType?: MaterialDocumentType;
   headerRowIndex?: number;
   items: MaterialMatchPreviewItem[];
@@ -247,12 +285,21 @@ export interface MaterialComparisonItem {
   pricingQuantity?: number;
   pricingQuantityNote?: string;
   unit?: string;
+  remarks?: string;
   sourceSkuCode?: string;
   sourceSkuName?: string;
   lowestCandidate?: MaterialComparisonCandidate;
   singleSupplierCandidate?: MaterialComparisonCandidate;
   candidates: MaterialComparisonCandidate[];
   emptyReason?: string;
+  actualQuotePrice?: number;
+  actualQuoteCurrency?: string;
+  quoteMarkupPercent?: number;
+  quoteSupplierSkuId?: number;
+  quoteSelectedUnit?: string;
+  quoteUnitPrice?: number;
+  quoteUnitPriceUsd?: number;
+  quoteStrategyType?: string;
 }
 
 export interface MaterialDemandComparisonResponse {

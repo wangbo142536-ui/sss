@@ -224,9 +224,19 @@ function normalizeItem(value: unknown): MaterialMatchPreviewItem | null {
     matchResult: readString(value, "matchResult") as MaterialMatchResult | undefined,
     matchResultName: readString(value, "matchResultName"),
     reason: readString(value, "reason"),
+    validationStatus: readString(value, "validationStatus"),
+    validationReason: readString(value, "validationReason"),
     hasImage: readBoolean(value, "hasImage"),
     imageIndex: readNumber(value, "imageIndex"),
     imageAnchor: readString(value, "imageAnchor"),
+    actualQuotePrice: readNumber(value, "actualQuotePrice"),
+    actualQuoteCurrency: readString(value, "actualQuoteCurrency"),
+    quoteMarkupPercent: readNumber(value, "quoteMarkupPercent"),
+    quoteSupplierSkuId: readNumber(value, "quoteSupplierSkuId"),
+    quoteSelectedUnit: readString(value, "quoteSelectedUnit"),
+    quoteUnitPrice: readNumber(value, "quoteUnitPrice"),
+    quoteUnitPriceUsd: readNumber(value, "quoteUnitPriceUsd"),
+    quoteStrategyType: readString(value, "quoteStrategyType"),
     candidateSnapshot: Array.isArray(value.candidateSnapshot) ? value.candidateSnapshot.map(normalizeCandidate).filter((item): item is MaterialMatchCandidate => Boolean(item)) : [],
     candidates: Array.isArray(value.candidates)
       ? value.candidates.map(normalizeCandidate).filter((item): item is MaterialMatchCandidate => Boolean(item))
@@ -247,12 +257,19 @@ function normalizeDemandSummary(value: unknown): MaterialDemandSummary | null {
     demandId,
     demandNo: readString(value, "demandNo") || "",
     applicationNo: readString(value, "applicationNo"),
+    inquiryNo: readString(value, "inquiryNo"),
+    materialType: readString(value, "materialType"),
+    currency: readString(value, "currency"),
+    recipientCompany: readString(value, "recipientCompany"),
+    handlerName: readString(value, "handlerName"),
+    handlerEmail: readString(value, "handlerEmail"),
     vesselName: readString(value, "vesselName"),
     supplyPortCode: readString(value, "supplyPortCode"),
     supplyPortName: readString(value, "supplyPortName"),
     vesselEta: readString(value, "vesselEta"),
     inquiryDate: readString(value, "inquiryDate"),
     sourceFileName: readString(value, "sourceFileName"),
+    sourceFileId: readString(value, "sourceFileId"),
     documentType: readString(value, "documentType") as MaterialDocumentType | undefined,
     headerRowIndex: readNumber(value, "headerRowIndex"),
     skuCount: readRequiredNumber(value, "skuCount"),
@@ -384,12 +401,21 @@ function normalizeComparisonItem(value: unknown): MaterialComparisonItem | null 
     pricingQuantity: readNumber(value, "pricingQuantity"),
     pricingQuantityNote: readString(value, "pricingQuantityNote"),
     unit: readString(value, "unit"),
+    remarks: readString(value, "remarks"),
     sourceSkuCode: readString(value, "sourceSkuCode"),
     sourceSkuName: readString(value, "sourceSkuName"),
     lowestCandidate: normalizeComparisonCandidate(value.lowestCandidate),
     singleSupplierCandidate: normalizeComparisonCandidate(value.singleSupplierCandidate),
     candidates,
-    emptyReason: readString(value, "emptyReason")
+    emptyReason: readString(value, "emptyReason"),
+    actualQuotePrice: readNumber(value, "actualQuotePrice"),
+    actualQuoteCurrency: readString(value, "actualQuoteCurrency"),
+    quoteMarkupPercent: readNumber(value, "quoteMarkupPercent"),
+    quoteSupplierSkuId: readNumber(value, "quoteSupplierSkuId"),
+    quoteSelectedUnit: readString(value, "quoteSelectedUnit"),
+    quoteUnitPrice: readNumber(value, "quoteUnitPrice"),
+    quoteUnitPriceUsd: readNumber(value, "quoteUnitPriceUsd"),
+    quoteStrategyType: readString(value, "quoteStrategyType")
   };
 }
 
@@ -444,6 +470,19 @@ function normalizeMatchPreview(payload: unknown): MaterialMatchPreviewResponse {
   return {
     documentType: readString(unwrapped, "documentType") || "UNKNOWN",
     sourceFormat: readString(unwrapped, "sourceFormat") || readString(unwrapped, "rfqFormat"),
+    sourceFileId: readString(unwrapped, "sourceFileId"),
+    sourceFileName: readString(unwrapped, "sourceFileName"),
+    inquiryNo: readString(unwrapped, "inquiryNo"),
+    requestNo: readString(unwrapped, "requestNo"),
+    vesselName: readString(unwrapped, "vesselName"),
+    materialType: readString(unwrapped, "materialType"),
+    currency: readString(unwrapped, "currency"),
+    suggestedPort: readString(unwrapped, "suggestedPort"),
+    eta: readString(unwrapped, "eta"),
+    recipientCompany: readString(unwrapped, "recipientCompany"),
+    handlerName: readString(unwrapped, "handlerName"),
+    handlerEmail: readString(unwrapped, "handlerEmail"),
+    rawHeaderFields: normalizeStringRecord(unwrapped.rawHeaderFields),
     headerRowIndex: readNumber(unwrapped, "headerRowIndex") ?? 0,
     totalRows: readNumber(unwrapped, "totalRows") ?? readNumber(unwrapped, "totalCount") ?? items.length,
     exactCount: readNumber(unwrapped, "exactCount") ?? items.filter((item) => item.matchResult === "EXACT").length,
@@ -506,6 +545,58 @@ export async function getMaterialDemandComparison(demandId: number | string): Pr
 
 export async function discardMaterialDemand(demandId: number | string): Promise<unknown> {
   return requestJson(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/discard`, { method: "POST" });
+}
+
+export async function saveMaterialComparisonQuotes(
+  demandId: number | string,
+  payload: {
+    strategyType?: string;
+    markupPercent?: number;
+    items: Array<{
+      demandItemId?: number | string;
+      skuId?: number;
+      selectedUnit?: string;
+      quantity?: string;
+      remarks?: string;
+      unitPrice?: number;
+      unitPriceUsd?: number;
+      actualQuotePrice?: number;
+      quoteMarkupPercent?: number;
+      currency?: string;
+    }>;
+  }
+): Promise<{ demandId?: number; savedCount?: number }> {
+  const response = await requestJson(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/comparison-quotes`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return isRecord(response) ? { demandId: readNumber(response, "demandId"), savedCount: readNumber(response, "savedCount") } : {};
+}
+
+export async function exportMaterialQuoteTemplate(demandId: number | string): Promise<void> {
+  const session = getAuthSession();
+  const response = await fetch(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/quote-export`, {
+    method: "GET",
+    headers: {
+      ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {})
+    }
+  });
+  if (!response.ok) {
+    throw createApiError(response, await readJson(response));
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const filenameStar = disposition.match(/filename\\*=UTF-8''([^;]+)/i);
+  const filenameBasic = disposition.match(/filename="?([^";]+)"?/i);
+  const fileName = decodeURIComponent(filenameStar?.[1] || filenameBasic?.[1] || `material-quotation-${demandId}.xlsx`);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function listMaterialDemandItemSupplierCandidates(demandId: number | string, itemId: number | string): Promise<MaterialComparisonCandidate[]> {

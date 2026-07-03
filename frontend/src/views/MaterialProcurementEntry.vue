@@ -21,8 +21,9 @@ const uploadError = ref("");
 const saveError = ref("");
 const saveNotice = ref("");
 const selectedFileName = ref("");
+const selectedSourceFileId = ref("");
 const searchKeyword = ref("");
-const statusFilter = ref<"ALL" | "EXACT" | "SIMILAR" | "UNMATCHED">("ALL");
+const statusFilter = ref<"ALL" | "MATCHED" | "ABNORMAL">("ALL");
 const expandedRowKey = ref("");
 const selectedCandidateIndexes = ref<Record<string, number>>({});
 const matchConfirmed = ref(false);
@@ -31,9 +32,22 @@ const matchPreview = ref<MaterialMatchPreviewResponse | null>(null);
 const demandId = ref<number | undefined>();
 const demandNo = ref("");
 const demandStatus = ref("");
-type DemandFormKey = "applicationNo" | "vesselName" | "supplyPortCode" | "vesselEta";
+type DemandFormKey = "applicationNo" | "inquiryNo" | "materialType" | "currency" | "recipientCompany" | "handlerName" | "handlerEmail" | "vesselName" | "supplyPortCode" | "vesselEta";
+type SupplyInfoItem = {
+  key: DemandFormKey;
+  label: string;
+  placeholder: string;
+  type: "text" | "select" | "datetime" | "handler";
+  required?: boolean;
+};
 const demandForm = ref({
   applicationNo: "",
+  inquiryNo: "",
+  materialType: "",
+  currency: "",
+  recipientCompany: "",
+  handlerName: "",
+  handlerEmail: "",
   vesselName: "",
   supplyPortCode: "",
   supplyPortName: "",
@@ -54,10 +68,15 @@ let progressTimer: number | undefined;
 const DEFAULT_MATERIAL_QUANTITY = "1";
 const DEFAULT_MATERIAL_UNIT = "个";
 
-const supplyInfo = computed(() => [
+const supplyInfo = computed<SupplyInfoItem[]>(() => [
   { key: "vesselName" as const, label: t("page.materials.vesselName"), placeholder: t("page.materials.vesselNamePlaceholder"), type: "text", required: true },
+  { key: "inquiryNo" as const, label: t("page.materials.inquiryNo"), placeholder: t("page.materials.inquiryNoPlaceholder"), type: "text" },
+  { key: "materialType" as const, label: t("page.materials.materialType"), placeholder: t("page.materials.materialTypePlaceholder"), type: "text" },
+  { key: "currency" as const, label: t("page.materials.currency"), placeholder: t("page.materials.currencyPlaceholder"), type: "text" },
   { key: "supplyPortCode" as const, label: t("page.materials.supplyPort"), placeholder: t("page.materials.supplyPortPlaceholder"), type: "select", required: true },
-  { key: "vesselEta" as const, label: t("page.materials.vesselEta"), placeholder: t("page.materials.vesselEtaPlaceholder"), type: "datetime", required: true }
+  { key: "vesselEta" as const, label: t("page.materials.vesselEta"), placeholder: t("page.materials.vesselEtaPlaceholder"), type: "datetime", required: true },
+  { key: "recipientCompany" as const, label: t("page.materials.recipientCompany"), placeholder: t("page.materials.recipientCompanyPlaceholder"), type: "text" },
+  { key: "handlerName" as const, label: t("page.materials.handlerContact"), placeholder: t("page.materials.handlerNamePlaceholder"), type: "handler" }
 ]);
 
 const demandRequiredFields: Array<{ key: DemandFormKey; errorKey: string }> = [
@@ -100,15 +119,19 @@ const isMaterialEditDisabled = computed(() => isDemandInComparisonStage.value ||
 
 const matchFilters = computed(() => [
   { value: "ALL" as const, label: `${t("common.all")} ${previewItems.value.length}` },
-  { value: "EXACT" as const, label: `${t("page.materials.exactShort")} ${matchPreview.value?.exactCount ?? 0}` },
-  { value: "SIMILAR" as const, label: `${t("page.materials.similarShort")} ${matchPreview.value?.similarCount ?? 0}` },
-  { value: "UNMATCHED" as const, label: `${t("page.materials.unmatchedShort")} ${matchPreview.value?.unmatchedCount ?? 0}` }
+  { value: "MATCHED" as const, label: `${t("page.materials.validationMatched")} ${validationCounts.value.matched}` },
+  { value: "ABNORMAL" as const, label: `${t("page.materials.validationAbnormal")} ${validationCounts.value.abnormal}` }
 ]);
+
+const validationCounts = computed(() => ({
+  matched: previewItems.value.filter((item) => validationStatus(item) === "MATCHED").length,
+  abnormal: previewItems.value.filter((item) => validationStatus(item) === "ABNORMAL").length
+}));
 
 const filteredItems = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
   return previewItems.value.filter((item) => {
-    if (statusFilter.value !== "ALL" && item.matchResult !== statusFilter.value) return false;
+    if (statusFilter.value !== "ALL" && validationStatus(item) !== statusFilter.value) return false;
     if (!keyword) return true;
 
     return [
@@ -185,10 +208,9 @@ function statusClass(status?: MaterialMatchResult): string {
 }
 
 function itemStatusClass(item: MaterialMatchPreviewItem): string {
-  const status = listMatchStatus(item);
-  if (status === "EXACT") return "ok";
-  if (status === "SIMILAR") return "sim";
-  if (status === "UNMATCHED") return "bad";
+  const status = validationStatus(item);
+  if (status === "MATCHED") return "ok";
+  if (status === "ABNORMAL") return "bad";
   return "wait";
 }
 
@@ -197,11 +219,16 @@ function isExactMatchRow(item: MaterialMatchPreviewItem): boolean {
 }
 
 function statusLabel(item: MaterialMatchPreviewItem): string {
-  const status = listMatchStatus(item);
-  if (status === "EXACT") return t("page.materials.statusExact");
-  if (status === "SIMILAR") return t("page.materials.statusSimilar");
-  if (status === "UNMATCHED") return t("page.materials.statusUnmatched");
+  const status = validationStatus(item);
+  if (status === "MATCHED") return t("page.materials.validationMatched");
+  if (status === "ABNORMAL") return t("page.materials.validationAbnormal");
   return t("page.materials.statusUnknown");
+}
+
+function validationStatus(item: MaterialMatchPreviewItem): "MATCHED" | "ABNORMAL" | "UNKNOWN" {
+  const explicit = String(item.validationStatus || "").toUpperCase();
+  if (explicit === "MATCHED" || explicit === "ABNORMAL") return explicit;
+  return isExactMatchRow(item) ? "MATCHED" : "ABNORMAL";
 }
 
 function listMatchStatus(item: MaterialMatchPreviewItem): "EXACT" | "SIMILAR" | "UNMATCHED" | "UNKNOWN" {
@@ -418,12 +445,53 @@ function unitOptionValue(item: DictionaryItem): string {
 
 function selectedPortName(): string {
   const selected = portOptions.value.find((item) => item.itemCode === demandForm.value.supplyPortCode || item.itemValue === demandForm.value.supplyPortCode);
-  return selected?.itemName || demandForm.value.supplyPortName || "";
+  return selected?.itemName || demandForm.value.supplyPortName || demandForm.value.supplyPortCode || "";
+}
+
+const hasCustomSupplyPort = computed(() => {
+  const code = demandForm.value.supplyPortCode.trim();
+  if (!code) return false;
+  return !portOptions.value.some((item) => item.itemCode === code || item.itemValue === code);
+});
+
+function normalizePortText(value?: string | null): string {
+  return String(value ?? "").replace(/[^A-Za-z0-9\u4e00-\u9fa5]/g, "").toUpperCase();
+}
+
+function matchedPortOption(rawPort?: string): DictionaryItem | undefined {
+  const normalized = normalizePortText(rawPort);
+  if (!normalized) return undefined;
+  return portOptions.value.find((item) =>
+    [item.itemCode, item.itemName, item.itemValue, item.itemNameEn]
+      .map(normalizePortText)
+      .some((value) => value === normalized)
+  );
+}
+
+function applySuggestedPort(rawPort?: string): void {
+  const text = String(rawPort ?? "").trim();
+  if (!text) return;
+  const matched = matchedPortOption(text);
+  demandForm.value.supplyPortCode = matched?.itemCode || text;
+  demandForm.value.supplyPortName = matched?.itemName || text;
 }
 
 function handleSupplyPortChange(): void {
   demandForm.value.supplyPortName = selectedPortName();
   handleDemandInput("supplyPortCode");
+}
+
+function applyHeaderContextToDemandForm(preview: MaterialMatchPreviewResponse): void {
+  demandForm.value.applicationNo = preview.requestNo || demandForm.value.applicationNo;
+  demandForm.value.inquiryNo = preview.inquiryNo || demandForm.value.inquiryNo;
+  demandForm.value.materialType = preview.materialType || demandForm.value.materialType;
+  demandForm.value.currency = preview.currency || demandForm.value.currency;
+  demandForm.value.recipientCompany = preview.recipientCompany || demandForm.value.recipientCompany;
+  demandForm.value.handlerName = preview.handlerName || demandForm.value.handlerName;
+  demandForm.value.handlerEmail = preview.handlerEmail || demandForm.value.handlerEmail;
+  demandForm.value.vesselName = preview.vesselName || demandForm.value.vesselName;
+  demandForm.value.vesselEta = preview.eta || demandForm.value.vesselEta;
+  applySuggestedPort(preview.suggestedPort);
 }
 
 async function loadProcurementDictionaries(): Promise<void> {
@@ -436,6 +504,9 @@ async function loadProcurementDictionaries(): Promise<void> {
     unitOptions.value = units;
     if (demandForm.value.supplyPortCode) {
       demandForm.value.supplyPortName = selectedPortName();
+    }
+    if (demandForm.value.supplyPortName && hasCustomSupplyPort.value) {
+      applySuggestedPort(demandForm.value.supplyPortName);
     }
     if (matchPreview.value) {
       matchPreview.value = {
@@ -508,13 +579,20 @@ function materialRowKey(row: MaterialMatchPreviewItem): string {
   return rowKey(row, index >= 0 ? index : 0);
 }
 
-function updateMaterialRowField(row: MaterialMatchPreviewItem, field: "quantity" | "unit", value: string): void {
+type EditableMaterialRowField = "impaCode" | "platformCode" | "description" | "sizeModel" | "quantity" | "unit" | "remarks";
+
+function updateMaterialRowField(row: MaterialMatchPreviewItem, field: EditableMaterialRowField, value: string): void {
   const preview = matchPreview.value;
   if (!preview || isMaterialEditDisabled.value) return;
   const index = preview.items.findIndex((item) => item === row);
   if (index < 0) return;
   const items = preview.items.slice();
-  items[index] = { ...items[index], [field]: value };
+  items[index] = {
+    ...items[index],
+    [field]: value,
+    validationStatus: ["impaCode", "platformCode", "description", "sizeModel"].includes(field) ? "ABNORMAL" : items[index].validationStatus,
+    validationReason: ["impaCode", "platformCode", "description", "sizeModel"].includes(field) ? "MANUAL_EDIT_RECHECK_REQUIRED" : items[index].validationReason
+  };
   matchPreview.value = { ...preview, items };
   matchConfirmed.value = false;
 
@@ -534,6 +612,21 @@ function normalizeMaterialRowField(row: MaterialMatchPreviewItem, field: "quanti
   const current = preview.items[index];
   const normalized = field === "quantity" ? String(current.quantity ?? "").trim() : normalizeUnitValue(current.unit);
   updateMaterialRowField(current, field, normalized);
+}
+
+function canEditAbnormalRow(row: MaterialMatchPreviewItem): boolean {
+  return validationStatus(row) === "ABNORMAL" && !isMaterialEditDisabled.value;
+}
+
+function editableSourceCode(row: MaterialMatchPreviewItem): string {
+  return firstText(row.impaCode, row.platformCode) === "-" ? "" : firstText(row.impaCode, row.platformCode);
+}
+
+function updateMaterialCode(row: MaterialMatchPreviewItem, value: string): void {
+  updateMaterialRowField(row, "impaCode", value.trim());
+  if (row.platformCode && row.platformCode === row.impaCode) {
+    updateMaterialRowField(row, "platformCode", value.trim());
+  }
 }
 
 function validateMaterialRows(): boolean {
@@ -601,11 +694,18 @@ async function persistDemand(showSuccess: boolean): Promise<MaterialDemandSaveRe
       demandId: demandId.value,
       demandNo: demandNo.value,
       applicationNo: demandForm.value.applicationNo.trim() || undefined,
+      inquiryNo: demandForm.value.inquiryNo.trim() || undefined,
+      materialType: demandForm.value.materialType.trim() || undefined,
+      currency: demandForm.value.currency.trim() || undefined,
+      recipientCompany: demandForm.value.recipientCompany.trim() || undefined,
+      handlerName: demandForm.value.handlerName.trim() || undefined,
+      handlerEmail: demandForm.value.handlerEmail.trim() || undefined,
       vesselName: demandForm.value.vesselName.trim(),
       supplyPortCode: demandForm.value.supplyPortCode.trim(),
       supplyPortName: selectedPortName(),
       vesselEta: demandForm.value.vesselEta.trim(),
       sourceFileName: selectedFileName.value,
+      sourceFileId: selectedSourceFileId.value || undefined,
       documentType: matchPreview.value.documentType,
       headerRowIndex: matchPreview.value.headerRowIndex,
       items
@@ -674,6 +774,12 @@ async function loadDemandDetail(id: string): Promise<void> {
     demandStatus.value = detail.demand.status || "";
     demandForm.value = {
       applicationNo: detail.demand.applicationNo || "",
+      inquiryNo: detail.demand.inquiryNo || "",
+      materialType: detail.demand.materialType || "",
+      currency: detail.demand.currency || "",
+      recipientCompany: detail.demand.recipientCompany || "",
+      handlerName: detail.demand.handlerName || "",
+      handlerEmail: detail.demand.handlerEmail || "",
       vesselName: detail.demand.vesselName || "",
       supplyPortCode: detail.demand.supplyPortCode || "",
       supplyPortName: detail.demand.supplyPortName || "",
@@ -681,8 +787,19 @@ async function loadDemandDetail(id: string): Promise<void> {
     };
     if (demandForm.value.supplyPortCode) demandForm.value.supplyPortName = selectedPortName();
     selectedFileName.value = detail.demand.sourceFileName || "";
+    selectedSourceFileId.value = detail.demand.sourceFileId || "";
     matchPreview.value = normalizeMaterialPreviewDefaults({
       documentType: detail.demand.documentType || "UNKNOWN",
+      inquiryNo: detail.demand.inquiryNo,
+      requestNo: detail.demand.applicationNo,
+      vesselName: detail.demand.vesselName,
+      materialType: detail.demand.materialType,
+      currency: detail.demand.currency,
+      suggestedPort: detail.demand.supplyPortName,
+      eta: detail.demand.vesselEta,
+      recipientCompany: detail.demand.recipientCompany,
+      handlerName: detail.demand.handlerName,
+      handlerEmail: detail.demand.handlerEmail,
       headerRowIndex: detail.demand.headerRowIndex || 0,
       totalRows: detail.demand.skuCount || detail.items.length,
       exactCount: detail.demand.exactCount,
@@ -746,6 +863,7 @@ function delay(ms: number): Promise<void> {
 async function handleFile(file?: File): Promise<void> {
   if (!file || isDemandActionBusy.value || isDemandReadonly.value) return;
   selectedFileName.value = file.name;
+  selectedSourceFileId.value = "";
   uploadError.value = "";
   saveNotice.value = "";
   isUploading.value = true;
@@ -756,6 +874,9 @@ async function handleFile(file?: File): Promise<void> {
 
   try {
     const preview = normalizeMaterialPreviewDefaults(await uploadMaterialMatchPreview(file));
+    selectedSourceFileId.value = preview.sourceFileId || "";
+    if (preview.sourceFileName) selectedFileName.value = preview.sourceFileName;
+    applyHeaderContextToDemandForm(preview);
     matchPreview.value = preview;
     progressResult.value = preview;
     clearProgressTimer();
@@ -827,6 +948,9 @@ onBeforeUnmount(() => {
                 @change="handleSupplyPortChange"
               >
                 <option value="">{{ item.placeholder }}</option>
+                <option v-if="hasCustomSupplyPort" :value="demandForm.supplyPortCode">
+                  {{ demandForm.supplyPortName || demandForm.supplyPortCode }}
+                </option>
                 <option v-for="port in portOptions" :key="port.id || port.itemCode" :value="port.itemCode">
                   {{ dictionaryOptionLabel(port) }}
                 </option>
@@ -841,6 +965,24 @@ onBeforeUnmount(() => {
                 :disabled="isDemandActionBusy || isDemandReadonly"
                 @input="handleDemandInput(item.key)"
               />
+              <div v-else-if="item.type === 'handler'" class="handler-contact-fields">
+                <input
+                  :ref="(element) => setDemandInputRef('handlerName', element)"
+                  v-model="demandForm.handlerName"
+                  type="text"
+                  :placeholder="item.placeholder"
+                  :disabled="isDemandActionBusy || isDemandReadonly"
+                  @input="handleDemandInput('handlerName')"
+                />
+                <input
+                  :ref="(element) => setDemandInputRef('handlerEmail', element)"
+                  v-model="demandForm.handlerEmail"
+                  type="text"
+                  :placeholder="t('page.materials.handlerEmailPlaceholder')"
+                  :disabled="isDemandActionBusy || isDemandReadonly"
+                  @input="handleDemandInput('handlerEmail')"
+                />
+              </div>
               <input
                 v-else
                 :ref="(element) => setDemandInputRef(item.key, element)"
@@ -976,7 +1118,6 @@ onBeforeUnmount(() => {
                 <span>{{ t("page.materials.quantity") }}</span>
                 <span>{{ t("page.materials.unit") }}</span>
                 <span>{{ t("page.materials.matchResult") }}</span>
-                <span>{{ t("page.materials.candidateImpa") }}</span>
               </div>
 
               <template v-if="filteredItems.length">
@@ -990,9 +1131,30 @@ onBeforeUnmount(() => {
                     @keydown.space.prevent="toggleRow(row, index)"
                   >
                     <span class="row-index"><b>{{ row.sequence ?? index + 1 }}</b></span>
-                    <span class="item-code">{{ firstText(row.impaCode, row.platformCode) }}</span>
-                    <strong>{{ itemDisplayName(row) }}</strong>
-                    <span>{{ firstText(row.sizeModel) }}</span>
+                    <label v-if="canEditAbnormalRow(row)" class="match-inline-field" @click.stop>
+                      <input
+                        :value="editableSourceCode(row)"
+                        :placeholder="t('page.materials.impaOrPlatformCode')"
+                        @input="updateMaterialCode(row, ($event.target as HTMLInputElement).value)"
+                      />
+                    </label>
+                    <span v-else class="item-code">{{ firstText(row.impaCode, row.platformCode) }}</span>
+                    <label v-if="canEditAbnormalRow(row)" class="match-inline-field" @click.stop>
+                      <input
+                        :value="itemDisplayName(row) === '-' ? '' : itemDisplayName(row)"
+                        :placeholder="t('page.materials.description')"
+                        @input="updateMaterialRowField(row, 'description', ($event.target as HTMLInputElement).value)"
+                      />
+                    </label>
+                    <strong v-else>{{ itemDisplayName(row) }}</strong>
+                    <label v-if="canEditAbnormalRow(row)" class="match-inline-field" @click.stop>
+                      <input
+                        :value="row.sizeModel ?? ''"
+                        :placeholder="t('page.materials.sizeModel')"
+                        @input="updateMaterialRowField(row, 'sizeModel', ($event.target as HTMLInputElement).value)"
+                      />
+                    </label>
+                    <span v-else>{{ firstText(row.sizeModel) }}</span>
                     <label
                       :class="['match-inline-field', { 'is-invalid': invalidMaterialRowKey === materialRowKey(row) && invalidMaterialField === 'quantity' }]"
                       @click.stop
@@ -1027,52 +1189,33 @@ onBeforeUnmount(() => {
                     <span>
                       <b :class="['status-pill', itemStatusClass(row)]">{{ statusLabel(row) }}</b>
                     </span>
-                    <span class="item-code">{{ displayedCandidateLabel(row, index) }}</span>
                   </div>
                   <div v-if="expandedRowKey === rowKey(row, index)" :class="['match-row-detail', { 'is-readonly-detail': isDemandInComparisonStage }]" @click.stop>
-                    <section>
-                      <h3>{{ t("page.materials.demandSku") }}</h3>
-                      <div class="sku-comparison-table">
-                        <div class="sku-comparison-head">
-                          <span>{{ t("page.materials.field") }}</span>
-                          <span>{{ t("page.materials.sourceValue") }}</span>
-                          <span>{{ t("page.materials.selectedCandidate") }}</span>
+                    <div class="match-detail-summary">
+                      <section>
+                        <h3>{{ t("page.materials.demandSku") }}</h3>
+                        <div class="sku-comparison-table">
+                          <div class="sku-comparison-head">
+                            <span>{{ t("page.materials.field") }}</span>
+                            <span>{{ t("page.materials.sourceValue") }}</span>
+                          </div>
+                          <div v-for="line in demandComparisonRows(row, index)" :key="line.label" class="sku-comparison-row">
+                            <span>{{ line.label }}</span>
+                            <strong>{{ line.source }}</strong>
+                          </div>
                         </div>
-                        <div v-for="line in demandComparisonRows(row, index)" :key="line.label" class="sku-comparison-row">
-                          <span>{{ line.label }}</span>
-                          <strong>{{ line.source }}</strong>
-                          <em>{{ line.candidate }}</em>
-                        </div>
-                      </div>
-                    </section>
-                    <section v-if="!isDemandInComparisonStage">
-                      <h3>{{ t("page.materials.candidateSku") }}</h3>
-                      <div v-if="visibleCandidateEntries(row, index).length" class="candidate-table">
-                        <div class="candidate-table-head">
-                          <span>{{ t("page.materials.candidateImpa") }}</span>
-                          <span>{{ t("page.materials.candidateName") }}</span>
-                          <span>{{ t("page.materials.specification") }}</span>
-                          <span>{{ t("page.materials.candidateMatchResult") }}</span>
-                        </div>
-                        <div
-                          v-for="entry in visibleCandidateEntries(row, index)"
-                          :key="`${rowKey(row, index)}-${entry.candidate.impaCode}-${entry.candidate.reason}-${entry.candidateIndex}`"
-                          :class="['candidate-row', { 'is-selected': selectedCandidateIndex(row, index) === entry.candidateIndex }]"
-                          role="button"
-                          tabindex="0"
-                          @click.stop="selectCandidate(row, index, entry.candidateIndex)"
-                          @keydown.enter.prevent.stop="selectCandidate(row, index, entry.candidateIndex)"
-                          @keydown.space.prevent.stop="selectCandidate(row, index, entry.candidateIndex)"
-                        >
-                          <strong>{{ entry.candidate.impaCode || "-" }}</strong>
-                          <span>{{ preferredCandidateName(row, entry.candidate) }}</span>
-                          <small>{{ firstText(entry.candidate.specification, entry.candidate.unit) }}</small>
-                          <b>{{ candidateMatchTypeLabel(entry.candidate, row) }}</b>
-                        </div>
-                      </div>
-                      <p v-else>{{ row.reason ? reasonLabel(row.reason) : t("page.materials.noCandidates") }}</p>
-                    </section>
-                    <section v-if="rawSourceRows(row).length" class="raw-source-section">
+                      </section>
+                      <label v-if="canEditAbnormalRow(row)" class="match-remark-field match-remark-field--side">
+                        <span>备注</span>
+                        <textarea
+                          :value="row.remarks ?? ''"
+                          placeholder="填写备注"
+                          rows="8"
+                          @input="updateMaterialRowField(row, 'remarks', ($event.target as HTMLTextAreaElement).value)"
+                        ></textarea>
+                      </label>
+                    </div>
+                    <section class="raw-source-section">
                       <h3>{{ t("page.materials.rawSourceFields") }}</h3>
                       <div class="raw-source-grid">
                         <div v-for="line in rawSourceRows(row)" :key="line.label" class="raw-source-row">
@@ -1291,6 +1434,12 @@ onBeforeUnmount(() => {
   font-weight: 800;
   background: #ffffff;
   outline: none;
+}
+
+.handler-contact-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+  gap: 8px;
 }
 
 .supply-item input.is-invalid,
@@ -1831,8 +1980,7 @@ onBeforeUnmount(() => {
     minmax(110px, 0.85fr)
     108px
     86px
-    92px
-    minmax(170px, 1fr);
+    92px;
   column-gap: 6px;
   align-items: center;
 }
@@ -1939,6 +2087,63 @@ onBeforeUnmount(() => {
   white-space: normal;
 }
 
+.match-remark-field {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.match-remark-field span {
+  color: #5d7896;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.match-remark-field input,
+.match-remark-field textarea {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid #b9d4e8;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #102f4f;
+  font-weight: 800;
+  outline: none;
+}
+
+.match-remark-field textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 132px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.match-remark-field--side {
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: stretch;
+  min-width: 0;
+  margin-bottom: 0;
+  padding: 12px;
+  border: 1px solid #d2e7f8;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.match-remark-field--side span {
+  display: flex;
+  align-items: center;
+}
+
+.match-remark-field input:focus,
+.match-remark-field textarea:focus {
+  border-color: #1d72d2;
+  box-shadow: 0 0 0 3px rgba(29, 114, 210, 0.14);
+}
+
 .match-row strong {
   min-width: 0;
   overflow: hidden;
@@ -2009,16 +2214,11 @@ onBeforeUnmount(() => {
 
 .match-row-detail {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.86fr);
   gap: 12px;
   padding: 14px 16px;
   border-top: 1px solid #d9eaf7;
   background: #f7fbff;
   animation: match-content-in 160ms ease-out;
-}
-
-.match-row-detail.is-readonly-detail {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .match-row-detail section {
@@ -2027,6 +2227,21 @@ onBeforeUnmount(() => {
   border: 1px solid #d2e7f8;
   border-radius: 14px;
   background: #ffffff;
+}
+
+.match-detail-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.match-row-detail.is-readonly-detail .match-detail-summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.match-row-detail.is-readonly-detail .match-remark-field--side {
+  display: none;
 }
 
 .match-row-detail h3 {
@@ -2087,7 +2302,7 @@ onBeforeUnmount(() => {
 .sku-comparison-head,
 .sku-comparison-row {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 108px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 9px 10px;

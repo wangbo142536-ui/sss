@@ -72,7 +72,7 @@ class PurchaseOrderServiceTest {
         assertThat(response.status()).isEqualTo("PENDING_SUPPLIER_CONFIRM");
         assertThat(response.supplierOrderCount()).isEqualTo(2);
         assertThat(response.itemCount()).isEqualTo(2);
-        assertThat(response.totalAmount()).isEqualByComparingTo("40.50");
+        assertThat(response.totalAmount()).isEqualByComparingTo("44.55");
 
         ArgumentCaptor<PurchaseOrderDraft> draftCaptor = ArgumentCaptor.forClass(PurchaseOrderDraft.class);
         verify(purchaseOrderRepository).insertOrder(draftCaptor.capture());
@@ -82,6 +82,10 @@ class PurchaseOrderServiceTest {
         assertThat(draft.supplierOrders()).extracting(PurchaseSupplierOrderDraft::supplierName)
             .containsExactlyInAnyOrder("供应商 A", "供应商 B");
         assertThat(draft.items()).hasSize(2);
+        assertThat(draft.items()).extracting(PurchaseOrderItemDraft::quoteMarkupPercent)
+            .allMatch(value -> value != null && value.compareTo(new BigDecimal("10")) == 0);
+        assertThat(draft.items()).extracting(PurchaseOrderItemDraft::actualQuotePrice)
+            .containsExactly(new BigDecimal("9.90000000"), new BigDecimal("14.85000000"));
         assertThat(draft.items()).extracting(PurchaseOrderItemDraft::quantityFallbackFlag)
             .containsExactly(false, true);
         assertThat(draft.items()).extracting(PurchaseOrderItemDraft::unitMismatchFlag)

@@ -1,4 +1,4 @@
-import type { SkuAttribute, SupplierSku, UserRole, WorkbenchMenuItem } from "@/types/workbench";
+﻿import type { SkuAttribute, SupplierSku, UserRole, WorkbenchMenuItem } from "@/types/workbench";
 
 const productImage = (bg: string, fg: string, label: string) =>
   `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' rx='10' fill='${bg.replace("#", "%23")}'/%3E%3Crect x='18' y='24' width='60' height='48' rx='8' fill='white' opacity='.85'/%3E%3Cpath d='M28 38h40M28 49h30M28 60h22' stroke='${fg.replace("#", "%23")}' stroke-width='5' stroke-linecap='round'/%3E%3Ctext x='48' y='88' text-anchor='middle' font-family='Arial' font-size='10' fill='${fg.replace("#", "%23")}'%3E${label}%3C/text%3E%3C/svg%3E`;
@@ -53,6 +53,7 @@ export const menuItems: WorkbenchMenuItem[] = [
   { key: "crewServices", labelKey: "nav.crewServices", route: "/crew-services", icon: "CS", sortOrder: 80, roles: ["admin", "purchaser", "operator"] },
   { key: "delivery", labelKey: "nav.delivery", route: "/delivery-tasks", icon: "DL", sortOrder: 90, roles: ["admin", "operator"] },
   { key: "settlements", labelKey: "nav.settlements", route: "/settlements", icon: "FN", sortOrder: 100, roles: ["admin", "finance"] },
+  { key: "supplyChainFinance", labelKey: "nav.supplyChainFinance", route: "/supply-chain-finance", icon: "SCF", sortOrder: 105, roles: ["admin", "purchaser", "finance"] },
   {
     key: "basicManagement",
     labelKey: "nav.basicManagement",
@@ -117,7 +118,7 @@ export const supplierSkus: SupplierSku[] = [
     name: "Mooring Rope",
     itemNo: "ZS-MR-25",
     impaCode: "110101",
-    supplier: "舟山甲板物料供应商",
+    supplier: "供货商A",
     price: 128,
     currency: "CNY",
     stock: 320,
@@ -131,7 +132,7 @@ export const supplierSkus: SupplierSku[] = [
     name: "Lubricating Oil",
     itemNo: "ZS-LO-5L",
     impaCode: "150203",
-    supplier: "海润轮机备件供应商",
+    supplier: "供货商B",
     price: 268,
     currency: "CNY",
     stock: 96,
@@ -145,7 +146,7 @@ export const supplierSkus: SupplierSku[] = [
     name: "Life Jacket",
     itemNo: "ZS-LJ-SOLAS",
     impaCode: "330501",
-    supplier: "安航救生消防供应商",
+    supplier: "供货商C",
     price: 186,
     currency: "CNY",
     stock: 54,
@@ -155,9 +156,9 @@ export const supplierSkus: SupplierSku[] = [
 ];
 
 export const suppliers = [
-  { id: "SUP-001", name: "舟山甲板物料供应商", port: "Zhoushan / Ningbo", score: "96", status: "active" },
-  { id: "SUP-002", name: "海润轮机备件供应商", port: "Zhoushan / Shanghai", score: "92", status: "warning" },
-  { id: "SUP-003", name: "安航救生消防供应商", port: "Zhoushan", score: "89", status: "active" }
+  { id: "SUP-001", name: "供货商A", port: "Zhoushan / Ningbo", score: "96", status: "active" },
+  { id: "SUP-002", name: "供货商B", port: "Zhoushan / Shanghai", score: "92", status: "warning" },
+  { id: "SUP-003", name: "供货商C", port: "Zhoushan", score: "89", status: "active" }
 ];
 
 export const requestRows = [
@@ -169,15 +170,15 @@ export const requestRows = [
 ];
 
 export const inquiries = [
-  { inquiryNo: "INQ-240604-18", supplier: "舟山甲板物料供应商", status: "quoted", validUntil: "2026-06-05 18:00" },
-  { inquiryNo: "INQ-240604-19", supplier: "海润轮机备件供应商", status: "inquiry", validUntil: "2026-06-05 12:00" },
+  { inquiryNo: "INQ-240604-18", supplier: "供货商A", status: "quoted", validUntil: "2026-06-05 18:00" },
+  { inquiryNo: "INQ-240604-19", supplier: "供货商B", status: "inquiry", validUntil: "2026-06-05 12:00" },
   { inquiryNo: "INQ-240604-20", supplier: "远洋伙食补给供应商", status: "inquiry", validUntil: "2026-06-04 20:00" }
 ];
 
 export const quoteRows = [
-  { code: "QTE-240604-01", subject: "PACIFIC TRADER 甲板物料报价", supplier: "舟山甲板物料供应商", status: "quoted", validUntil: "2026-06-06 12:00" },
-  { code: "QTE-240604-02", subject: "BLUE PORT 润滑油报价", supplier: "海润轮机备件供应商", status: "quoted", validUntil: "2026-06-06 18:00" },
-  { code: "QTE-240604-03", subject: "ZHONG WAI YUN 6 电气仪表报价", supplier: "蓝港电气仪表供应商", status: "inquiry", validUntil: "2026-06-07 10:00" }
+  { code: "QTE-240604-01", subject: "PACIFIC TRADER 甲板物料报价", supplier: "供货商A", status: "quoted", validUntil: "2026-06-06 12:00" },
+  { code: "QTE-240604-02", subject: "BLUE PORT 润滑油报价", supplier: "供货商B", status: "quoted", validUntil: "2026-06-06 18:00" },
+  { code: "QTE-240604-03", subject: "ZHONG WAI YUN 6 电气仪表报价", supplier: "供货商C", status: "inquiry", validUntil: "2026-06-07 10:00" }
 ];
 
 export const comparisonRows = [
@@ -187,9 +188,9 @@ export const comparisonRows = [
 ];
 
 export const orderRows = [
-  { code: "PO-240604-01", sourceNo: "INQ-240604-18", vesselName: "PACIFIC TRADER", supplier: "舟山甲板物料供应商", amount: "18,420", status: "active", orderDate: "2026-06-06", deliveryDate: "2026-06-09" },
-  { code: "PO-240604-02", sourceNo: "INQ-240604-19", vesselName: "BLUE PORT", supplier: "海润轮机备件供应商", amount: "9,080", status: "warning", orderDate: "2026-06-07", deliveryDate: "2026-06-10" },
-  { code: "PO-240604-03", sourceNo: "INQ-240604-20", vesselName: "ZHONG WAI YUN 6", supplier: "蓝港电气仪表供应商", amount: "19,910", status: "matching", orderDate: "2026-06-08", deliveryDate: "2026-06-11" }
+  { code: "PO-240604-01", sourceNo: "INQ-240604-18", vesselName: "PACIFIC TRADER", supplier: "供货商A", amount: "18,420", status: "active", orderDate: "2026-06-06", deliveryDate: "2026-06-09" },
+  { code: "PO-240604-02", sourceNo: "INQ-240604-19", vesselName: "BLUE PORT", supplier: "供货商B", amount: "9,080", status: "warning", orderDate: "2026-06-07", deliveryDate: "2026-06-10" },
+  { code: "PO-240604-03", sourceNo: "INQ-240604-20", vesselName: "ZHONG WAI YUN 6", supplier: "供货商C", amount: "19,910", status: "matching", orderDate: "2026-06-08", deliveryDate: "2026-06-11" }
 ];
 
 export const foodInquiries = [
@@ -217,9 +218,9 @@ export const foodOrderRows = [
 ];
 
 export const settlementRows = [
-  { code: "SET-240604-01", type: "material", sourceNo: "PO-240604-01", vesselName: "PACIFIC TRADER", supplier: "舟山甲板物料供应商", amount: "18,420", status: "pending", applyDate: "2026-06-09", settlementDate: "2026-06-12" },
+  { code: "SET-240604-01", type: "material", sourceNo: "PO-240604-01", vesselName: "PACIFIC TRADER", supplier: "供货商A", amount: "18,420", status: "pending", applyDate: "2026-06-09", settlementDate: "2026-06-12" },
   { code: "SET-240604-02", type: "food", sourceNo: "FPO-240604-01", vesselName: "PACIFIC TRADER", supplier: "远洋伙食补给供应商", amount: "6,840", status: "active", applyDate: "2026-06-10", settlementDate: "2026-06-13" },
-  { code: "SET-240604-03", type: "material", sourceNo: "PO-240604-02", vesselName: "BLUE PORT", supplier: "海润轮机备件供应商", amount: "9,080", status: "archived", applyDate: "2026-06-11", settlementDate: "2026-06-14" }
+  { code: "SET-240604-03", type: "material", sourceNo: "PO-240604-02", vesselName: "BLUE PORT", supplier: "供货商B", amount: "9,080", status: "archived", applyDate: "2026-06-11", settlementDate: "2026-06-14" }
 ];
 
 export const crewServiceRows = [
@@ -229,9 +230,10 @@ export const crewServiceRows = [
 ];
 
 export const ranking = [
-  { supplier: "舟山甲板物料供应商", score: 96, amount: 18420, source: "有效日价 + 正式报价" },
-  { supplier: "海润轮机备件供应商", score: 92, amount: 19080, source: "正式报价" },
-  { supplier: "安航救生消防供应商", score: 89, amount: 19360, source: "有效日价" },
-  { supplier: "蓝港电气仪表供应商", score: 86, amount: 19910, source: "正式报价" },
+  { supplier: "供货商A", score: 96, amount: 18420, source: "有效日价 + 正式报价" },
+  { supplier: "供货商B", score: 92, amount: 19080, source: "正式报价" },
+  { supplier: "供货商C", score: 89, amount: 19360, source: "有效日价" },
+  { supplier: "供货商C", score: 86, amount: 19910, source: "正式报价" },
   { supplier: "东海航海用品供应商", score: 82, amount: 20420, source: "有效日价" }
 ];
+

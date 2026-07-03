@@ -115,12 +115,19 @@ public class MaterialDemandService {
             request.demandId(),
             request.demandNo(),
             optionalText(request.applicationNo()),
+            optionalText(request.inquiryNo()),
+            optionalText(request.materialType()),
+            optionalText(request.currency()),
+            optionalText(request.recipientCompany()),
+            optionalText(request.handlerName()),
+            optionalText(request.handlerEmail()),
             request.vesselName().trim(),
             optionalText(request.supplyPortCode()),
             optionalText(request.supplyPortName()),
             optionalText(request.vesselEta()),
             inquiryDate.toString(),
             optionalText(request.sourceFileName()),
+            optionalText(request.sourceFileId()),
             optionalText(request.documentType()),
             request.headerRowIndex() == null ? 0 : request.headerRowIndex(),
             items
@@ -159,12 +166,58 @@ public class MaterialDemandService {
             item.matchResult(),
             item.matchResultName(),
             item.reason(),
+            validationStatus(item),
+            validationReason(item),
             item.hasImage(),
             item.imageIndex(),
             item.imageAnchor(),
+            item.actualQuotePrice(),
+            optionalText(item.actualQuoteCurrency()),
+            item.quoteMarkupPercent(),
+            item.quoteSupplierSkuId(),
+            optionalText(item.quoteSelectedUnit()),
+            item.quoteUnitPrice(),
+            item.quoteUnitPriceUsd(),
+            optionalText(item.quoteStrategyType()),
             item.candidateSnapshot(),
             item.candidates()
         );
+    }
+
+    private String validationStatus(MaterialDemandItemRequest item) {
+        String explicit = optionalText(item.validationStatus());
+        if (explicit != null) {
+            return explicit;
+        }
+        return "EXACT".equals(item.matchResult()) && "CODE_MATCH".equals(item.reason()) ? "MATCHED" : "ABNORMAL";
+    }
+
+    private String validationReason(MaterialDemandItemRequest item) {
+        String explicit = optionalText(item.validationReason());
+        if (explicit != null) {
+            return explicit;
+        }
+        if ("EXACT".equals(item.matchResult()) && "CODE_MATCH".equals(item.reason())) {
+            return "CODE_MATCH";
+        }
+        String code = optionalText(item.impaCode());
+        if (code == null) {
+            return "CODE_MISSING";
+        }
+        return "CODE_ABNORMAL";
+    }
+
+    @Transactional
+    public MaterialComparisonQuoteSaveResponse saveComparisonQuotes(
+        String authorizationHeader,
+        Long demandId,
+        MaterialComparisonQuoteSaveRequest request
+    ) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        MaterialDemandSummaryResponse demand = requireDemandById(currentUser.companyId(), demandId);
+        ensureEditable(demand);
+        int savedCount = materialDemandRepository.updateComparisonQuotes(currentUser.companyId(), demandId, request);
+        return new MaterialComparisonQuoteSaveResponse(demandId, savedCount);
     }
 
     private String positiveQuantity(String value) {

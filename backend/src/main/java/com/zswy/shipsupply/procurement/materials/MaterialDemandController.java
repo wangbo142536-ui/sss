@@ -3,6 +3,10 @@ package com.zswy.shipsupply.procurement.materials;
 import java.time.LocalDate;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,13 +23,16 @@ public class MaterialDemandController {
 
     private final MaterialDemandService materialDemandService;
     private final MaterialDemandComparisonService materialDemandComparisonService;
+    private final MaterialQuoteExportService materialQuoteExportService;
 
     public MaterialDemandController(
         MaterialDemandService materialDemandService,
-        MaterialDemandComparisonService materialDemandComparisonService
+        MaterialDemandComparisonService materialDemandComparisonService,
+        MaterialQuoteExportService materialQuoteExportService
     ) {
         this.materialDemandService = materialDemandService;
         this.materialDemandComparisonService = materialDemandComparisonService;
+        this.materialQuoteExportService = materialQuoteExportService;
     }
 
     @PostMapping
@@ -76,6 +83,28 @@ public class MaterialDemandController {
         @PathVariable Long id
     ) {
         return materialDemandComparisonService.comparison(authorizationHeader, id);
+    }
+
+    @PostMapping("/{id}/comparison-quotes")
+    public MaterialComparisonQuoteSaveResponse saveComparisonQuotes(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long id,
+        @RequestBody MaterialComparisonQuoteSaveRequest request
+    ) {
+        return materialDemandService.saveComparisonQuotes(authorizationHeader, id, request);
+    }
+
+    @GetMapping("/{id}/quote-export")
+    public ResponseEntity<Resource> exportQuote(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long id
+    ) {
+        MaterialQuoteExportFile file = materialQuoteExportService.exportQuote(authorizationHeader, id);
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .contentLength(file.fileSize())
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.fileName().replace("\"", "") + "\"")
+            .body(file.resource());
     }
 
     @GetMapping("/{id}/items/{itemId}/supplier-candidates")

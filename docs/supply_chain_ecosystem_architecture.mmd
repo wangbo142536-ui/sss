@@ -1,0 +1,86 @@
+flowchart LR
+  buyer["船代/买方企业<br/>采购需求、下单、付款、融资申请"]
+  supplier["供货商企业<br/>SKU、报价、确认、备货、供船"]
+  barge["驳船/交通艇/配送方<br/>航线调度、送船、签收"]
+  crew["船员/船舶服务<br/>登轮、接送、生活服务"]
+  platform["船供海事服务平台<br/>供应链协同中枢"]
+  finance["供应链金融<br/>预付 + 贷款 + 还款"]
+  bank["银行/金融机构<br/>授信、审批、放款、回款"]
+  gov["政府侧<br/>监管、补贴、资质、港区协同"]
+  third["三方生态<br/>气象、AIS/船期、海关、保险、电子签章、OCR/AI"]
+
+  subgraph core["平台核心供应链能力"]
+    demand["需求导入<br/>Excel/Word/PDF/清单"]
+    standard["标准库<br/>IMPA/MSG、伙食分类、数据字典"]
+    match["智能匹配<br/>标准编码、供应商 SKU、异常复核"]
+    inquiry["询价/报价<br/>供货商响应、报价保存、原模板导出"]
+    compare["比价决策<br/>最低混供、集中采购、利润报价、币种切换"]
+    order["采购订单<br/>联系人、供货商子单、状态聚合"]
+    fulfillment["履约供船<br/>确认、备货、备货完成、供船图片"]
+    settlement["费用结算与归档<br/>发票、付款、单证、核销资料"]
+  end
+
+  buyer --> demand --> standard --> match --> inquiry --> compare --> order --> fulfillment --> settlement
+  supplier --> inquiry
+  supplier --> order
+  supplier --> fulfillment
+  barge --> fulfillment
+  crew --> platform
+  platform --> demand
+  platform --> standard
+  platform --> match
+  platform --> inquiry
+  platform --> compare
+  platform --> order
+  platform --> fulfillment
+  platform --> settlement
+
+  order --> finance
+  finance --> bank
+  bank --> supplier
+  buyer --> finance
+  gov --> platform
+  gov --> finance
+  third --> platform
+  third --> fulfillment
+
+  subgraph financeFlow["供应链金融资金链"]
+    payable["下单形成应付金额"]
+    prepay["买方预付<br/>例：20%"]
+    loan["融资贷款<br/>例：80%"]
+    disburse["放款至供货商/平台监管账户"]
+    repay["到期还款/结清/逾期"]
+  end
+
+  order --> payable --> prepay --> loan --> disburse --> repay
+  bank --> loan
+  gov --> prepay
+  gov --> loan
+
+  subgraph govFlow["政府侧与公共服务"]
+    subsidy["政府补贴<br/>航运、外贸、数字化、普惠金融"]
+    regulator["资质/信用/监管<br/>企业审核、合规留痕"]
+    port["港口/海事/海关协同<br/>报关报备、港区通行、作业窗口"]
+  end
+
+  subsidy --> finance
+  regulator --> platform
+  port --> fulfillment
+
+  subgraph thirdFlow["三方接入"]
+    weather["气象/潮汐/锚地窗口"]
+    ais["AIS/船期/靠离泊"]
+    customs["报关报备/单证"]
+    insurance["保险/保函/风控"]
+    esign["电子签章/合同"]
+    ai["OCR/AI 识别<br/>清单、图片、报价单"]
+  end
+
+  weather --> compare
+  weather --> fulfillment
+  ais --> order
+  customs --> settlement
+  insurance --> finance
+  esign --> order
+  ai --> demand
+  ai --> match

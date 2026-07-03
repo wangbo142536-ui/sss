@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120">
+  <defs>
+    <style>
+      .bg{fill:#f6f8fb}.title{font:700 34px "Microsoft YaHei",Arial,sans-serif;fill:#102033}.sub{font:400 18px "Microsoft YaHei",Arial,sans-serif;fill:#526276}.group{fill:#fff;stroke:#d8e2ef;stroke-width:2}.core{fill:#f8fbff;stroke:#8fb7ff;stroke-width:2}.finance{fill:#fff8ec;stroke:#efb35a;stroke-width:2}.gov{fill:#f2fbf5;stroke:#6abd82;stroke-width:2}.third{fill:#f7f4ff;stroke:#9a80e9;stroke-width:2}.actor{fill:#102033}.actorText{font:700 18px "Microsoft YaHei",Arial,sans-serif;fill:#fff}.actorSmall{font:400 13px "Microsoft YaHei",Arial,sans-serif;fill:#d7e2ef}.box{fill:#fff;stroke:#c9d7e8;stroke-width:1.6}.boxTitle{font:700 17px "Microsoft YaHei",Arial,sans-serif;fill:#12243a}.boxText{font:400 13px "Microsoft YaHei",Arial,sans-serif;fill:#526276}.label{font:700 18px "Microsoft YaHei",Arial,sans-serif;fill:#24364a}.smallLabel{font:400 13px "Microsoft YaHei",Arial,sans-serif;fill:#607186}.arrow{stroke:#6f8197;stroke-width:2;fill:none;marker-end:url(#arrow)}.arrowBlue{stroke:#2f6fed;stroke-width:2.4;fill:none;marker-end:url(#arrowBlue)}.arrowGold{stroke:#cf842f;stroke-width:2.4;fill:none;marker-end:url(#arrowGold)}.arrowGreen{stroke:#3f9b62;stroke-width:2.2;fill:none;marker-end:url(#arrowGreen)}.pill{fill:#eaf2ff;stroke:#b9d2ff}.pillText{font:700 14px "Microsoft YaHei",Arial,sans-serif;fill:#2455a6}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#6f8197"/></marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#2f6fed"/></marker>
+    <marker id="arrowGold" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#cf842f"/></marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#3f9b62"/></marker>
+  </defs>
+  <rect class="bg" width="1800" height="1120"/>
+  <text x="70" y="70" class="title">船供供应链生态架构图</text>
+  <text x="70" y="103" class="sub">覆盖现有采购链路，并扩展供应链金融、政府侧、银行与三方生态协同</text>
+
+  <rect x="70" y="145" width="260" height="110" rx="10" class="actor"/>
+  <text x="100" y="183" class="actorText">船代 / 买方企业</text>
+  <text x="100" y="212" class="actorSmall">导入需求、比价下单、付款</text>
+  <text x="100" y="234" class="actorSmall">申请融资、查看履约与归档</text>
+
+  <rect x="1470" y="145" width="260" height="110" rx="10" class="actor"/>
+  <text x="1500" y="183" class="actorText">供货商企业</text>
+  <text x="1500" y="212" class="actorSmall">SKU 上架、报价、确认订单</text>
+  <text x="1500" y="234" class="actorSmall">备货、供船、回款</text>
+
+  <rect x="1470" y="310" width="260" height="110" rx="10" class="actor"/>
+  <text x="1500" y="348" class="actorText">驳船 / 交通艇 / 配送方</text>
+  <text x="1500" y="377" class="actorSmall">航线调度、锚地送船</text>
+  <text x="1500" y="399" class="actorSmall">签收、异常上报、图片回传</text>
+
+  <rect x="70" y="310" width="260" height="110" rx="10" class="actor"/>
+  <text x="100" y="348" class="actorText">船员 / 船舶服务</text>
+  <text x="100" y="377" class="actorSmall">登轮、接送、生活服务</text>
+  <text x="100" y="399" class="actorSmall">报关报备、港区通行协同</text>
+
+  <rect x="390" y="145" width="1020" height="410" rx="14" class="core"/>
+  <text x="420" y="183" class="label">平台核心供应链能力</text>
+  <text x="420" y="211" class="smallLabel">以采购单为主线，把标准库、供应商、报价、履约、结算和单证串成可追踪链路</text>
+
+  <rect x="425" y="245" width="180" height="92" rx="8" class="box"/>
+  <text x="447" y="277" class="boxTitle">需求导入</text>
+  <text x="447" y="304" class="boxText">Excel / Word / PDF</text>
+  <text x="447" y="324" class="boxText">船舶、港口、ETA、询价号</text>
+
+  <rect x="645" y="245" width="180" height="92" rx="8" class="box"/>
+  <text x="667" y="277" class="boxTitle">标准库</text>
+  <text x="667" y="304" class="boxText">IMPA / MSG</text>
+  <text x="667" y="324" class="boxText">伙食分类、数据字典</text>
+
+  <rect x="865" y="245" width="180" height="92" rx="8" class="box"/>
+  <text x="887" y="277" class="boxTitle">智能匹配</text>
+  <text x="887" y="304" class="boxText">标准编码校验</text>
+  <text x="887" y="324" class="boxText">供应商 SKU / 异常复核</text>
+
+  <rect x="1085" y="245" width="180" height="92" rx="8" class="box"/>
+  <text x="1107" y="277" class="boxTitle">询价报价</text>
+  <text x="1107" y="304" class="boxText">供货商响应</text>
+  <text x="1107" y="324" class="boxText">报价保存、原模板导出</text>
+
+  <rect x="425" y="385" width="180" height="92" rx="8" class="box"/>
+  <text x="447" y="417" class="boxTitle">比价决策</text>
+  <text x="447" y="444" class="boxText">最低混供 / 集中采购</text>
+  <text x="447" y="464" class="boxText">利润报价、币种切换</text>
+
+  <rect x="645" y="385" width="180" height="92" rx="8" class="box"/>
+  <text x="667" y="417" class="boxTitle">采购订单</text>
+  <text x="667" y="444" class="boxText">联系人快照</text>
+  <text x="667" y="464" class="boxText">主单 / 供货商子单</text>
+
+  <rect x="865" y="385" width="180" height="92" rx="8" class="box"/>
+  <text x="887" y="417" class="boxTitle">履约供船</text>
+  <text x="887" y="444" class="boxText">确认、备货完成</text>
+  <text x="887" y="464" class="boxText">供船图片、签收</text>
+
+  <rect x="1085" y="385" width="180" height="92" rx="8" class="box"/>
+  <text x="1107" y="417" class="boxTitle">结算归档</text>
+  <text x="1107" y="444" class="boxText">费用、发票、付款</text>
+  <text x="1107" y="464" class="boxText">单证、核销资料</text>
+
+  <path d="M605 291 H645" class="arrowBlue"/>
+  <path d="M825 291 H865" class="arrowBlue"/>
+  <path d="M1045 291 H1085" class="arrowBlue"/>
+  <path d="M1175 337 C1175 360 515 355 515 385" class="arrowBlue"/>
+  <path d="M605 431 H645" class="arrowBlue"/>
+  <path d="M825 431 H865" class="arrowBlue"/>
+  <path d="M1045 431 H1085" class="arrowBlue"/>
+
+  <rect x="390" y="610" width="1020" height="190" rx="14" class="finance"/>
+  <text x="420" y="648" class="label">供应链金融资金链</text>
+  <text x="420" y="676" class="smallLabel">采购单下单后形成应付金额，可拆分为企业预付与金融贷款</text>
+  <rect x="425" y="705" width="150" height="62" rx="8" class="box"/>
+  <text x="446" y="742" class="boxTitle">应付金额</text>
+  <rect x="615" y="705" width="150" height="62" rx="8" class="box"/>
+  <text x="636" y="732" class="boxTitle">买方预付</text>
+  <text x="636" y="754" class="boxText">示例 20%</text>
+  <rect x="805" y="705" width="150" height="62" rx="8" class="box"/>
+  <text x="826" y="732" class="boxTitle">融资贷款</text>
+  <text x="826" y="754" class="boxText">示例 80%</text>
+  <rect x="995" y="705" width="150" height="62" rx="8" class="box"/>
+  <text x="1016" y="732" class="boxTitle">放款</text>
+  <text x="1016" y="754" class="boxText">至供货商/监管账户</text>
+  <rect x="1185" y="705" width="150" height="62" rx="8" class="box"/>
+  <text x="1206" y="732" class="boxTitle">还款结清</text>
+  <text x="1206" y="754" class="boxText">到期 / 逾期 / 结清</text>
+  <path d="M575 736 H615" class="arrowGold"/>
+  <path d="M765 736 H805" class="arrowGold"/>
+  <path d="M955 736 H995" class="arrowGold"/>
+  <path d="M1145 736 H1185" class="arrowGold"/>
+
+  <rect x="70" y="610" width="260" height="190" rx="14" class="finance"/>
+  <text x="100" y="648" class="label">银行 / 金融机构</text>
+  <text x="100" y="684" class="boxText">授信额度</text>
+  <text x="100" y="710" class="boxText">融资审批</text>
+  <text x="100" y="736" class="boxText">放款确认</text>
+  <text x="100" y="762" class="boxText">还款与风险预警</text>
+
+  <rect x="1470" y="610" width="260" height="190" rx="14" class="gov"/>
+  <text x="1500" y="648" class="label">政府侧</text>
+  <text x="1500" y="684" class="boxText">政府补贴：航运、外贸、数字化、普惠金融</text>
+  <text x="1500" y="710" class="boxText">资质与信用监管</text>
+  <text x="1500" y="736" class="boxText">港口 / 海事 / 海关协同</text>
+  <text x="1500" y="762" class="boxText">合规留痕与补贴核验</text>
+
+  <rect x="70" y="850" width="1660" height="180" rx="14" class="third"/>
+  <text x="100" y="888" class="label">三方生态接入</text>
+  <text x="100" y="916" class="smallLabel">增强清单识别、风险判断、港区作业窗口、合同单证与金融风控</text>
+  <rect x="105" y="945" width="190" height="58" rx="8" class="box"/><text x="127" y="980" class="boxTitle">气象 / 潮汐 / 锚地</text>
+  <rect x="330" y="945" width="190" height="58" rx="8" class="box"/><text x="352" y="980" class="boxTitle">AIS / 船期 / 靠离泊</text>
+  <rect x="555" y="945" width="190" height="58" rx="8" class="box"/><text x="577" y="980" class="boxTitle">海关 / 报关报备</text>
+  <rect x="780" y="945" width="190" height="58" rx="8" class="box"/><text x="802" y="980" class="boxTitle">保险 / 保函 / 风控</text>
+  <rect x="1005" y="945" width="190" height="58" rx="8" class="box"/><text x="1027" y="980" class="boxTitle">电子签章 / 合同</text>
+  <rect x="1230" y="945" width="190" height="58" rx="8" class="box"/><text x="1252" y="980" class="boxTitle">OCR / AI 识别</text>
+  <rect x="1455" y="945" width="190" height="58" rx="8" class="box"/><text x="1477" y="980" class="boxTitle">支付 / 票税 / 对账</text>
+
+  <path d="M330 200 H390" class="arrowBlue"/>
+  <path d="M1410 200 H1470" class="arrowBlue"/>
+  <path d="M1410 365 H1470" class="arrowBlue"/>
+  <path d="M330 365 C360 365 360 500 410 500" class="arrow"/>
+  <path d="M735 477 V610" class="arrowGold"/>
+  <path d="M330 705 H390" class="arrowGold"/>
+  <path d="M1410 705 H1470" class="arrowGreen"/>
+  <path d="M1470 670 C1360 620 1220 555 1175 477" class="arrowGreen"/>
+  <path d="M1600 610 C1600 520 1390 520 1265 431" class="arrowGreen"/>
+  <path d="M900 850 V800" class="arrow"/>
+  <path d="M1325 945 C1340 835 1340 550 515 337" class="arrow"/>
+  <path d="M200 945 C250 810 340 500 425 291" class="arrow"/>
+  <path d="M425 780 C320 810 250 820 200 800" class="arrowGold"/>
+
+  <rect x="420" y="515" width="132" height="28" rx="14" class="pill"/><text x="442" y="535" class="pillText">伙食采购</text>
+  <rect x="565" y="515" width="132" height="28" rx="14" class="pill"/><text x="587" y="535" class="pillText">物料采购</text>
+  <rect x="710" y="515" width="132" height="28" rx="14" class="pill"/><text x="732" y="535" class="pillText">供应商池</text>
+  <rect x="855" y="515" width="132" height="28" rx="14" class="pill"/><text x="877" y="535" class="pillText">气象服务</text>
+  <rect x="1000" y="515" width="132" height="28" rx="14" class="pill"/><text x="1022" y="535" class="pillText">驳船服务</text>
+  <rect x="1145" y="515" width="132" height="28" rx="14" class="pill"/><text x="1167" y="535" class="pillText">船员服务</text>
+
+  <text x="70" y="1080" class="smallLabel">输出依据：项目 PRODUCT、长期记忆、页面规格、供应链金融一期需求。说明：官方 GitHub skills 列表未发现专门的 architecture/diagram skill，本图采用可维护 SVG + Mermaid 源文件落地。</text>
+</svg>

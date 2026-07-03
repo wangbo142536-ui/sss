@@ -42,6 +42,10 @@ const rowIdentifier = (row: T) => {
 <template>
   <div class="data-table-wrap">
     <table class="data-table">
+      <colgroup>
+        <col v-if="props.showIndex" class="data-table-index-col" />
+        <col v-for="column in props.columns" :key="column.key" :style="{ width: column.width }" />
+      </colgroup>
       <thead>
         <tr>
           <th v-if="props.showIndex" class="data-table-index-cell">

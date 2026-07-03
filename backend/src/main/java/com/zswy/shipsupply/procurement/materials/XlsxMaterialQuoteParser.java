@@ -3,6 +3,7 @@ package com.zswy.shipsupply.procurement.materials;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -169,6 +170,7 @@ public class XlsxMaterialQuoteParser {
         String sourceFormat = SOURCE_FORMAT_UNKNOWN;
         int headerRowNumber = 0;
         List<MaterialQuoteRow> rows = new ArrayList<>();
+        HeaderContextBuilder headerContextBuilder = new HeaderContextBuilder();
 
         for (int i = 0; i < rowNodes.getLength(); i++) {
             Element rowElement = (Element) rowNodes.item(i);
@@ -181,6 +183,7 @@ public class XlsxMaterialQuoteParser {
             if (headersByColumn.isEmpty()) {
                 DetectedDocument detected = detectDocument(valuesByColumn);
                 if (detected == null) {
+                    collectHeaderContext(valuesByColumn, headerContextBuilder);
                     continue;
                 }
                 headersByColumn.putAll(valuesByColumn);
@@ -240,7 +243,103 @@ public class XlsxMaterialQuoteParser {
                 imageAnchor == null ? null : imageAnchor.contentType()
             ));
         }
-        return new MaterialParsedDocument(documentType, sourceFormat, headerRowNumber, rows);
+        return new MaterialParsedDocument(documentType, sourceFormat, headerRowNumber, rows, headerContextBuilder.toContext());
+    }
+
+    private void collectHeaderContext(Map<String, String> valuesByColumn, HeaderContextBuilder builder) {
+        List<String> values = valuesByColumn.values().stream()
+            .map(value -> value == null ? "" : value.trim())
+            .filter(value -> !value.isBlank())
+            .toList();
+        for (int index = 0; index < values.size(); index++) {
+            String label = values.get(index);
+            HeaderFieldKind kind = headerFieldKind(label);
+            if (kind == null) {
+                continue;
+            }
+            String value = valueAfterLabel(label);
+            int nextIndex = index + 1;
+            while (value.isBlank() && nextIndex < values.size()) {
+                String candidate = values.get(nextIndex);
+                if (headerFieldKind(candidate) != null) {
+                    break;
+                }
+                value = candidate.trim();
+                nextIndex++;
+            }
+            if (value.isBlank()) {
+                continue;
+            }
+            builder.accept(kind, label, normalizedHeaderValue(kind, value));
+        }
+    }
+
+    private String valueAfterLabel(String label) {
+        int colonIndex = Math.max(label.lastIndexOf(':'), label.lastIndexOf('：'));
+        if (colonIndex < 0 || colonIndex >= label.length() - 1) {
+            return "";
+        }
+        return label.substring(colonIndex + 1).trim();
+    }
+
+    private String normalizedHeaderValue(HeaderFieldKind kind, String value) {
+        String text = value == null ? "" : value.trim();
+        if ((kind == HeaderFieldKind.ETA || kind == HeaderFieldKind.DATE) && text.matches("\\d+(\\.0+)?")) {
+            try {
+                int serial = (int) Double.parseDouble(text);
+                if (serial > 20000 && serial < 80000) {
+                    return LocalDate.of(1899, 12, 30).plusDays(serial).toString();
+                }
+            } catch (NumberFormatException ignored) {
+                return text;
+            }
+        }
+        return text;
+    }
+
+    private HeaderFieldKind headerFieldKind(String label) {
+        String normalized = normalizeHeader(label);
+        if (normalized.isBlank()) {
+            return null;
+        }
+        if (normalized.contains("REQUESTNO") || normalized.contains("SHENQINGDANHAO") || label.contains("申请单号") || label.contains("询价单号")) {
+            return HeaderFieldKind.REQUEST_NO;
+        }
+        if (normalized.contains("SHIPNAME") || label.contains("船舶")) {
+            return HeaderFieldKind.SHIP_NAME;
+        }
+        if (normalized.contains("MATERIALSTYPE") || label.contains("物资类别")) {
+            return HeaderFieldKind.MATERIAL_TYPE;
+        }
+        if (normalized.contains("CURRENCY") || label.contains("币种")) {
+            return HeaderFieldKind.CURRENCY;
+        }
+        if (normalized.endsWith("PORT") || label.contains("建议送船港")) {
+            return HeaderFieldKind.PORT;
+        }
+        if (normalized.contains("ETA") || label.contains("预计到达时间")) {
+            return HeaderFieldKind.ETA;
+        }
+        if (normalized.equals("TO") || label.contains("收报单位")) {
+            return HeaderFieldKind.RECIPIENT_COMPANY;
+        }
+        if (normalized.contains("HANDLER") || label.contains("经办人")) {
+            return HeaderFieldKind.HANDLER_NAME;
+        }
+        if (normalized.contains("EMAIL") || label.contains("电子邮箱")) {
+            return HeaderFieldKind.HANDLER_EMAIL;
+        }
+        if (normalized.contains("DATE") || label.contains("日期")) {
+            return HeaderFieldKind.DATE;
+        }
+        if (normalized.contains("TOTALAMOUNT") || normalized.contains("QUOTENO") || normalized.contains("QUOTEDON")
+            || normalized.contains("DISCOUNT") || normalized.contains("PAYMENT") || normalized.contains("VALIDITY")
+            || normalized.contains("LEADTIME") || normalized.contains("SUPPLYPORT") || label.contains("报价")
+            || label.contains("折扣") || label.contains("支付条款") || label.contains("有效期") || label.contains("供应港口")
+            || label.contains("交付周期") || label.contains("总报价金额")) {
+            return HeaderFieldKind.RAW_ONLY;
+        }
+        return null;
     }
 
     private DetectedDocument detectDocument(Map<String, String> valuesByColumn) {
@@ -484,5 +583,94 @@ public class XlsxMaterialQuoteParser {
     }
 
     private record DetectedDocument(String documentType, String sourceFormat) {
+    }
+
+    private enum HeaderFieldKind {
+        REQUEST_NO,
+        SHIP_NAME,
+        MATERIAL_TYPE,
+        CURRENCY,
+        PORT,
+        ETA,
+        RECIPIENT_COMPANY,
+        HANDLER_NAME,
+        HANDLER_EMAIL,
+        DATE,
+        RAW_ONLY
+    }
+
+    private static class HeaderContextBuilder {
+        private String inquiryNo;
+        private String requestNo;
+        private String vesselName;
+        private String materialType;
+        private String currency;
+        private String suggestedPort;
+        private String eta;
+        private String recipientCompany;
+        private String handlerName;
+        private String handlerEmail;
+        private final Map<String, String> rawHeaderFields = new LinkedHashMap<>();
+
+        private void accept(HeaderFieldKind kind, String label, String value) {
+            String cleanedLabel = cleanLabel(label);
+            rawHeaderFields.putIfAbsent(cleanedLabel, value);
+            switch (kind) {
+                case REQUEST_NO -> acceptRequestNo(label, value);
+                case SHIP_NAME -> vesselName = firstNonBlank(vesselName, value);
+                case MATERIAL_TYPE -> materialType = firstNonBlank(materialType, value);
+                case CURRENCY -> currency = firstNonBlank(currency, value);
+                case PORT -> suggestedPort = firstNonBlank(suggestedPort, value);
+                case ETA -> eta = firstNonBlank(eta, value);
+                case RECIPIENT_COMPANY -> recipientCompany = firstNonBlank(recipientCompany, value);
+                case HANDLER_NAME -> handlerName = firstNonBlank(handlerName, value);
+                case HANDLER_EMAIL -> handlerEmail = firstNonBlank(handlerEmail, value);
+                case DATE, RAW_ONLY -> {
+                    // Keep quote-side and duplicated context in rawHeaderFields only.
+                }
+            }
+        }
+
+        private void acceptRequestNo(String label, String value) {
+            if (label.contains("询价单号") || value.toUpperCase(Locale.ROOT).contains("-Q")) {
+                inquiryNo = firstNonBlank(inquiryNo, value);
+                return;
+            }
+            if (label.contains("申请单号")) {
+                requestNo = firstNonBlank(requestNo, value);
+                return;
+            }
+            if (requestNo == null || requestNo.isBlank()) {
+                requestNo = value;
+            } else {
+                inquiryNo = firstNonBlank(inquiryNo, value);
+            }
+        }
+
+        private MaterialHeaderContext toContext() {
+            return new MaterialHeaderContext(
+                inquiryNo,
+                requestNo,
+                vesselName,
+                materialType,
+                currency,
+                suggestedPort,
+                eta,
+                recipientCompany,
+                handlerName,
+                handlerEmail,
+                Map.copyOf(rawHeaderFields)
+            );
+        }
+
+        private static String firstNonBlank(String current, String candidate) {
+            return current == null || current.isBlank() ? candidate : current;
+        }
+
+        private static String cleanLabel(String label) {
+            return label == null
+                ? ""
+                : label.replaceAll("[：:]+\\s*$", "").replaceAll("\\s+", " ").trim();
+        }
     }
 }

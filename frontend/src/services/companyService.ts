@@ -3,7 +3,9 @@ import { ApiError, getAuthSession } from "@/services/authService";
 export const companyEndpoints = {
   profile: "/api/company/profile",
   qualifications: "/api/company/qualifications",
-  qualificationDetail: (qualificationId: string | number) => `/api/company/qualifications/${encodeURIComponent(String(qualificationId))}`
+  qualificationDetail: (qualificationId: string | number) => `/api/company/qualifications/${encodeURIComponent(String(qualificationId))}`,
+  contacts: "/api/company/contacts",
+  contactDetail: (contactId: string | number) => `/api/company/contacts/${encodeURIComponent(String(contactId))}`
 } as const;
 
 export type CompanyPayload = Record<string, unknown>;
@@ -91,4 +93,26 @@ export function updateCompanyQualification(qualificationId: string | number, pay
 
 export function deleteCompanyQualification(qualificationId: string | number) {
   return requestCompanyJson(companyEndpoints.qualificationDetail(qualificationId), { method: "DELETE" });
+}
+
+export function listCompanyContacts(params: CompanyQueryParams = {}) {
+  return requestCompanyJson(`${companyEndpoints.contacts}${buildCompanyQuery(params)}`, { method: "GET" });
+}
+
+export function createCompanyContact(payload: CompanyPayload) {
+  return requestCompanyJson(companyEndpoints.contacts, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateCompanyContact(contactId: string | number, payload: CompanyPayload) {
+  return requestCompanyJson(companyEndpoints.contactDetail(contactId), {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteCompanyContact(contactId: string | number) {
+  return requestCompanyJson(companyEndpoints.contactDetail(contactId), { method: "DELETE" });
 }

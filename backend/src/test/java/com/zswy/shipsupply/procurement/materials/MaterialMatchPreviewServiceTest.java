@@ -152,7 +152,7 @@ class MaterialMatchPreviewServiceTest {
     }
 
     @Test
-    void demandCodeHitWithMismatchedNameIsDowngradedForReview() {
+    void demandOfficialCodeHitReturnsExactEvenWhenNameNeedsReview() {
         MaterialMatchPreviewService service = serviceWithItems(List.of(item(
             "110203",
             "11",
@@ -189,8 +189,53 @@ class MaterialMatchPreviewServiceTest {
             null
         )));
 
-        assertThat(response.items().get(0).matchResult()).isEqualTo("UNMATCHED");
-        assertThat(response.items().get(0).reason()).isEqualTo("NAME_SPEC_MISMATCH");
+        assertThat(response.items().get(0).matchResult()).isEqualTo("EXACT");
+        assertThat(response.items().get(0).reason()).isEqualTo("CODE_MATCH");
+    }
+
+    @Test
+    void demandOfficialCodeHitTreatsPluralAndColorAsExactCodeMatch() {
+        MaterialMatchPreviewService service = serviceWithItems(List.of(item(
+            "150601",
+            "15",
+            "Cabin Stores",
+            "1506",
+            "Bath towel",
+            "Towel (Bath)",
+            "",
+            "PCS"
+        )));
+
+        MaterialMatchPreviewResponse response = service.matchRows(List.of(new MaterialQuoteRow(
+            "DEMAND_INQUIRY",
+            "STANDARD_FQ",
+            27,
+            1,
+            28,
+            Map.of("IMPA", "150601", "DESCRIPTION", "Towels WHITE", "Size/Model", ""),
+            "150601",
+            "Towels WHITE",
+            "",
+            "1",
+            "PCS",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            false,
+            null,
+            null,
+            null,
+            null
+        )));
+
+        MaterialMatchPreviewItem matched = response.items().get(0);
+        assertThat(response.exactCount()).isEqualTo(1);
+        assertThat(matched.matchResult()).isEqualTo("EXACT");
+        assertThat(matched.reason()).isEqualTo("CODE_MATCH");
+        assertThat(matched.candidateImpaCode()).isEqualTo("150601");
     }
 
     @Test

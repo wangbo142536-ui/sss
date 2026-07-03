@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -34,6 +34,7 @@ const draftHour = ref("09");
 const draftMinute = ref("00");
 const rootRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLButtonElement | null>(null);
+const popoverStyle = ref<Record<string, string>>({});
 
 const labels = {
   date: "\u65e5\u671f",
@@ -110,10 +111,33 @@ function toggle(): void {
   syncDraft(props.modelValue);
   ensureDraftDefaults();
   open.value = !open.value;
+  if (open.value) {
+    nextTick(updatePopoverPosition);
+  }
 }
 
 function close(): void {
   open.value = false;
+}
+
+function updatePopoverPosition(): void {
+  const trigger = triggerRef.value;
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  const gap = 6;
+  const margin = 12;
+  const width = Math.min(360, Math.max(260, window.innerWidth - margin * 2));
+  const estimatedHeight = props.mode === "datetime" ? 274 : 218;
+  const opensUp = rect.bottom + gap + estimatedHeight > window.innerHeight && rect.top > estimatedHeight;
+  const left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin);
+  const top = opensUp
+    ? Math.max(margin, rect.top - gap - estimatedHeight)
+    : Math.min(rect.bottom + gap, window.innerHeight - estimatedHeight - margin);
+  popoverStyle.value = {
+    width: `${width}px`,
+    left: `${left}px`,
+    top: `${top}px`
+  };
 }
 
 function apply(): void {
@@ -149,10 +173,14 @@ function handleKeydown(event: KeyboardEvent): void {
 
 document.addEventListener("pointerdown", handleDocumentPointer);
 document.addEventListener("keydown", handleKeydown);
+window.addEventListener("resize", updatePopoverPosition);
+window.addEventListener("scroll", updatePopoverPosition, true);
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", handleDocumentPointer);
   document.removeEventListener("keydown", handleKeydown);
+  window.removeEventListener("resize", updatePopoverPosition);
+  window.removeEventListener("scroll", updatePopoverPosition, true);
 });
 
 defineExpose({
@@ -168,7 +196,7 @@ defineExpose({
         <path d="M7 3v4M17 3v4M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
       </svg>
     </button>
-    <div v-if="open" class="stable-datetime-popover">
+    <div v-if="open" class="stable-datetime-popover" :style="popoverStyle">
       <div class="stable-datetime-row">
         <span>{{ labels.date }}</span>
         <div class="stable-datetime-date-grid">

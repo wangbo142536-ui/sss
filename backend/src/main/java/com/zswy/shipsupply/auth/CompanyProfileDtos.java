@@ -57,3 +57,28 @@ record CompanyQualificationListResponse(
     List<CompanyQualificationResponse> items
 ) {
 }
+
+record CompanyContactResponse(
+    Long contactId,
+    Long companyId,
+    String contactName,
+    String contactPhone,
+    String contactEmail,
+    String status,
+    String createdAt,
+    String updatedAt
+) {
+}
+
+record CompanyContactSaveRequest(
+    String contactName,
+    String contactPhone,
+    String contactEmail,
+    String status
+) {
+}
+
+record CompanyContactListResponse(
+    List<CompanyContactResponse> items
+) {
+}

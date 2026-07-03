@@ -6,6 +6,15 @@ public record MaterialParsedDocument(
     String documentType,
     String sourceFormat,
     int headerRowIndex,
-    List<MaterialQuoteRow> rows
+    List<MaterialQuoteRow> rows,
+    MaterialHeaderContext headerContext
 ) {
+    public MaterialParsedDocument(
+        String documentType,
+        String sourceFormat,
+        int headerRowIndex,
+        List<MaterialQuoteRow> rows
+    ) {
+        this(documentType, sourceFormat, headerRowIndex, rows, MaterialHeaderContext.empty());
+    }
 }
