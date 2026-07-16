@@ -3,6 +3,7 @@ package com.zswy.shipsupply.procurement.materials;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -78,6 +79,23 @@ public class PurchaseOrderController {
         return purchaseOrderService.buyerDetail(authorizationHeader, orderId);
     }
 
+    @PutMapping("/api/procurement/purchase-orders/{orderId}/delivery-info")
+    public PurchaseOrderDetailResponse updateDeliveryInfo(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId,
+        @RequestBody PurchaseOrderDeliveryInfoUpdateRequest request
+    ) {
+        return purchaseOrderService.updateDeliveryInfo(authorizationHeader, orderId, request);
+    }
+
+    @PostMapping("/api/procurement/purchase-orders/{orderId}/remind")
+    public PurchaseOrderReminderResponse remindSuppliers(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId
+    ) {
+        return purchaseOrderService.remindSuppliers(authorizationHeader, orderId);
+    }
+
     @PostMapping("/api/procurement/purchase-orders/{orderId}/discard")
     public MaterialDemandStatusResponse discardPurchaseOrder(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
@@ -136,6 +154,16 @@ public class PurchaseOrderController {
         return purchaseOrderService.markSupplierReady(authorizationHeader, orderId, supplierOrderId);
     }
 
+    @PostMapping("/api/procurement/purchase-orders/{orderId}/supplier-orders/{supplierOrderId}/customs-documents")
+    public PurchaseOrderDetailResponse saveSupplierCustomsDocuments(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId,
+        @PathVariable Long supplierOrderId,
+        @RequestBody PurchaseOrderAttachmentSaveRequest request
+    ) {
+        return purchaseOrderService.saveSupplierCustomsDocuments(authorizationHeader, orderId, supplierOrderId, request);
+    }
+
     @PostMapping("/api/procurement/purchase-orders/{orderId}/supplier-orders/{supplierOrderId}/supplied")
     public PurchaseOrderDetailResponse markSupplierSupplied(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
@@ -144,5 +172,14 @@ public class PurchaseOrderController {
         @RequestBody PurchaseSupplierSupplyCompleteRequest request
     ) {
         return purchaseOrderService.markSupplierSupplied(authorizationHeader, orderId, supplierOrderId, request);
+    }
+
+    @PostMapping("/api/procurement/purchase-orders/{orderId}/supplier-orders/{supplierOrderId}/waiting-supply")
+    public PurchaseOrderDetailResponse markSupplierWaitingSupply(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long orderId,
+        @PathVariable Long supplierOrderId
+    ) {
+        return purchaseOrderService.markSupplierWaitingSupply(authorizationHeader, orderId, supplierOrderId);
     }
 }

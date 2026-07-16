@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,6 +24,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class MaterialDemandRepository {
 
     private static final TypeReference<Map<String, String>> RAW_COLUMNS_TYPE = new TypeReference<>() {
+    };
+    private static final TypeReference<Map<String, Object>> TRAFFIC_SERVICE_TYPE = new TypeReference<>() {
     };
     private static final TypeReference<List<MaterialMatchCandidate>> CANDIDATES_TYPE = new TypeReference<>() {
     };
@@ -66,9 +69,9 @@ public class MaterialDemandRepository {
                 INSERT INTO material_demand
                   (company_id, created_by, updated_by, demand_no, application_no, inquiry_no,
                    material_type, currency, recipient_company, handler_name, handler_email, vessel_name,
-                   supply_port_code, supply_port_name, vessel_eta, inquiry_date, source_file_name, source_file_id, document_type, header_row_index, sku_count, exact_count,
+                   supply_port_code, supply_port_name, vessel_eta, inquiry_date, source_file_name, source_file_id, document_type, header_row_index, traffic_service_json, sku_count, exact_count,
                    similar_count, unmatched_count, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SAVED')
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SAVED')
                 """,
                 Statement.RETURN_GENERATED_KEYS
             );
@@ -92,10 +95,11 @@ public class MaterialDemandRepository {
             statement.setString(18, request.sourceFileId());
             statement.setString(19, request.documentType());
             statement.setInt(20, request.headerRowIndex());
-            statement.setInt(21, stats.skuCount());
-            statement.setInt(22, stats.exactCount());
-            statement.setInt(23, stats.similarCount());
-            statement.setInt(24, stats.unmatchedCount());
+            statement.setString(21, jsonObject(request.trafficService()));
+            statement.setInt(22, stats.skuCount());
+            statement.setInt(23, stats.exactCount());
+            statement.setInt(24, stats.similarCount());
+            statement.setInt(25, stats.unmatchedCount());
             return statement;
         }, keyHolder);
         return keyHolder.getKey().longValue();
@@ -128,6 +132,7 @@ public class MaterialDemandRepository {
                 source_file_id = ?,
                 document_type = ?,
                 header_row_index = ?,
+                traffic_service_json = ?,
                 sku_count = ?,
                 exact_count = ?,
                 similar_count = ?,
@@ -152,6 +157,7 @@ public class MaterialDemandRepository {
             request.sourceFileId(),
             request.documentType(),
             request.headerRowIndex(),
+            jsonObject(request.trafficService()),
             stats.skuCount(),
             stats.exactCount(),
             stats.similarCount(),
@@ -299,10 +305,12 @@ public class MaterialDemandRepository {
         String status,
         LocalDate dateFrom,
         LocalDate dateTo,
+        String stage,
         int page,
         int size
     ) {
-        long total = count(companyId, keyword, status, dateFrom, dateTo);
+        String stageFilter = comparisonStage(stage);
+        long total = count(companyId, keyword, status, dateFrom, dateTo, stageFilter);
         int offset = (page - 1) * size;
         List<MaterialDemandSummaryResponse> items = jdbcTemplate.query(
             """
@@ -310,6 +318,7 @@ public class MaterialDemandRepository {
             FROM material_demand
             WHERE company_id = ?
               AND (? IS NULL OR status = ?)
+              AND (? IS NULL OR ? IS NOT NULL OR status IN ('COMPARING', 'ORDERED'))
               AND (? IS NULL OR inquiry_date >= ?)
               AND (? IS NULL OR inquiry_date <= ?)
               AND (
@@ -327,6 +336,8 @@ public class MaterialDemandRepository {
             (rs, rowNum) -> summary(rs),
             companyId,
             status,
+            status,
+            stageFilter,
             status,
             dateFrom,
             dateFrom,
@@ -364,7 +375,11 @@ public class MaterialDemandRepository {
         long demandId,
         MaterialComparisonQuoteSaveRequest request
     ) {
-        if (request == null || request.items() == null) {
+        if (request == null) {
+            return 0;
+        }
+        updateComparisonFixedFees(companyId, demandId, request);
+        if (request.items() == null) {
             return 0;
         }
         jdbcTemplate.update(
@@ -384,65 +399,97 @@ public class MaterialDemandRepository {
             companyId,
             demandId
         );
-        int saved = 0;
-        for (MaterialComparisonQuoteItemRequest item : request.items()) {
-            if (item == null || item.demandItemId() == null) {
-                continue;
-            }
-            jdbcTemplate.update(
-                """
-                UPDATE material_demand_item
-                SET quantity = COALESCE(?, quantity),
-                    remarks = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE company_id = ? AND demand_id = ? AND id = ?
-                """,
+        List<MaterialComparisonQuoteItemRequest> validItems = request.items().stream()
+            .filter(item -> item != null && item.demandItemId() != null)
+            .toList();
+        if (validItems.isEmpty()) {
+            return 0;
+        }
+
+        List<Object[]> args = new ArrayList<>(validItems.size());
+        for (MaterialComparisonQuoteItemRequest item : validItems) {
+            boolean selected = item.actualQuotePrice() != null;
+            args.add(new Object[] {
                 optionalText(item.quantity()),
                 optionalText(item.remarks()),
+                selected ? item.actualQuotePrice() : null,
+                selected ? optionalText(item.currency()) : null,
+                selected ? (item.quoteMarkupPercent() == null ? request.markupPercent() : item.quoteMarkupPercent()) : null,
+                selected ? item.skuId() : null,
+                selected ? optionalText(item.selectedUnit()) : null,
+                selected ? item.unitPrice() : null,
+                selected ? item.unitPriceUsd() : null,
+                selected ? optionalText(request.strategyType()) : null,
                 companyId,
                 demandId,
                 item.demandItemId()
-            );
-            if (item.actualQuotePrice() == null) {
+            });
+        }
+
+        int[] updates = jdbcTemplate.batchUpdate(
+            """
+            UPDATE material_demand_item
+            SET quantity = COALESCE(?, quantity),
+                remarks = ?,
+                actual_quote_price = ?,
+                actual_quote_currency = ?,
+                quote_markup_percent = ?,
+                quote_supplier_sku_id = ?,
+                quote_selected_unit = ?,
+                quote_unit_price = ?,
+                quote_unit_price_usd = ?,
+                quote_strategy_type = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND demand_id = ? AND id = ?
+            """,
+            args
+        );
+        int saved = 0;
+        for (int index = 0; index < validItems.size(); index++) {
+            if (validItems.get(index).actualQuotePrice() == null) {
                 continue;
             }
-            saved += jdbcTemplate.update(
-                """
-                UPDATE material_demand_item
-                SET actual_quote_price = ?,
-                    actual_quote_currency = ?,
-                    quote_markup_percent = ?,
-                    quote_supplier_sku_id = ?,
-                    quote_selected_unit = ?,
-                    quote_unit_price = ?,
-                    quote_unit_price_usd = ?,
-                    quote_strategy_type = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE company_id = ? AND demand_id = ? AND id = ?
-                """,
-                item.actualQuotePrice(),
-                optionalText(item.currency()),
-                item.quoteMarkupPercent() == null ? request.markupPercent() : item.quoteMarkupPercent(),
-                item.skuId(),
-                optionalText(item.selectedUnit()),
-                item.unitPrice(),
-                item.unitPriceUsd(),
-                optionalText(request.strategyType()),
-                companyId,
-                demandId,
-                item.demandItemId()
-            );
+            if (updates[index] > 0 || updates[index] == Statement.SUCCESS_NO_INFO) {
+                saved++;
+            }
         }
         return saved;
     }
 
-    private long count(long companyId, String keyword, String status, LocalDate dateFrom, LocalDate dateTo) {
+    private void updateComparisonFixedFees(
+        long companyId,
+        long demandId,
+        MaterialComparisonQuoteSaveRequest request
+    ) {
+        jdbcTemplate.update(
+            """
+            UPDATE material_demand
+            SET fixed_freight_fee = ?,
+                fixed_customs_fee = ?,
+                fixed_crane_fee = ?,
+                fixed_other_fee = ?,
+                traffic_service_json = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND id = ?
+            """,
+            request.fixedFreightFee(),
+            request.fixedCustomsFee(),
+            request.fixedCraneFee(),
+            request.fixedOtherFee(),
+            jsonObject(request.trafficService()),
+            companyId,
+            demandId
+        );
+    }
+
+    private long count(long companyId, String keyword, String status, LocalDate dateFrom, LocalDate dateTo, String stageFilter) {
         Long total = jdbcTemplate.queryForObject(
             """
             SELECT COUNT(*)
             FROM material_demand
             WHERE company_id = ?
               AND (? IS NULL OR status = ?)
+              AND (? IS NULL OR ? IS NOT NULL OR status IN ('COMPARING', 'ORDERED'))
               AND (? IS NULL OR inquiry_date >= ?)
               AND (? IS NULL OR inquiry_date <= ?)
               AND (
@@ -459,6 +506,8 @@ public class MaterialDemandRepository {
             companyId,
             status,
             status,
+            stageFilter,
+            status,
             dateFrom,
             dateFrom,
             dateTo,
@@ -474,6 +523,10 @@ public class MaterialDemandRepository {
         return total == null ? 0L : total;
     }
 
+    private String comparisonStage(String stage) {
+        return stage != null && "COMPARISON".equalsIgnoreCase(stage.trim()) ? "COMPARISON" : null;
+    }
+
     private List<MaterialDemandSummaryResponse> querySummaries(String sql, Object... args) {
         return jdbcTemplate.query(sql, (rs, rowNum) -> summary(rs), args);
     }
@@ -487,6 +540,11 @@ public class MaterialDemandRepository {
             safeString(rs, "inquiry_no"),
             safeString(rs, "material_type"),
             safeString(rs, "currency"),
+            nullableBigDecimal(rs, "fixed_freight_fee"),
+            nullableBigDecimal(rs, "fixed_customs_fee"),
+            nullableBigDecimal(rs, "fixed_crane_fee"),
+            nullableBigDecimal(rs, "fixed_other_fee"),
+            readTrafficService(safeString(rs, "traffic_service_json")),
             safeString(rs, "recipient_company"),
             safeString(rs, "handler_name"),
             safeString(rs, "handler_email"),
@@ -574,6 +632,17 @@ public class MaterialDemandRepository {
         }
     }
 
+    private String jsonObject(Object value) {
+        try {
+            if (value == null) {
+                return null;
+            }
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize material demand object JSON", ex);
+        }
+    }
+
     private Map<String, String> readRawColumns(String json) {
         if (json == null || json.isBlank()) {
             return Map.of();
@@ -582,6 +651,17 @@ public class MaterialDemandRepository {
             return objectMapper.readValue(json, RAW_COLUMNS_TYPE);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to read raw columns JSON", ex);
+        }
+    }
+
+    private Map<String, Object> readTrafficService(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, TRAFFIC_SERVICE_TYPE);
+        } catch (JsonProcessingException ex) {
+            return Map.of();
         }
     }
 
@@ -604,6 +684,14 @@ public class MaterialDemandRepository {
     private Long nullableLong(ResultSet rs, String columnName) throws SQLException {
         long value = rs.getLong(columnName);
         return rs.wasNull() ? null : value;
+    }
+
+    private java.math.BigDecimal nullableBigDecimal(ResultSet rs, String columnName) throws SQLException {
+        try {
+            return rs.getBigDecimal(columnName);
+        } catch (SQLException ex) {
+            return null;
+        }
     }
 
     private String timestampToString(Timestamp timestamp) {

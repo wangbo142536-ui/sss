@@ -131,6 +131,11 @@ export interface MaterialDemandSummary {
   inquiryNo?: string;
   materialType?: string;
   currency?: string;
+  fixedFreightFee?: number;
+  fixedCustomsFee?: number;
+  fixedCraneFee?: number;
+  fixedOtherFee?: number;
+  trafficService?: MaterialDemandTrafficService;
   recipientCompany?: string;
   handlerName?: string;
   handlerEmail?: string;
@@ -150,6 +155,44 @@ export interface MaterialDemandSummary {
   status?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface MaterialDemandTrafficCargo {
+  cargoName?: string;
+  weightKg?: number;
+  volumeCbm?: number;
+}
+
+export interface MaterialDemandTrafficService {
+  trafficServiceOrderId?: number;
+  bookingId?: number;
+  departurePoint?: string;
+  destinationPoint?: string;
+  startTime?: string;
+  returnTime?: string;
+  serviceNodes?: Array<{ nodeName?: string; startTime?: string; endTime?: string }>;
+  supplyMode?: "SEA" | "LAND" | string;
+  supplyAddress?: string;
+  supplyRemark?: string;
+  fixedProviderType?: "BARGE" | "SUPPLIER" | string;
+  fixedProviderId?: string | number;
+  fixedProviderName?: string;
+  shuttleNo?: string;
+  trafficVesselName?: string;
+  seaArea?: string;
+  anchorageCode?: string;
+  anchorageName?: string;
+  useTime?: string;
+  serviceType?: "PERSONNEL" | "GOODS" | string;
+  passengerType?: string;
+  passengerCount?: number;
+  cargoType?: string;
+  returnTrip?: boolean;
+  allowShare?: boolean;
+  basePrice?: number;
+  sharedPrice?: number;
+  remark?: string;
+  cargos?: MaterialDemandTrafficCargo[];
 }
 
 export interface MaterialDemandDetail {
@@ -183,6 +226,7 @@ export interface MaterialDemandSavePayload {
   sourceFileId?: string;
   documentType?: MaterialDocumentType;
   headerRowIndex?: number;
+  trafficService?: MaterialDemandTrafficService;
   items: MaterialMatchPreviewItem[];
 }
 
@@ -310,4 +354,16 @@ export interface MaterialDemandComparisonResponse {
   isOrdered?: boolean;
   isDiscarded?: boolean;
   existingPurchaseOrderId?: number;
+}
+
+export interface MaterialComparisonQuoteImportItem {
+  demandItemId?: number;
+  sourceRowNumber?: number;
+  quantity?: string;
+}
+
+export interface MaterialComparisonQuoteImportResponse {
+  demandId?: number;
+  matchedCount?: number;
+  items: MaterialComparisonQuoteImportItem[];
 }

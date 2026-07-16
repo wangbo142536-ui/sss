@@ -150,6 +150,7 @@ function apply(): void {
   const value = props.mode === "datetime" ? `${dateValue}T${draftHour.value}:${draftMinute.value}` : dateValue;
   emitValue(value);
   close();
+  nextTick(close);
 }
 
 function clear(): void {
@@ -236,8 +237,8 @@ defineExpose({
         </label>
       </div>
       <footer class="stable-datetime-actions">
-        <button type="button" @click="clear">{{ labels.clear }}</button>
-        <button type="button" class="is-primary" @click="apply">{{ labels.confirm }}</button>
+        <button type="button" @pointerdown.prevent.stop="clear">{{ labels.clear }}</button>
+        <button type="button" class="is-primary" @pointerdown.prevent.stop="apply">{{ labels.confirm }}</button>
       </footer>
     </div>
   </span>

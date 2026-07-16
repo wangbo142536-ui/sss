@@ -102,6 +102,26 @@ public class ShopService {
         );
     }
 
+    public SupplierListResponse listSuppliers(
+        String authorizationHeader,
+        String keyword,
+        String port,
+        String category,
+        String status,
+        int page,
+        int size
+    ) {
+        currentUserService.requireActiveCompanyUser(authorizationHeader);
+        return shopRepository.listSuppliers(
+            optional(keyword),
+            optional(port),
+            optional(category),
+            optional(status),
+            page <= 0 ? 1 : page,
+            size <= 0 ? 50 : Math.min(size, 200)
+        );
+    }
+
     @Transactional
     public ShopSkuResponse createSku(String authorizationHeader, ShopSkuRequest request) {
         CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);

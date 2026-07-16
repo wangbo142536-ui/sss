@@ -179,9 +179,11 @@ export default {
   },
   nav: {
     dashboard: "Dashboard",
-    basicManagement: "Basic Management",
-    materialProcurement: "Material Procurement",
-    foodProcurement: "Food Procurement Management",
+    dashboardGovernment: "Gov Dashboard",
+    basicManagement: "Basic Services",
+    procurementServices: "Procurement Services",
+    materialProcurement: "Material Procurement Services",
+    foodProcurement: "Food Procurement Services",
     impa: "IMPA Library",
     suppliers: "Suppliers",
     supplierProducts: "Company Management",
@@ -190,10 +192,27 @@ export default {
     quotes: "Quote Management",
     compare: "Comparison Management",
     orders: "Purchase Management",
-    supplierOrders: "Supplier Purchasing",
+    supplierOrders: "Procurement - Supplier",
+    supplierSettlements: "Settlement - Supplier",
+    evaluations: "Service Evaluation",
     supplyChainFinance: "Supply Chain Finance",
+    customsServices: "Customs Services",
+    portShippingServices: "Port & Shipping Services",
+    borderInspectionServices: "Border Inspection Services",
+    maritimeServices: "Maritime Services",
     crewServices: "Crew Services",
-    delivery: "Barge Management",
+    delivery: "Barge Services",
+    transportManagement: "Barge Services",
+    bargeServices: "Barge Services",
+    trafficBoat: "Service Hall",
+    trafficBoatMyServices: "My Services",
+    trafficRoutes: "Barge Management",
+    regulatoryServices: "Regulatory Services",
+    qualitySupervision: "Quality Supervision",
+    taxServices: "Tax Services",
+    financialServices: "Financial Services",
+    weatherServices: "Weather Services",
+    vesselDynamicsServices: "Vessel Dynamics Services",
     settlements: "Settlement Management",
     companyMembers: "Company Members",
     registrations: "Registration Review",
@@ -444,6 +463,30 @@ export default {
         phonePlaceholder: "Enter phone",
         emailPlaceholder: "Enter email",
         updatedAt: "Updated at"
+      },
+      vessel: {
+        title: "Vessel Management",
+        add: "Add Vessel",
+        empty: "No company vessels yet.",
+        created: "Vessel created.",
+        updated: "Vessel updated.",
+        deleted: "Vessel deleted.",
+        createFailed: "Failed to create vessel.",
+        updateFailed: "Failed to update vessel.",
+        deleteFailed: "Failed to delete vessel.",
+        deleteConfirm: "Delete this vessel?",
+        nameRequired: "Enter vessel name.",
+        vesselName: "Vessel name",
+        vesselType: "Vessel type",
+        buildDate: "Build date",
+        nextMaintenanceDate: "Next maintenance",
+        capacity: "Capacity",
+        namePlaceholder: "Enter vessel name",
+        typePlaceholder: "Enter vessel type",
+        capacityPlaceholder: "Enter passenger or cargo capacity"
+      },
+      trafficService: {
+        title: "Traffic Service"
       },
       exceptionQueue: "Exception queue",
       exceptionHint: "Handle candidate selection, manual platform code input or mark as pending.",
@@ -889,7 +932,8 @@ export default {
     risk: "Risk",
     score: "Score",
     owner: "Owner",
-    updatedAt: "Updated"
+    updatedAt: "Updated",
+    remark: "Remark"
   },
   attr: {
     spec: "Spec",
@@ -1064,6 +1108,14 @@ export default {
     matchCount: "Matched SKUs",
     totalAmount: "Total amount",
     costAmount: "Cost",
+    fixedFeeTitle: "Supply fees",
+    fixedFeeTotal: "Supply fees",
+    fixedFee: {
+      freight: "Freight",
+      customs: "Customs",
+      crane: "Crane",
+      other: "Other"
+    },
     quoteTotal: "Quote total",
     profitAmount: "Profit",
     vs: "VS",
@@ -1160,8 +1212,10 @@ export default {
       retry: "Retry",
       supplierConfirm: "Confirm",
       supplierReject: "Reject",
-      markReady: "Ready",
-      markSupplied: "Supplied"
+      remind: "Remind",
+      markReady: "Submit",
+      markSupplied: "Supplied",
+      uploadCustomsDocuments: "Upload Customs Documents"
     },
     dialog: {
       title: "Confirm Order",
@@ -1206,7 +1260,7 @@ export default {
       remark: "Remark",
       deliveryAddress: "Delivery Detail Address",
       expectedReadyAt: "Expected Ready At",
-      supplierRemark: "Supplier Remark",
+      supplierRemark: "Remark",
       discountType: "Discount Type",
       discountValue: "Discount Value",
       rejectReason: "Reject Reason",
@@ -1215,7 +1269,15 @@ export default {
       unit: "Unit",
       unitPrice: "Unit Price",
       amount: "Amount",
-      flags: "Flags"
+      flags: "Flags",
+      quoteAmount: "Quote Amount",
+      costAmount: "Cost Amount",
+      fixedFee: "Supply Fee",
+      profitAmount: "Profit",
+      total: "Total",
+      customsService: "Customs",
+      craneService: "Crane",
+      trafficBoatService: "Traffic Boat"
     },
     filter: {
       keyword: "Keyword",
@@ -1227,15 +1289,19 @@ export default {
     },
     section: {
       basicInfo: "Basic Info",
-      supplierConfirm: "Supplier Confirmation",
+      supplierConfirm: "Supply Status",
       items: "Items",
-      timeline: "Timeline"
+      timeline: "Timeline",
+      qc: "QC",
+      customsDocuments: "Customs Documents",
+      otherServices: "Service Management"
     },
     status: {
       PENDING_SUPPLIER_CONFIRM: "Pending Confirmation",
       PARTIALLY_CONFIRMED: "Partially Confirmed",
       PREPARING: "Preparing",
-      READY_TO_DELIVER: "Ready",
+      READY_TO_DELIVER: "In Transit",
+      IN_TRANSIT: "In Transit",
       PARTIALLY_READY: "Partially Ready",
       SUPPLIED: "Supplied",
       PARTIALLY_SUPPLIED: "Partially Supplied",
@@ -1246,12 +1312,16 @@ export default {
       COMPLETED: "Completed"
     },
     statusSupplier: {
-      READY_TO_DELIVER: "Ready to Supply",
+      READY_TO_DELIVER: "In Transit",
+      IN_TRANSIT: "In Transit",
       PARTIALLY_READY: "Partially Ready to Supply"
     },
     packaging: {
       UNIFIED_PACKAGING: "Platform Unified",
       SUPPLIER_PACKAGING: "Self Packaging"
+    },
+    serviceMode: {
+      package: "Package"
     },
     discount: {
       AMOUNT: "By Amount",
@@ -1270,7 +1340,14 @@ export default {
     },
     notice: {
       created: "Purchase order created.",
-      idempotent: "This plan already has a purchase order."
+      idempotent: "This plan already has a purchase order.",
+      qcRequired: "System selected 5 items for QC. Upload photos to prove packaging and quality are intact.",
+      customsDocuments: "Upload customs declaration documents for this order. Multiple files are supported.",
+      customsRequired: "Customs documents pending",
+      customsSaved: "Customs documents saved",
+      deliveryInfoSaved: "Purchase information saved",
+      remindSending: "Sending email reminder...",
+      remindSent: "Email reminder sent"
     },
     error: {
       noOrderableItems: "No orderable products",
@@ -1290,6 +1367,8 @@ export default {
       rejectReasonRequired: "Enter reject reason",
       deliveryImageRequired: "Upload a delivery completion photo",
       supplierActionFailed: "Supplier action failed",
+      saveDetailFailed: "Failed to save purchase information",
+      remindFailed: "Failed to send reminder",
       notFound: "Purchase order does not exist or is not accessible.",
       supplierOrderNotFound: "Supplier sub-order does not exist or is not accessible."
     },
@@ -1474,6 +1553,296 @@ export default {
     saveFailed: "Data dictionary failed to save.",
     deleteFailed: "Data dictionary failed to disable.",
     required: "Fill in required fields."
+  },
+  trafficService: {
+    title: "Service Management",
+    empty: "No other services",
+    emptyPrice: "No anchorage prices",
+    filter: {
+      keyword: "Keyword",
+      keywordPlaceholder: "Search service no., anchorage or remark",
+      anchoragePlaceholder: "Search anchorage name or code"
+    },
+    field: {
+      serviceNo: "Service No.",
+      seaArea: "Sea Area",
+      anchorage: "Anchorage",
+      useTime: "Use Time",
+      serviceType: "Service Type",
+      passengerType: "Passenger Type",
+      passengerCount: "Passenger Count",
+      cargoType: "Cargo Type",
+      returnTrip: "Return Trip",
+      allowShare: "Allow Shared Boat",
+      basePrice: "Base Price",
+      sharedPrice: "Shared Price",
+      supplier: "Service Provider",
+      feeType: "Type",
+      destination: "Destination",
+      planTime: "Plan Time",
+      freightAmount: "Amount",
+      price: "Price",
+      businessInfo: "Business Info",
+      businessContact: "Business Contact",
+      acceptedAt: "Accepted At",
+      trafficVessel: "Traffic Boat",
+      handler: "Handler",
+      supplierMessage: "Supplier Message",
+      departureTime: "Departure Time",
+      arrivalTime: "Arrival Time",
+      returnStartTime: "Return Start",
+      returnEndTime: "Return End",
+      signPhoto: "Signed Photo",
+      pickupPhoto: "Pickup Photo",
+      returnArrivalPhoto: "Return Arrival Photo",
+      cargoName: "Cargo Name",
+      weightKg: "Weight(kg)",
+      volumeCbm: "Volume(cbm)"
+    },
+    seaArea: {
+      north: "Northern Sea Area",
+      south: "Southern Sea Area"
+    },
+    serviceType: {
+      personnel: "Personnel",
+      goods: "Goods"
+    },
+    passengerType: {
+      normal: "Normal",
+      jointInspection: "Joint Inspection"
+    },
+    cargoType: {
+      cargo: "Cargo",
+      supply: "Supply"
+    },
+    status: {
+      active: "Active",
+      pendingConfirm: "Pending confirmation",
+      confirmed: "Waiting Service",
+      waitingService: "Waiting Service",
+      discarded: "Discarded"
+    },
+    dialog: {
+      createTitle: "New Other Service",
+      queryFreightTitle: "Query Freight",
+      editTitle: "Detail",
+      subtitle: "Maintain anchorage, use time, sharing and boat prices.",
+      compareSubtitle: "Select anchorage and anchoring time. The system filters available barge services and writes the freight."
+    },
+    section: {
+      basicInfo: "Basic Info",
+      businessInfo: "Business Info",
+      cargo: "Cargo Info",
+      transport: "Service Management",
+      supplement: "Supplement Info",
+      handling: "Handling Info"
+    },
+    action: {
+      addCargo: "Add Cargo"
+    },
+    placeholder: {
+      anchorage: "Select anchorage",
+      passengerCount: "Passengers",
+      remark: "Departure pier and other notes",
+      supplierMessage: "Enter supplier message",
+      photoUrl: "Enter image URL"
+    },
+    notice: {
+      created: "Other service created",
+      updated: "Other service saved",
+      confirmed: "Traffic boat service confirmed",
+      discarded: "Other service discarded",
+      priceSaved: "Anchorage price saved",
+      pricesSaved: "Traffic service prices saved"
+    },
+    error: {
+      loadFailed: "Other services failed to load.",
+      saveFailed: "Other service failed to save.",
+      confirmFailed: "Traffic boat service failed to confirm.",
+      discardFailed: "Other service failed to discard.",
+      anchorageRequired: "Please select anchorage.",
+      priceNotFound: "No available traffic boat price for this anchorage."
+    }
+  },
+  trafficMarketplace: {
+    tab: {
+      requests: "Boat Requests",
+      shuttles: "Shared Barges",
+      serviceHall: "Barge Services",
+      myOrders: "My Services",
+      myServices: "My Services"
+    },
+    field: {
+      requestNo: "Request No.",
+      quoteAmount: "Quote",
+      availableStartTime: "Available Time",
+      availableReturnTime: "Return Available",
+      shuttleNo: "Barge No.",
+      route: "Route",
+      departurePoint: "Departure",
+      destinationPoint: "Destination",
+      destinationSeaArea: "Sea Area",
+      destinationAnchorage: "Destination Anchorage",
+      startTime: "Start Time",
+      returnTime: "Return Time",
+      contact: "Contact",
+      contactPhone: "Phone",
+      message: "Message",
+      passengerCapacity: "Passenger Capacity",
+      cargoCapacityKg: "Cargo Weight(kg)",
+      cargoCapacityCbm: "Cargo Volume(cbm)",
+      serviceNode: "Node",
+      nodeStartTime: "Start Time",
+      nodeEndTime: "End Time",
+      currentShareCount: "Shared Count"
+    },
+    status: {
+      draft: "Pending publish",
+      pendingPublish: "Pending publish",
+      published: "Published",
+      sharing: "Publishing",
+      quoting: "Quoting",
+      awarded: "Awarded",
+      orderCreated: "Order Created",
+      cancelled: "Cancelled",
+      submitted: "Submitted",
+      updated: "Updated",
+      selected: "Selected",
+      rejected: "Rejected",
+      withdrawn: "Withdrawn",
+      full: "In progress",
+      closed: "Closed",
+      completed: "Completed",
+      finished: "Finished",
+      availableShare: "Available",
+      joinedShare: "Joined",
+      missedShare: "Missed"
+    },
+    action: {
+      createRequest: "Publish Request",
+      publishRequest: "Publish",
+      selectQuote: "Select Quote",
+      quote: "Quote",
+      submitQuote: "Submit Quote",
+      withdrawQuote: "Withdraw",
+      createShuttle: "Publish Barge",
+      publishShuttle: "Publish",
+      addShuttleNode: "Add Node",
+      closeShuttle: "Close Barge",
+      bookShuttle: "Book"
+    },
+    dialog: {
+      requestTitle: "Publish Traffic Boat Request",
+      requestSubtitle: "After publishing, traffic boat providers can quote in the service hall.",
+      quoteTitle: "Submit Traffic Boat Quote",
+      quoteSubtitle: "The buyer side recommends the lowest quote by default and can choose manually.",
+      shuttleTitle: "Barge Service",
+      shuttleSubtitle: "Set anchorage, start time, return time and shared barge price."
+    },
+    section: {
+      requestServices: "Service Management",
+      requestServicesHint: "Temporary traffic boat requests from ship agents, ready for provider quotes.",
+      shuttleServices: "Scheduled Barge Services",
+      shuttleServicesHint: "Shared barge services with fixed anchorage and departure windows.",
+      shuttleManagement: "Barge Management",
+      shuttleManagementHint: "Publish and manage your scheduled shared barge services. Published services appear in the hall.",
+      shuttleNodes: "Barge Service Nodes",
+      orderManagement: "Settlement Management",
+      orderManagementHint: "Handle traffic boat orders created from selected quotes or barge bookings."
+    },
+    notice: {
+      requestCreated: "Boat request published.",
+      requestCancelled: "Boat request cancelled.",
+      quoteSaved: "Quote submitted.",
+      quoteSelected: "Quote selected and order created.",
+      quoteWithdrawn: "Quote withdrawn.",
+      shuttleCreated: "Shared barge published.",
+      shuttleSaved: "Shared barge saved as draft.",
+      shuttlePublished: "Shared barge published.",
+      shuttleClosed: "Shared barge closed.",
+      shuttleBooked: "Shared barge booked."
+    },
+    error: {
+      loadFailed: "Traffic marketplace failed to load.",
+      saveFailed: "Boat request failed to save.",
+      cancelFailed: "Boat request failed to cancel.",
+      selectFailed: "Quote failed to select.",
+      quoteFailed: "Quote failed to submit.",
+      shuttleFailed: "Shared barge operation failed."
+    },
+    emptyRequests: "No boat requests",
+    emptyQuotes: "No quotes",
+    emptyShuttles: "No shared barges",
+    unit: {
+      person: " pax"
+    },
+    shuttleAdminTitle: "Shared Barge Services",
+    shuttleAdminSubtitle: "Traffic boat providers can publish anchorage, start/return time and shared price.",
+    placeholder: {
+      departurePoint: "e.g. Shenjiamen Pier",
+      destinationPoint: "e.g. Luhuashan Anchorage",
+      serviceNode: "e.g. Node 1",
+      shuttleSearch: "Search vessel or order no."
+    }
+  },
+  trafficFeeType: {
+    freight: "Freight",
+    customs: "Customs",
+    crane: "Crane"
+  },
+  trafficRoute: {
+    title: "Order Planning",
+    subtitle: "Group same-day traffic service orders into shared boat routes.",
+    empty: "No routes",
+    emptyStops: "No stops",
+    emptyOrders: "No unplanned orders",
+    mapPlaceholder: "Route Map",
+    mapHint: "Phase one shows route order by stops; live map comes later.",
+    filter: {
+      keyword: "Search route or supplier",
+      serviceDate: "Service date"
+    },
+    field: {
+      routeNo: "Route No.",
+      routeName: "Route Name",
+      serviceDate: "Service Date",
+      supplier: "Supplier",
+      vessel: "Boat",
+      departure: "Departure",
+      finish: "Finish",
+      orderCount: "Orders",
+      totalIncome: "Income",
+      estimatedCost: "Cost",
+      estimatedProfit: "Profit",
+      stop: "Stop",
+      plannedTime: "Planned Time",
+      contact: "Contact",
+      amount: "Amount"
+    },
+    status: {
+      draft: "Draft",
+      ready: "Ready",
+      inProgress: "In progress",
+      completed: "Completed",
+      discarded: "Discarded",
+      planned: "Planned"
+    },
+    action: {
+      create: "New Route",
+      addStop: "Add to Route",
+      confirm: "Confirm Route",
+      start: "Start",
+      complete: "Complete",
+      discard: "Discard Route"
+    },
+    notice: {
+      created: "Route created",
+      updated: "Route updated"
+    },
+    error: {
+      loadFailed: "Routes failed to load.",
+      saveFailed: "Route failed to save."
+    }
   },
   registration: {
     pendingList: "Pending Registrations",

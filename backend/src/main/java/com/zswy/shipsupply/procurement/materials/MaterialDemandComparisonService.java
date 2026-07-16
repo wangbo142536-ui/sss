@@ -59,7 +59,7 @@ public class MaterialDemandComparisonService {
         }
         materialDemandRepository.markComparingIfSaved(currentUser.companyId(), demandId);
         List<MaterialDemandItemResponse> demandItems = materialDemandRepository.items(currentUser.companyId(), demandId);
-        List<MaterialSupplierCandidate> supplierPool = onShelfSupplierPool();
+        SupplierCandidateIndex supplierPool = SupplierCandidateIndex.from(onShelfSupplierPool());
         Long existingPurchaseOrderId = purchaseOrderRepository.findFirstActiveOrderIdByDemand(currentUser.companyId(), demandId);
         if (existingPurchaseOrderId != null && existingPurchaseOrderId <= 0) {
             existingPurchaseOrderId = null;
@@ -103,7 +103,7 @@ public class MaterialDemandComparisonService {
             .filter(candidate -> itemId != null && itemId.equals(candidate.itemId()))
             .findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_DEMAND_ITEM_NOT_FOUND"));
-        return draftItem(item, onShelfSupplierPool()).candidates();
+        return draftItem(item, SupplierCandidateIndex.from(onShelfSupplierPool())).candidates();
     }
 
     private List<MaterialSupplierCandidate> onShelfSupplierPool() {
@@ -122,7 +122,7 @@ public class MaterialDemandComparisonService {
 
     private ComparisonItemDraft draftItem(
         MaterialDemandItemResponse item,
-        List<MaterialSupplierCandidate> supplierPool
+        SupplierCandidateIndex supplierPool
     ) {
         BigDecimal pricingQuantity = parsePositiveQuantity(item.quantity());
         String pricingQuantityNote = pricingQuantity == null ? "璁′环鏁伴噺鎸?1" : null;
@@ -145,7 +145,7 @@ public class MaterialDemandComparisonService {
 
     private List<MaterialSupplierCandidate> supplierCandidates(
         MaterialDemandItemResponse item,
-        List<MaterialSupplierCandidate> supplierPool,
+        SupplierCandidateIndex supplierPool,
         BigDecimal requestedQty
     ) {
         List<String> nameTokens = mergeTokens(
@@ -160,7 +160,10 @@ public class MaterialDemandComparisonService {
         addCode(platformCodes, item.candidateImpaCode());
         String preferredCategory = preferredCategory(item);
 
-        return supplierPool.stream()
+        List<IndexedSupplierCandidate> indexedCandidates = supplierPool.indexedCandidates(platformCodes, supplierSku);
+        List<IndexedSupplierCandidate> candidatesToScore = indexedCandidates.isEmpty() ? supplierPool.fallbackCandidates(nameTokens, preferredCategory) : indexedCandidates;
+
+        return candidatesToScore.stream()
             .map(candidate -> scoreCandidate(candidate, supplierSku, platformCodes, nameTokens, specTokens, preferredCategory, requestedQty))
             .filter(candidate -> candidate.rank() > 0)
             .sorted(candidateComparator())
@@ -170,7 +173,7 @@ public class MaterialDemandComparisonService {
     }
 
     private ScoredSupplierCandidate scoreCandidate(
-        MaterialSupplierCandidate candidate,
+        IndexedSupplierCandidate indexedCandidate,
         String supplierSku,
         Set<String> platformCodes,
         List<String> nameTokens,
@@ -178,11 +181,12 @@ public class MaterialDemandComparisonService {
         String preferredCategory,
         BigDecimal requestedQty
     ) {
+        MaterialSupplierCandidate candidate = indexedCandidate.candidate();
         boolean codeMatch = platformCodes.stream()
             .anyMatch(code -> code.equals(normalizeCode(candidate.impaCode())) || code.equals(normalizeCode(candidate.platformCode())));
         boolean supplierSkuMatch = !supplierSku.isBlank() && supplierSku.equals(normalizeCode(candidate.supplierSkuCode()));
-        double nameScore = coverage(nameTokens, tokenize(candidate.productName()));
-        double specScore = coverage(specTokens, mergeTokens(tokenize(candidate.attributeSummary()), tokenize(candidate.packageSpec())));
+        double nameScore = coverage(nameTokens, indexedCandidate.nameTokens());
+        double specScore = coverage(specTokens, indexedCandidate.specTokens());
         boolean nameSpecMatch = nameScore >= 0.6 || (!nameTokens.isEmpty() && nameScore > 0 && (specTokens.isEmpty() || specScore > 0));
         boolean categoryMatch = preferredCategory != null && preferredCategory.equals(candidate.categoryCode());
 
@@ -201,10 +205,6 @@ public class MaterialDemandComparisonService {
             rank = 2;
             matchType = "NAME_SPEC_MATCH";
             reason = specTokens.isEmpty() || specScore > 0 ? "NAME_SPEC_MATCH" : "NAME_MATCH";
-        } else if (categoryMatch) {
-            rank = 1;
-            matchType = "CATEGORY_MATCH";
-            reason = "CATEGORY_MATCH";
         }
         return new ScoredSupplierCandidate(
             candidate.withMatch(matchType, reason),
@@ -592,5 +592,118 @@ public class MaterialDemandComparisonService {
         MaterialDemandComparisonStrategy strategy,
         Map<Long, MaterialSupplierCandidate> candidateByItemId
     ) {
+    }
+
+    private record IndexedSupplierCandidate(
+        MaterialSupplierCandidate candidate,
+        List<String> nameTokens,
+        List<String> specTokens
+    ) {
+    }
+
+    private record SupplierCandidateIndex(
+        List<IndexedSupplierCandidate> all,
+        Map<String, List<IndexedSupplierCandidate>> byCode,
+        Map<String, List<IndexedSupplierCandidate>> bySupplierSku,
+        Map<String, List<IndexedSupplierCandidate>> byNameToken,
+        Map<String, List<IndexedSupplierCandidate>> byCategory
+    ) {
+        static SupplierCandidateIndex from(List<MaterialSupplierCandidate> candidates) {
+            List<IndexedSupplierCandidate> prepared = prepare(candidates);
+            return new SupplierCandidateIndex(
+                prepared,
+                indexByCode(prepared),
+                prepared.stream()
+                    .filter(candidate -> !normalizeCandidateCode(candidate.candidate().supplierSkuCode()).isBlank())
+                    .collect(Collectors.groupingBy(
+                        candidate -> normalizeCandidateCode(candidate.candidate().supplierSkuCode()),
+                        java.util.LinkedHashMap::new,
+                        Collectors.toList()
+                    )),
+                indexByNameToken(prepared),
+                prepared.stream()
+                    .filter(candidate -> candidate.candidate().categoryCode() != null && !candidate.candidate().categoryCode().isBlank())
+                    .collect(Collectors.groupingBy(
+                        candidate -> candidate.candidate().categoryCode(),
+                        java.util.LinkedHashMap::new,
+                        Collectors.toList()
+                    ))
+            );
+        }
+
+        List<IndexedSupplierCandidate> indexedCandidates(Set<String> platformCodes, String supplierSku) {
+            LinkedHashSet<IndexedSupplierCandidate> matches = new LinkedHashSet<>();
+            platformCodes.forEach(code -> matches.addAll(byCode.getOrDefault(code, List.of())));
+            if (!supplierSku.isBlank()) {
+                matches.addAll(bySupplierSku.getOrDefault(supplierSku, List.of()));
+            }
+            return List.copyOf(matches);
+        }
+
+        List<IndexedSupplierCandidate> fallbackCandidates(List<String> nameTokens, String preferredCategory) {
+            LinkedHashSet<IndexedSupplierCandidate> matches = new LinkedHashSet<>();
+            nameTokens.forEach(token -> matches.addAll(byNameToken.getOrDefault(token, List.of())));
+            if (matches.isEmpty() && preferredCategory != null && !preferredCategory.isBlank()) {
+                matches.addAll(byCategory.getOrDefault(preferredCategory, List.of()));
+            }
+            return matches.isEmpty() ? all : List.copyOf(matches);
+        }
+
+        private static List<IndexedSupplierCandidate> prepare(List<MaterialSupplierCandidate> candidates) {
+            return candidates.stream()
+                .map(candidate -> new IndexedSupplierCandidate(
+                    candidate,
+                    tokenizeCandidate(candidate.productName()),
+                    mergeCandidateTokens(tokenizeCandidate(candidate.attributeSummary()), tokenizeCandidate(candidate.packageSpec()))
+                ))
+                .toList();
+        }
+
+        private static Map<String, List<IndexedSupplierCandidate>> indexByCode(List<IndexedSupplierCandidate> candidates) {
+            Map<String, List<IndexedSupplierCandidate>> index = new java.util.LinkedHashMap<>();
+            candidates.forEach(candidate -> {
+                addIndexCandidate(index, normalizeCandidateCode(candidate.candidate().impaCode()), candidate);
+                addIndexCandidate(index, normalizeCandidateCode(candidate.candidate().platformCode()), candidate);
+            });
+            return index;
+        }
+
+        private static Map<String, List<IndexedSupplierCandidate>> indexByNameToken(List<IndexedSupplierCandidate> candidates) {
+            Map<String, List<IndexedSupplierCandidate>> index = new java.util.LinkedHashMap<>();
+            candidates.forEach(candidate -> candidate.nameTokens().forEach(token -> addIndexCandidate(index, token, candidate)));
+            return index;
+        }
+
+        private static void addIndexCandidate(Map<String, List<IndexedSupplierCandidate>> index, String code, IndexedSupplierCandidate candidate) {
+            if (code.isBlank()) return;
+            index.computeIfAbsent(code, ignored -> new ArrayList<>()).add(candidate);
+        }
+
+        private static String normalizeCandidateCode(String value) {
+            if (value == null) {
+                return "";
+            }
+            return value.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+        }
+
+        private static List<String> tokenizeCandidate(String value) {
+            if (value == null || value.isBlank()) {
+                return List.of();
+            }
+            List<String> tokens = new ArrayList<>();
+            for (String token : TOKEN_SPLITTER.split(value.toUpperCase(Locale.ROOT))) {
+                if (token.length() < 3 || STOP_WORDS.contains(token) || token.chars().allMatch(Character::isDigit)) {
+                    continue;
+                }
+                tokens.add(token);
+            }
+            return tokens.stream().distinct().toList();
+        }
+
+        private static List<String> mergeCandidateTokens(List<String> first, List<String> second) {
+            List<String> merged = new ArrayList<>(first);
+            merged.addAll(second);
+            return merged.stream().distinct().toList();
+        }
     }
 }

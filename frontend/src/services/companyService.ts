@@ -5,7 +5,10 @@ export const companyEndpoints = {
   qualifications: "/api/company/qualifications",
   qualificationDetail: (qualificationId: string | number) => `/api/company/qualifications/${encodeURIComponent(String(qualificationId))}`,
   contacts: "/api/company/contacts",
-  contactDetail: (contactId: string | number) => `/api/company/contacts/${encodeURIComponent(String(contactId))}`
+  contactDetail: (contactId: string | number) => `/api/company/contacts/${encodeURIComponent(String(contactId))}`,
+  vessels: "/api/company/vessels",
+  vesselDetail: (vesselId: string | number) => `/api/company/vessels/${encodeURIComponent(String(vesselId))}`,
+  valueAddedServices: "/api/company/value-added-services"
 } as const;
 
 export type CompanyPayload = Record<string, unknown>;
@@ -115,4 +118,38 @@ export function updateCompanyContact(contactId: string | number, payload: Compan
 
 export function deleteCompanyContact(contactId: string | number) {
   return requestCompanyJson(companyEndpoints.contactDetail(contactId), { method: "DELETE" });
+}
+
+export function listCompanyVessels(params: CompanyQueryParams = {}) {
+  return requestCompanyJson(`${companyEndpoints.vessels}${buildCompanyQuery(params)}`, { method: "GET" });
+}
+
+export function createCompanyVessel(payload: CompanyPayload) {
+  return requestCompanyJson(companyEndpoints.vessels, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateCompanyVessel(vesselId: string | number, payload: CompanyPayload) {
+  return requestCompanyJson(companyEndpoints.vesselDetail(vesselId), {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteCompanyVessel(vesselId: string | number) {
+  return requestCompanyJson(companyEndpoints.vesselDetail(vesselId), { method: "DELETE" });
+}
+
+export function getCompanyValueAddedServices(companyId?: string | number) {
+  const query = companyId == null || String(companyId).trim() === "" ? "" : `?companyId=${encodeURIComponent(String(companyId))}`;
+  return requestCompanyJson(`${companyEndpoints.valueAddedServices}${query}`, { method: "GET" });
+}
+
+export function updateCompanyValueAddedServices(payload: CompanyPayload) {
+  return requestCompanyJson(companyEndpoints.valueAddedServices, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
 }

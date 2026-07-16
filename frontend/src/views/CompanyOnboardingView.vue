@@ -224,7 +224,7 @@ const submit = async () => {
 };
 
 const enterWorkbench = async () => {
-  await router.push(resolveAuthRoute({ token: "", roles: [], permissions: [], menus: [], defaultRoute: "/dashboard", profileStatus: "ACTIVE" }));
+  await router.push(resolveAuthRoute({ token: "", roles: [], permissions: [], menus: [], defaultRoute: "/dashboard-government", profileStatus: "ACTIVE" }));
 };
 </script>
 

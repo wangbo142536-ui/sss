@@ -153,14 +153,26 @@ class MaterialDemandServiceTest {
         when(currentUserService.requireActiveCompanyUser("Bearer company-token"))
             .thenReturn(new CurrentUserContext(10L, 1L, "ACTIVE", "ACTIVE"));
         MaterialDemandListResponse listResponse = new MaterialDemandListResponse(List.of(summary(101L)), 1, 20, 1L);
-        when(materialDemandRepository.list(1L, "APP-001", "SAVED", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30), 1, 20))
+        when(materialDemandRepository.list(1L, "APP-001", "SAVED", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30), null, 1, 20))
             .thenReturn(listResponse);
         when(materialDemandRepository.findSummaryById(1L, 101L)).thenReturn(Optional.of(summary(101L)));
         when(materialDemandRepository.items(1L, 101L)).thenReturn(List.of(itemResponse(201L)));
 
-        assertThat(service.list("Bearer company-token", "APP-001", "SAVED", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30), 1, 20).total())
+        assertThat(service.list("Bearer company-token", "APP-001", "SAVED", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30), null, 1, 20).total())
             .isEqualTo(1L);
         assertThat(service.detail("Bearer company-token", 101L).items()).hasSize(1);
+    }
+
+    @Test
+    void passesComparisonStageToDemandRepository() {
+        when(currentUserService.requireActiveCompanyUser("Bearer company-token"))
+            .thenReturn(new CurrentUserContext(10L, 1L, "ACTIVE", "ACTIVE"));
+        MaterialDemandListResponse listResponse = new MaterialDemandListResponse(List.of(summary(101L)), 1, 50, 1L);
+        when(materialDemandRepository.list(1L, null, null, null, null, "COMPARISON", 1, 50))
+            .thenReturn(listResponse);
+
+        assertThat(service.list("Bearer company-token", null, null, null, null, "COMPARISON", 1, 50).items())
+            .hasSize(1);
     }
 
     @Test

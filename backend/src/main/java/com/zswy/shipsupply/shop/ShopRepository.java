@@ -299,6 +299,82 @@ public class ShopRepository {
         return new ShopSkuListResponse(items, total, page, size);
     }
 
+    public SupplierListResponse listSuppliers(String keyword, String port, String category, String status, int page, int size) {
+        String baseSql = """
+            FROM company c
+            LEFT JOIN shop_store s ON s.company_id = c.id
+            LEFT JOIN (
+              SELECT company_id,
+                     COUNT(*) AS sku_count,
+                     GROUP_CONCAT(DISTINCT NULLIF(service_ports, '') SEPARATOR ', ') AS sku_ports,
+                     GROUP_CONCAT(DISTINCT NULLIF(category_name, '') SEPARATOR ', ') AS sku_categories
+              FROM shop_sku
+              GROUP BY company_id
+            ) sku ON sku.company_id = c.id
+            LEFT JOIN (
+              SELECT supplier_id AS company_id,
+                     COUNT(*) AS legacy_sku_count,
+                     GROUP_CONCAT(DISTINCT NULLIF(service_port, '') SEPARATOR ', ') AS legacy_ports
+              FROM supplier_sku
+              WHERE enabled = 1
+              GROUP BY supplier_id
+            ) legacy_sku ON legacy_sku.company_id = c.id
+            LEFT JOIN (
+              SELECT company_id,
+                     COUNT(*) AS user_count
+              FROM sys_user
+              WHERE status = 'ACTIVE'
+              GROUP BY company_id
+            ) active_user ON active_user.company_id = c.id
+            WHERE c.company_type = 'SUPPLIER'
+              AND (
+                COALESCE(active_user.user_count, 0) > 0
+                OR COALESCE(sku.sku_count, 0) > 0
+                OR COALESCE(legacy_sku.legacy_sku_count, 0) > 0
+              )
+            """;
+        List<Object> args = new ArrayList<>();
+        StringBuilder filters = new StringBuilder();
+        appendLikeFilter(filters, args, keyword, "c.company_name", "s.shop_name", "c.contact_name", "c.contact_phone");
+        appendLikeFilter(filters, args, port, "s.service_ports", "sku.sku_ports", "legacy_sku.legacy_ports");
+        appendLikeFilter(filters, args, category, "s.main_categories", "sku.sku_categories");
+        String normalizedStatus = value(status, null);
+        if (normalizedStatus != null && !"all".equalsIgnoreCase(normalizedStatus)) {
+            if ("active".equalsIgnoreCase(normalizedStatus) || "ACTIVE".equalsIgnoreCase(normalizedStatus)) {
+                filters.append(" AND c.status = 'ACTIVE'");
+            } else if ("warning".equalsIgnoreCase(normalizedStatus) || "WARNING".equalsIgnoreCase(normalizedStatus)) {
+                filters.append(" AND c.status <> 'ACTIVE'");
+            }
+        }
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) " + baseSql + filters, Long.class, args.toArray());
+        List<Object> queryArgs = new ArrayList<>(args);
+        queryArgs.add(size);
+        queryArgs.add((page - 1) * size);
+        List<SupplierSummaryResponse> items = jdbcTemplate.query(
+            """
+            SELECT
+              c.id AS company_id,
+              c.company_name,
+              c.contact_name,
+              c.contact_phone,
+              c.status,
+              COALESCE(s.service_ports, sku.sku_ports, legacy_sku.legacy_ports, '') AS port,
+              COALESCE(s.main_categories, sku.sku_categories, '') AS category,
+              COALESCE(sku.sku_count, 0) + COALESCE(legacy_sku.legacy_sku_count, 0) AS sku_count,
+              GREATEST(c.updated_at, COALESCE(s.updated_at, c.updated_at)) AS updated_at
+            """ + baseSql + filters + """
+            ORDER BY
+              CASE WHEN c.status = 'ACTIVE' THEN 0 ELSE 1 END ASC,
+              COALESCE(sku.sku_count, 0) + COALESCE(legacy_sku.legacy_sku_count, 0) DESC,
+              c.id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (rs, rowNum) -> supplier(rs),
+            queryArgs.toArray()
+        );
+        return new SupplierListResponse(items, total == null ? 0 : total, page, size);
+    }
+
     public boolean deleteSku(long companyId, long skuId) {
         return jdbcTemplate.update("DELETE FROM shop_sku WHERE company_id = ? AND id = ?", companyId, skuId) > 0;
     }
@@ -770,6 +846,27 @@ public class ShopRepository {
         );
     }
 
+    private SupplierSummaryResponse supplier(ResultSet rs) throws SQLException {
+        long companyId = rs.getLong("company_id");
+        long skuCount = rs.getLong("sku_count");
+        String status = "ACTIVE".equalsIgnoreCase(value(rs.getString("status"), "")) ? "active" : "warning";
+        int score = Math.min(99, 88 + (int) Math.min(9, skuCount / 80));
+        return new SupplierSummaryResponse(
+            companyId,
+            "SUP-" + companyId,
+            rs.getString("company_name"),
+            value(rs.getString("port"), "--"),
+            value(rs.getString("category"), "--"),
+            String.valueOf(score),
+            status,
+            status,
+            skuCount,
+            rs.getString("contact_name"),
+            rs.getString("contact_phone"),
+            string(rs.getTimestamp("updated_at"))
+        );
+    }
+
     private List<ShopSkuAttributeResponse> attributes(long skuId) {
         return jdbcTemplate.query(
             "SELECT * FROM shop_sku_attribute WHERE sku_id = ? ORDER BY sort_order ASC, id ASC",
@@ -830,6 +927,22 @@ public class ShopRepository {
 
     private <T> List<T> list(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    private void appendLikeFilter(StringBuilder filters, List<Object> args, String keyword, String... columns) {
+        String value = value(keyword, null);
+        if (value == null || columns.length == 0) {
+            return;
+        }
+        filters.append(" AND (");
+        for (int index = 0; index < columns.length; index++) {
+            if (index > 0) {
+                filters.append(" OR ");
+            }
+            filters.append(columns[index]).append(" LIKE CONCAT('%', ?, '%')");
+            args.add(value);
+        }
+        filters.append(")");
     }
 
     private String json(Object value) {

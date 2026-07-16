@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { t } from "@/i18n";
-
 withDefaults(
   defineProps<{
     active?: boolean;
@@ -18,8 +16,10 @@ withDefaults(
     <slot />
     <Transition name="fade">
       <div v-if="active" class="loading-overlay" aria-live="polite">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        <strong>{{ label || t("common.loading") }}</strong>
+        <div class="loading-pill">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          <strong>{{ label || "加载中" }}</strong>
+        </div>
       </div>
     </Transition>
   </div>

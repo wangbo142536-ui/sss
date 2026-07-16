@@ -71,14 +71,19 @@ public class FileStorageService {
     }
 
     private boolean canAccess(AuthenticatedUser user, StoredFileResponse file) {
-        boolean isAdmin = authRepository.rolesForUser(user.id()).stream()
-            .anyMatch(role -> "PLATFORM_ADMIN".equals(role.roleCode()));
+        var roles = authRepository.rolesForUser(user.id());
+        boolean isAdmin = roles.stream().anyMatch(role -> "PLATFORM_ADMIN".equals(role.roleCode()));
         if (isAdmin) {
             return true;
         }
         if (Objects.equals(file.uploaderUserId(), user.id())) {
             return true;
         }
-        return file.qualificationCompanyId() != null && Objects.equals(file.qualificationCompanyId(), user.companyId());
+        if (file.qualificationCompanyId() != null && Objects.equals(file.qualificationCompanyId(), user.companyId())) {
+            return true;
+        }
+        boolean regulatory = roles.stream().anyMatch(role ->
+            role.roleCode() != null && role.roleCode().toUpperCase().contains("REGULATORY"));
+        return authRepository.hasBusinessFileAccess(file.fileId(), user.companyId(), regulatory);
     }
 }

@@ -103,5 +103,55 @@ public class CompanyProfileController {
     ) {
         companyProfileService.deleteContact(authorizationHeader, contactId);
     }
+
+    @GetMapping("/vessels")
+    public CompanyVesselListResponse vessels(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestParam(value = "status", required = false) String status
+    ) {
+        return companyProfileService.vessels(authorizationHeader, status);
+    }
+
+    @GetMapping("/value-added-services")
+    public CompanyValueAddedServiceResponse valueAddedServices(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestParam(value = "companyId", required = false) Long companyId
+    ) {
+        return companyProfileService.valueAddedServices(authorizationHeader, companyId);
+    }
+
+    @PutMapping("/value-added-services")
+    public CompanyValueAddedServiceResponse saveValueAddedServices(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestBody CompanyValueAddedServiceSaveRequest request
+    ) {
+        return companyProfileService.saveValueAddedServices(authorizationHeader, request);
+    }
+
+    @PostMapping("/vessels")
+    public CompanyVesselResponse createVessel(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestBody CompanyVesselSaveRequest request
+    ) {
+        return companyProfileService.createVessel(authorizationHeader, request);
+    }
+
+    @PutMapping("/vessels/{vesselId}")
+    public CompanyVesselResponse updateVessel(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long vesselId,
+        @RequestBody CompanyVesselSaveRequest request
+    ) {
+        return companyProfileService.updateVessel(authorizationHeader, vesselId, request);
+    }
+
+    @DeleteMapping("/vessels/{vesselId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteVessel(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long vesselId
+    ) {
+        companyProfileService.deleteVessel(authorizationHeader, vesselId);
+    }
 }
 

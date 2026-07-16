@@ -35,11 +35,16 @@ class PurchaseOrderServiceTest {
     @Mock
     private PurchaseOrderRepository purchaseOrderRepository;
 
+    @Mock
+    private SettlementOrderService settlementOrderService;
+
     private PurchaseOrderService service;
 
     @BeforeEach
     void setUp() {
-        service = new PurchaseOrderService(currentUserService, comparisonService, purchaseOrderRepository);
+        service = new PurchaseOrderService(
+            currentUserService, comparisonService, purchaseOrderRepository, null, settlementOrderService
+        );
     }
 
     @Test
@@ -72,7 +77,7 @@ class PurchaseOrderServiceTest {
         assertThat(response.status()).isEqualTo("PENDING_SUPPLIER_CONFIRM");
         assertThat(response.supplierOrderCount()).isEqualTo(2);
         assertThat(response.itemCount()).isEqualTo(2);
-        assertThat(response.totalAmount()).isEqualByComparingTo("44.55");
+        assertThat(response.totalAmount()).isEqualByComparingTo("40.50");
 
         ArgumentCaptor<PurchaseOrderDraft> draftCaptor = ArgumentCaptor.forClass(PurchaseOrderDraft.class);
         verify(purchaseOrderRepository).insertOrder(draftCaptor.capture());
@@ -309,6 +314,7 @@ class PurchaseOrderServiceTest {
 
         assertThat(response.purchaseOrderId()).isEqualTo(501L);
         assertThat(response.redirectTo()).isEqualTo("/orders/501");
+        verify(settlementOrderService).ensureForPurchaseOrder(22L, 10L, 501L);
         verify(comparisonService, never()).comparison("Bearer buyer", 101L);
         verify(purchaseOrderRepository, never()).insertOrder(any());
     }

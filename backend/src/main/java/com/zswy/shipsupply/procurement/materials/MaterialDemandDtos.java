@@ -24,6 +24,7 @@ record MaterialDemandSaveRequest(
     String sourceFileId,
     String documentType,
     Integer headerRowIndex,
+    Map<String, Object> trafficService,
     List<MaterialDemandItemRequest> items
 ) {
     MaterialDemandSaveRequest(
@@ -40,7 +41,7 @@ record MaterialDemandSaveRequest(
         Integer headerRowIndex,
         List<MaterialDemandItemRequest> items
     ) {
-        this(demandId, demandNo, applicationNo, null, null, null, null, null, null, vesselName, supplyPortCode, supplyPortName, vesselEta, inquiryDate, sourceFileName, null, documentType, headerRowIndex, items);
+        this(demandId, demandNo, applicationNo, null, null, null, null, null, null, vesselName, supplyPortCode, supplyPortName, vesselEta, inquiryDate, sourceFileName, null, documentType, headerRowIndex, null, items);
     }
 }
 
@@ -264,6 +265,11 @@ record MaterialDemandSummaryResponse(
     String inquiryNo,
     String materialType,
     String currency,
+    java.math.BigDecimal fixedFreightFee,
+    java.math.BigDecimal fixedCustomsFee,
+    java.math.BigDecimal fixedCraneFee,
+    java.math.BigDecimal fixedOtherFee,
+    Map<String, Object> trafficService,
     String recipientCompany,
     String handlerName,
     String handlerEmail,
@@ -304,7 +310,7 @@ record MaterialDemandSummaryResponse(
         String createdAt,
         String updatedAt
     ) {
-        this(demandId, demandNo, applicationNo, null, null, null, null, null, null, vesselName, supplyPortCode, supplyPortName, vesselEta, inquiryDate, sourceFileName, null, documentType, headerRowIndex, skuCount, exactCount, similarCount, unmatchedCount, status, createdAt, updatedAt);
+        this(demandId, demandNo, applicationNo, null, null, null, null, null, null, null, null, null, null, null, vesselName, supplyPortCode, supplyPortName, vesselEta, inquiryDate, sourceFileName, null, documentType, headerRowIndex, skuCount, exactCount, similarCount, unmatchedCount, status, createdAt, updatedAt);
     }
 
     @JsonProperty("itemCount")
@@ -559,6 +565,11 @@ record MaterialDemandStats(
 record MaterialComparisonQuoteSaveRequest(
     String strategyType,
     java.math.BigDecimal markupPercent,
+    java.math.BigDecimal fixedFreightFee,
+    java.math.BigDecimal fixedCustomsFee,
+    java.math.BigDecimal fixedCraneFee,
+    java.math.BigDecimal fixedOtherFee,
+    Map<String, Object> trafficService,
     List<MaterialComparisonQuoteItemRequest> items
 ) {
 }
@@ -580,5 +591,19 @@ record MaterialComparisonQuoteItemRequest(
 record MaterialComparisonQuoteSaveResponse(
     Long demandId,
     int savedCount
+) {
+}
+
+record MaterialComparisonQuoteImportResponse(
+    Long demandId,
+    int matchedCount,
+    List<MaterialComparisonQuoteImportItem> items
+) {
+}
+
+record MaterialComparisonQuoteImportItem(
+    Long demandItemId,
+    Integer sourceRowNumber,
+    String quantity
 ) {
 }

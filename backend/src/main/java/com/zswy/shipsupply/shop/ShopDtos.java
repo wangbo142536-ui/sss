@@ -48,6 +48,30 @@ record ShopSkuListResponse(
 ) {
 }
 
+record SupplierListResponse(
+    List<SupplierSummaryResponse> items,
+    long total,
+    int page,
+    int size
+) {
+}
+
+record SupplierSummaryResponse(
+    Long companyId,
+    String id,
+    String name,
+    String port,
+    String category,
+    String score,
+    String status,
+    String qualificationStatus,
+    Long skuCount,
+    String contactName,
+    String contactPhone,
+    String updatedAt
+) {
+}
+
 record ShopSkuRequest(
     String productType,
     String categoryCode,

@@ -9,6 +9,7 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +43,13 @@ public class PurchaseOrderRepository {
                    md.currency AS source_currency,
                    md.recipient_company AS source_recipient_company,
                    md.handler_name AS source_handler_name,
-                   md.handler_email AS source_handler_email
+                   md.handler_email AS source_handler_email,
+                   md.fixed_freight_fee AS source_fixed_freight_fee,
+                   md.fixed_customs_fee AS source_fixed_customs_fee,
+                   md.fixed_crane_fee AS source_fixed_crane_fee,
+                   md.fixed_other_fee AS source_fixed_other_fee,
+                   JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.supplyMode')) AS source_supply_mode,
+                   JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.fixedProviderType')) AS source_fixed_provider_type
             FROM purchase_order po
             LEFT JOIN material_demand md ON md.id = po.demand_id
             LEFT JOIN (
@@ -170,12 +177,11 @@ public class PurchaseOrderRepository {
             """
             SELECT order_no
             FROM purchase_order
-            WHERE buyer_company_id = ? AND order_no LIKE CONCAT(?, '%')
+            WHERE order_no LIKE CONCAT(?, '%')
             ORDER BY order_no DESC
             LIMIT 1
             """,
             (rs, rowNum) -> rs.getString("order_no"),
-            buyerCompanyId,
             prefix
         );
         if (existing.isEmpty()) {
@@ -219,6 +225,53 @@ public class PurchaseOrderRepository {
         return findBuyerDetail(draft.buyerCompanyId(), orderId).orElseThrow();
     }
 
+    public void linkBargeBookingToPurchaseOrder(Long buyerCompanyId, Long purchaseOrderId) {
+        jdbcTemplate.update(
+            """
+            UPDATE traffic_shuttle_booking booking
+            JOIN purchase_order purchase
+              ON purchase.id = ? AND purchase.buyer_company_id = ?
+            LEFT JOIN material_demand demand ON demand.id = purchase.demand_id
+            SET booking.purchase_order_id = purchase.id,
+                booking.updated_at = CURRENT_TIMESTAMP
+            WHERE booking.requester_company_id = purchase.buyer_company_id
+              AND booking.status <> 'CANCELLED'
+              AND (
+                booking.purchase_order_id = purchase.id
+                OR booking.request_id = purchase.demand_id
+                OR JSON_UNQUOTE(JSON_EXTRACT(demand.traffic_service_json, '$.bookingId')) = CAST(booking.id AS CHAR)
+                OR JSON_UNQUOTE(JSON_EXTRACT(demand.traffic_service_json, '$.trafficServiceOrderId')) = CAST(booking.traffic_service_order_id AS CHAR)
+              )
+            """,
+            purchaseOrderId,
+            buyerCompanyId
+        );
+        jdbcTemplate.update(
+            """
+            UPDATE traffic_service_order traffic
+            JOIN traffic_shuttle_booking booking
+              ON booking.traffic_service_order_id = traffic.id AND booking.status <> 'CANCELLED'
+            JOIN purchase_order purchase
+              ON purchase.id = ? AND purchase.buyer_company_id = ?
+            LEFT JOIN material_demand demand ON demand.id = purchase.demand_id
+            SET traffic.purchase_order_id = purchase.id,
+                traffic.updated_at = CURRENT_TIMESTAMP
+            WHERE traffic.requester_company_id = purchase.buyer_company_id
+              AND traffic.status <> 'DISCARDED'
+              AND (traffic.purchase_order_id IS NULL OR traffic.purchase_order_id = purchase.id)
+              AND (
+                booking.purchase_order_id = purchase.id
+                OR booking.request_id = purchase.demand_id
+                OR traffic.demand_id = purchase.demand_id
+                OR JSON_UNQUOTE(JSON_EXTRACT(demand.traffic_service_json, '$.bookingId')) = CAST(booking.id AS CHAR)
+                OR JSON_UNQUOTE(JSON_EXTRACT(demand.traffic_service_json, '$.trafficServiceOrderId')) = CAST(traffic.id AS CHAR)
+              )
+            """,
+            purchaseOrderId,
+            buyerCompanyId
+        );
+    }
+
     public PurchaseOrderListResponse listBuyer(
         Long buyerCompanyId,
         String keyword,
@@ -234,11 +287,20 @@ public class PurchaseOrderRepository {
         QueryParts query = buyerQuery(buyerCompanyId, keyword, status, supplier, createdFrom, createdTo, deliveryFrom, deliveryTo);
         long total = count("purchase_order po", query);
         String sql = "SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method, "
+            + "supplier_contacts.supplier_contact_name, supplier_contacts.supplier_contact_phone, "
+            + "purchase_progress.purchased_sku_count, purchase_progress.total_sku_count, supplier_readiness.ready_supplier_count, supplier_readiness.supplier_stage_index, "
             + "md.inquiry_no AS source_inquiry_no, md.material_type AS source_material_type, md.currency AS source_currency, "
-            + "md.recipient_company AS source_recipient_company, md.handler_name AS source_handler_name, md.handler_email AS source_handler_email "
+            + "md.recipient_company AS source_recipient_company, md.handler_name AS source_handler_name, md.handler_email AS source_handler_email, "
+            + "md.fixed_freight_fee AS source_fixed_freight_fee, md.fixed_customs_fee AS source_fixed_customs_fee, "
+            + "md.fixed_crane_fee AS source_fixed_crane_fee, md.fixed_other_fee AS source_fixed_other_fee, "
+            + "JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.supplyMode')) AS source_supply_mode, "
+            + "JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.fixedProviderType')) AS source_fixed_provider_type "
             + "FROM purchase_order po LEFT JOIN material_demand md ON md.id = po.demand_id "
             + supplierCountJoin()
             + packagingMethodJoin()
+            + supplierContactJoin()
+            + purchaseProgressJoin()
+            + supplierReadinessJoin()
             + query.where()
             + " ORDER BY po.created_at DESC, po.id DESC LIMIT ? OFFSET ?";
         List<Object> args = new ArrayList<>(query.args());
@@ -252,15 +314,30 @@ public class PurchaseOrderRepository {
         Optional<PurchaseOrderSummaryResponse> order = jdbcTemplate.query(
             """
             SELECT po.*, supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, packaging_methods.packaging_method,
+                   supplier_contacts.supplier_contact_name,
+                   supplier_contacts.supplier_contact_phone,
+                   purchase_progress.purchased_sku_count,
+                   purchase_progress.total_sku_count,
+                   supplier_readiness.ready_supplier_count,
+                   supplier_readiness.supplier_stage_index,
                    md.inquiry_no AS source_inquiry_no,
                    md.material_type AS source_material_type,
                    md.currency AS source_currency,
                    md.recipient_company AS source_recipient_company,
                    md.handler_name AS source_handler_name,
-                   md.handler_email AS source_handler_email
+                   md.handler_email AS source_handler_email,
+                   md.fixed_freight_fee AS source_fixed_freight_fee,
+                   md.fixed_customs_fee AS source_fixed_customs_fee,
+                   md.fixed_crane_fee AS source_fixed_crane_fee,
+                   md.fixed_other_fee AS source_fixed_other_fee,
+                   JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.supplyMode')) AS source_supply_mode,
+                   JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.fixedProviderType')) AS source_fixed_provider_type
             FROM purchase_order po
             LEFT JOIN material_demand md ON md.id = po.demand_id
             """ + supplierCountJoin() + packagingMethodJoin() + """
+            """ + supplierContactJoin() + """
+            """ + purchaseProgressJoin() + """
+            """ + supplierReadinessJoin() + """
             WHERE po.buyer_company_id = ? AND po.id = ?
             LIMIT 1
             """,
@@ -271,8 +348,43 @@ public class PurchaseOrderRepository {
         return order.map(summary -> new PurchaseOrderDetailResponse(
             summary,
             supplierOrders(orderId, null),
-            events(orderId)
+            events(orderId),
+            attachments(orderId, null)
         ));
+    }
+
+    public boolean updateDeliveryInfo(
+        Long buyerCompanyId,
+        Long orderId,
+        PurchaseOrderDeliveryInfoUpdateRequest request
+    ) {
+        if (request == null) {
+            return false;
+        }
+        int updated = jdbcTemplate.update(
+            """
+            UPDATE purchase_order
+            SET supply_port = ?,
+                vessel_eta = ?,
+                required_delivery_time = ?,
+                delivery_contact_name = ?,
+                delivery_contact_phone = ?,
+                delivery_contact_email = ?,
+                buyer_remark = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND buyer_company_id = ?
+            """,
+            blankToNull(request.supplyPort()),
+            blankToNull(request.vesselEta()),
+            blankToNull(request.requiredDeliveryTime()),
+            blankToNull(request.deliveryContactName()),
+            blankToNull(request.deliveryContactPhone()),
+            blankToNull(request.deliveryContactEmail()),
+            blankToNull(request.buyerRemark()),
+            orderId,
+            buyerCompanyId
+        );
+        return updated > 0;
     }
 
     public PurchaseOrderListResponse listSupplier(
@@ -286,16 +398,34 @@ public class PurchaseOrderRepository {
     ) {
         QueryParts query = supplierQuery(supplierCompanyId, keyword, status, createdFrom, createdTo);
         long total = count("purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id", query);
-        String sql = "SELECT DISTINCT po.*, pos.id AS supplier_order_id, pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method, "
+        String supplierStageCase = "CASE "
+            + "WHEN pos.status IN ('SUPPLIED', 'COMPLETED') THEN 5 "
+            + "WHEN pos.status IN ('PARTIALLY_SUPPLIED', 'SUPPLYING', 'IN_SERVICE', 'IN_PROGRESS') THEN 4 "
+            + "WHEN pos.status IN ('WAITING_SUPPLY', 'WAITING_SERVICE') THEN 3 "
+            + "WHEN pos.status IN ('PARTIALLY_READY', 'READY_TO_DELIVER', 'IN_TRANSIT') THEN 2 "
+            + "WHEN pos.status IN ('PARTIALLY_CONFIRMED', 'PREPARING') THEN 1 "
+            + "ELSE 0 END";
+        String sql = "SELECT DISTINCT po.*, pos.id AS supplier_order_id, "
+            + "CASE WHEN COALESCE(barge_progress.barge_stage_index, 0) > " + supplierStageCase + " THEN barge_progress.barge_status ELSE pos.status END AS supplier_status, "
+            + "pos.expected_ready_at AS supplier_expected_ready_at, pos.packaging_method AS packaging_method, "
+            + "pos.subtotal_amount AS supplier_subtotal_amount, pos.final_amount AS supplier_final_amount, "
+            + "GREATEST(" + supplierStageCase + ", COALESCE(barge_progress.barge_stage_index, 0)) AS supplier_stage_index, "
             + "supplier_counts.quoted_supplier_count, supplier_counts.total_supplier_count, "
             + "md.inquiry_no AS source_inquiry_no, md.material_type AS source_material_type, md.currency AS source_currency, "
-            + "md.recipient_company AS source_recipient_company, md.handler_name AS source_handler_name, md.handler_email AS source_handler_email "
+            + "md.recipient_company AS source_recipient_company, md.handler_name AS source_handler_name, md.handler_email AS source_handler_email, "
+            + "md.fixed_freight_fee AS source_fixed_freight_fee, md.fixed_customs_fee AS source_fixed_customs_fee, "
+            + "md.fixed_crane_fee AS source_fixed_crane_fee, md.fixed_other_fee AS source_fixed_other_fee, "
+            + "JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.supplyMode')) AS source_supply_mode, "
+            + "JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.fixedProviderType')) AS source_fixed_provider_type "
             + "FROM purchase_order po JOIN purchase_order_supplier pos ON pos.order_id = po.id "
             + "LEFT JOIN material_demand md ON md.id = po.demand_id "
+            + supplierBargeProgressJoin()
             + supplierCountJoin()
             + query.where()
             + " ORDER BY po.created_at DESC, po.id DESC LIMIT ? OFFSET ?";
-        List<Object> args = new ArrayList<>(query.args());
+        List<Object> args = new ArrayList<>();
+        args.add(supplierCompanyId);
+        args.addAll(query.args());
         args.add(size);
         args.add((page - 1) * size);
         List<PurchaseOrderSummaryResponse> items = jdbcTemplate.query(sql, (rs, rowNum) -> summary(rs), args.toArray());
@@ -346,6 +476,7 @@ public class PurchaseOrderRepository {
             supplierCompanyId
         );
         insertEvent(orderId, supplierOrderId, "SUPPLIER_CONFIRMED", "Supplier confirmed", userId, supplierCompanyId);
+        insertQcRequiredEvent(orderId, supplierOrderId, userId, supplierCompanyId);
         aggregateOrderStatus(orderId);
         return findSupplierDetail(supplierCompanyId, orderId);
     }
@@ -405,6 +536,51 @@ public class PurchaseOrderRepository {
         return findSupplierDetail(supplierCompanyId, orderId);
     }
 
+    public Optional<PurchaseOrderDetailResponse> saveSupplierCustomsDocuments(
+        Long supplierCompanyId,
+        Long userId,
+        Long orderId,
+        Long supplierOrderId,
+        PurchaseOrderAttachmentSaveRequest request
+    ) {
+        Optional<PurchaseSupplierOrderResponse> supplierOrder = supplierOrderForSupplier(orderId, supplierOrderId, supplierCompanyId);
+        if (supplierOrder.isEmpty()) {
+            return Optional.empty();
+        }
+        jdbcTemplate.update(
+            """
+            DELETE FROM purchase_order_attachment
+            WHERE order_id = ? AND supplier_order_id = ? AND attachment_type = 'CUSTOMS_DOCUMENT'
+            """,
+            orderId,
+            supplierOrderId
+        );
+        List<PurchaseOrderAttachmentPayload> files = request == null || request.files() == null ? List.of() : request.files();
+        for (PurchaseOrderAttachmentPayload file : files) {
+            String fileName = blankToNull(file == null ? null : file.fileName());
+            String fileId = blankToNull(file == null ? null : file.fileId());
+            String fileUrl = blankToNull(file == null ? null : file.fileUrl());
+            if (fileName == null && fileId == null && fileUrl == null) {
+                continue;
+            }
+            jdbcTemplate.update(
+                """
+                INSERT INTO purchase_order_attachment
+                  (order_id, supplier_order_id, attachment_type, file_id, file_name, file_url, created_by)
+                VALUES (?, ?, 'CUSTOMS_DOCUMENT', ?, ?, ?, ?)
+                """,
+                orderId,
+                supplierOrderId,
+                fileId,
+                fileName,
+                fileUrl,
+                userId
+            );
+        }
+        insertEvent(orderId, supplierOrderId, "CUSTOMS_DOCUMENTS_SAVED", "Customs documents saved", userId, supplierCompanyId);
+        return findSupplierDetail(supplierCompanyId, orderId);
+    }
+
     public Optional<PurchaseOrderDetailResponse> markSupplierSupplied(
         Long supplierCompanyId,
         Long userId,
@@ -419,7 +595,7 @@ public class PurchaseOrderRepository {
         jdbcTemplate.update(
             """
             UPDATE purchase_order_supplier
-            SET status = 'SUPPLIED',
+            SET status = 'IN_TRANSIT',
                 supplied_at = CURRENT_TIMESTAMP,
                 delivery_image_file_id = ?,
                 delivery_image_url = ?,
@@ -433,8 +609,36 @@ public class PurchaseOrderRepository {
             orderId,
             supplierCompanyId
         );
-        insertEvent(orderId, supplierOrderId, "SUPPLIER_SUPPLIED", "Supplier completed delivery", userId, supplierCompanyId);
+        insertEvent(orderId, supplierOrderId, "SUPPLIER_IN_TRANSIT", "Supplier started delivery", userId, supplierCompanyId);
         aggregateOrderStatus(orderId);
+        return findSupplierDetail(supplierCompanyId, orderId);
+    }
+
+    public Optional<PurchaseOrderDetailResponse> markSupplierWaitingSupply(
+        Long supplierCompanyId,
+        Long userId,
+        Long orderId,
+        Long supplierOrderId
+    ) {
+        Optional<PurchaseSupplierOrderResponse> supplierOrder = supplierOrderForSupplier(orderId, supplierOrderId, supplierCompanyId);
+        if (supplierOrder.isEmpty()) {
+            return Optional.empty();
+        }
+        int updated = jdbcTemplate.update(
+            """
+            UPDATE purchase_order_supplier
+            SET status = 'WAITING_SUPPLY',
+                supplied_at = COALESCE(supplied_at, CURRENT_TIMESTAMP)
+            WHERE id = ? AND order_id = ? AND supplier_company_id = ? AND status = 'IN_TRANSIT'
+            """,
+            supplierOrderId,
+            orderId,
+            supplierCompanyId
+        );
+        if (updated > 0) {
+            insertEvent(orderId, supplierOrderId, "SUPPLIER_WAITING_SUPPLY", "Supplier completed transport", userId, supplierCompanyId);
+            aggregateOrderStatus(orderId);
+        }
         return findSupplierDetail(supplierCompanyId, orderId);
     }
 
@@ -449,7 +653,13 @@ public class PurchaseOrderRepository {
                    md.currency AS source_currency,
                    md.recipient_company AS source_recipient_company,
                    md.handler_name AS source_handler_name,
-                   md.handler_email AS source_handler_email
+                   md.handler_email AS source_handler_email,
+                   md.fixed_freight_fee AS source_fixed_freight_fee,
+                   md.fixed_customs_fee AS source_fixed_customs_fee,
+                   md.fixed_crane_fee AS source_fixed_crane_fee,
+                   md.fixed_other_fee AS source_fixed_other_fee,
+                   JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.supplyMode')) AS source_supply_mode,
+                   JSON_UNQUOTE(JSON_EXTRACT(md.traffic_service_json, '$.fixedProviderType')) AS source_fixed_provider_type
             FROM purchase_order po
             JOIN purchase_order_supplier pos ON pos.order_id = po.id AND pos.supplier_company_id = ?
             LEFT JOIN material_demand md ON md.id = po.demand_id
@@ -464,7 +674,8 @@ public class PurchaseOrderRepository {
         return order.map(summary -> new PurchaseOrderDetailResponse(
             summary,
             supplierOrders(orderId, supplierCompanyId),
-            events(orderId)
+            events(orderId),
+            attachments(orderId, supplierCompanyId)
         ));
     }
 
@@ -625,13 +836,39 @@ public class PurchaseOrderRepository {
         );
     }
 
+    private void insertQcRequiredEvent(Long orderId, Long supplierOrderId, Long userId, Long supplierCompanyId) {
+        List<String> labels = jdbcTemplate.query(
+            """
+            SELECT COALESCE(NULLIF(product_name, ''), NULLIF(supplier_sku_code, ''), CONCAT('SKU ', id)) AS label
+            FROM purchase_order_item
+            WHERE order_id = ? AND supplier_order_id = ?
+            ORDER BY id ASC
+            """,
+            (rs, rowNum) -> rs.getString("label"),
+            orderId,
+            supplierOrderId
+        );
+        if (labels.isEmpty()) {
+            return;
+        }
+        Collections.shuffle(labels);
+        List<String> selected = labels.stream().limit(5).toList();
+        insertEvent(orderId, supplierOrderId, "QC_REQUIRED", "QC random check: " + String.join(", ", selected), userId, supplierCompanyId);
+    }
+
     private void aggregateOrderStatus(Long orderId) {
         List<String> statuses = jdbcTemplate.query(
             "SELECT status FROM purchase_order_supplier WHERE order_id = ?",
             (rs, rowNum) -> rs.getString("status"),
             orderId
         );
-        String status = aggregateStatus(statuses);
+        String computedStatus = aggregateStatus(statuses);
+        String currentStatus = jdbcTemplate.query(
+            "SELECT status FROM purchase_order WHERE id = ?",
+            rs -> rs.next() ? rs.getString("status") : null,
+            orderId
+        );
+        String status = forwardStatus(currentStatus, computedStatus);
         BigDecimal total = jdbcTemplate.queryForObject(
             "SELECT COALESCE(SUM(final_amount), 0) FROM purchase_order_supplier WHERE order_id = ?",
             BigDecimal.class,
@@ -651,10 +888,14 @@ public class PurchaseOrderRepository {
         }
         boolean allPreparing = statuses.stream().allMatch(PurchaseOrderService.PREPARING::equals);
         boolean allReady = statuses.stream().allMatch(PurchaseOrderService.READY_TO_DELIVER::equals);
+        boolean allInTransit = statuses.stream().allMatch(PurchaseOrderService.IN_TRANSIT::equals);
+        boolean allWaitingSupply = statuses.stream().allMatch(PurchaseOrderService.WAITING_SUPPLY::equals);
         boolean allSupplied = statuses.stream().allMatch(PurchaseOrderService.SUPPLIED::equals);
         boolean allRejected = statuses.stream().allMatch(PurchaseOrderService.REJECTED::equals);
         boolean anyPreparing = statuses.stream().anyMatch(PurchaseOrderService.PREPARING::equals);
         boolean anyReady = statuses.stream().anyMatch(PurchaseOrderService.READY_TO_DELIVER::equals);
+        boolean anyInTransit = statuses.stream().anyMatch(PurchaseOrderService.IN_TRANSIT::equals);
+        boolean anyWaitingSupply = statuses.stream().anyMatch(PurchaseOrderService.WAITING_SUPPLY::equals);
         boolean anySupplied = statuses.stream().anyMatch(PurchaseOrderService.SUPPLIED::equals);
         boolean anyRejected = statuses.stream().anyMatch(PurchaseOrderService.REJECTED::equals);
         if (allSupplied) {
@@ -662,6 +903,12 @@ public class PurchaseOrderRepository {
         }
         if (anySupplied) {
             return "PARTIALLY_SUPPLIED";
+        }
+        if (allWaitingSupply || anyWaitingSupply) {
+            return PurchaseOrderService.WAITING_SUPPLY;
+        }
+        if (allInTransit || anyInTransit) {
+            return PurchaseOrderService.IN_TRANSIT;
         }
         if (allReady) {
             return PurchaseOrderService.READY_TO_DELIVER;
@@ -684,6 +931,42 @@ public class PurchaseOrderRepository {
         return PurchaseOrderService.PENDING_SUPPLIER_CONFIRM;
     }
 
+    private String forwardStatus(String currentStatus, String computedStatus) {
+        String current = normalizeStatus(currentStatus);
+        String computed = normalizeStatus(computedStatus);
+        if (current == null) {
+            return computed;
+        }
+        if (computed == null) {
+            return current;
+        }
+        return statusStage(computed) >= statusStage(current) ? computed : current;
+    }
+
+    private int statusStage(String status) {
+        if (status == null) {
+            return -1;
+        }
+        return switch (status) {
+            case "COMPLETED", "SUPPLIED" -> 6;
+            case "PARTIALLY_SUPPLIED", "SUPPLYING", "IN_SERVICE", "IN_PROGRESS" -> 5;
+            case "WAITING_SUPPLY", "WAITING_SERVICE" -> 4;
+            case "IN_TRANSIT" -> 3;
+            case "READY_TO_DELIVER", "PARTIALLY_READY" -> 2;
+            case "PREPARING", "PARTIALLY_CONFIRMED" -> 1;
+            case "PENDING_SUPPLIER_CONFIRM" -> 0;
+            case "DISCARDED", "CANCELLED", "CANCELED", "REJECTED", "PARTIALLY_REJECTED" -> 0;
+            default -> 0;
+        };
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        return status.trim().toUpperCase();
+    }
+
     private List<PurchaseSupplierOrderResponse> supplierOrders(Long orderId, Long supplierCompanyId) {
         String sql = """
             SELECT *
@@ -704,7 +987,7 @@ public class PurchaseOrderRepository {
             orderId,
             rs.getLong("supplier_company_id"),
             rs.getString("supplier_name"),
-            rs.getString("status"),
+            Optional.ofNullable(safeString(rs, "supplier_status")).orElse(rs.getString("status")),
             rs.getInt("item_count"),
             rs.getBigDecimal("subtotal_amount"),
             rs.getString("discount_type"),
@@ -766,6 +1049,31 @@ public class PurchaseOrderRepository {
             """,
             (rs, rowNum) -> event(rs),
             orderId
+        );
+    }
+
+    private List<PurchaseOrderAttachmentResponse> attachments(Long orderId, Long supplierCompanyId) {
+        String sql = """
+            SELECT attachment.*
+            FROM purchase_order_attachment attachment
+            JOIN purchase_order_supplier supplier_order ON supplier_order.id = attachment.supplier_order_id
+            WHERE attachment.order_id = ?
+            """ + (supplierCompanyId == null ? "" : " AND supplier_order.supplier_company_id = ?")
+            + " ORDER BY attachment.created_at ASC, attachment.id ASC";
+        Object[] args = supplierCompanyId == null ? new Object[] {orderId} : new Object[] {orderId, supplierCompanyId};
+        return jdbcTemplate.query(sql, (rs, rowNum) -> attachment(rs), args);
+    }
+
+    private PurchaseOrderAttachmentResponse attachment(ResultSet rs) throws SQLException {
+        return new PurchaseOrderAttachmentResponse(
+            rs.getLong("id"),
+            rs.getLong("order_id"),
+            rs.getLong("supplier_order_id"),
+            rs.getString("attachment_type"),
+            optionalString(rs, "file_id"),
+            optionalString(rs, "file_name"),
+            optionalString(rs, "file_url"),
+            timestampToString(rs.getTimestamp("created_at"))
         );
     }
 
@@ -893,19 +1201,33 @@ public class PurchaseOrderRepository {
             optionalString(rs, "delivery_contact_name"),
             optionalString(rs, "delivery_contact_phone"),
             optionalString(rs, "delivery_contact_email"),
+            optionalString(rs, "supplier_contact_name"),
+            optionalString(rs, "supplier_contact_phone"),
             rs.getString("strategy_type"),
             rs.getString("strategy_name"),
             rs.getInt("supplier_count"),
             optionalInt(rs, "quoted_supplier_count", rs.getInt("supplier_count")),
             optionalInt(rs, "total_supplier_count", rs.getInt("supplier_count")),
             rs.getInt("item_count"),
+            optionalInt(rs, "purchased_sku_count", rs.getInt("item_count")),
+            optionalInt(rs, "total_sku_count", rs.getInt("item_count")),
+            optionalInt(rs, "ready_supplier_count", 0),
+            optionalInt(rs, "supplier_stage_index", 0),
             rs.getBigDecimal("total_amount"),
             optionalBigDecimal(rs, "total_amount_usd", BigDecimal.ZERO),
+            optionalBigDecimal(rs, "supplier_subtotal_amount", null),
+            optionalBigDecimal(rs, "supplier_final_amount", null),
             rs.getString("currency"),
-            rs.getString("status"),
+            Optional.ofNullable(safeString(rs, "supplier_status")).orElse(rs.getString("status")),
             optionalString(rs, "packaging_method"),
             optionalLong(rs, "supplier_order_id"),
             optionalTimestamp(rs, "supplier_expected_ready_at"),
+            optionalBigDecimal(rs, "source_fixed_freight_fee", BigDecimal.ZERO),
+            optionalBigDecimal(rs, "source_fixed_customs_fee", BigDecimal.ZERO),
+            optionalBigDecimal(rs, "source_fixed_crane_fee", BigDecimal.ZERO),
+            optionalBigDecimal(rs, "source_fixed_other_fee", BigDecimal.ZERO),
+            optionalString(rs, "source_supply_mode"),
+            optionalString(rs, "source_fixed_provider_type"),
             rs.getString("buyer_remark"),
             timestampToString(rs.getTimestamp("created_at")),
             timestampToString(rs.getTimestamp("updated_at"))
@@ -1032,6 +1354,128 @@ public class PurchaseOrderRepository {
                FROM purchase_order_supplier
                GROUP BY order_id
              ) packaging_methods ON packaging_methods.order_id = po.id
+            """;
+    }
+
+    private String supplierContactJoin() {
+        return """
+             LEFT JOIN (
+               SELECT pos.order_id,
+                      SUBSTRING_INDEX(GROUP_CONCAT(cc.contact_name ORDER BY pos.id ASC, cc.id ASC SEPARATOR '||'), '||', 1) AS supplier_contact_name,
+                      SUBSTRING_INDEX(GROUP_CONCAT(cc.contact_phone ORDER BY pos.id ASC, cc.id ASC SEPARATOR '||'), '||', 1) AS supplier_contact_phone
+               FROM purchase_order_supplier pos
+               JOIN company_contact cc ON cc.company_id = pos.supplier_company_id AND cc.status = 'ACTIVE'
+               GROUP BY pos.order_id
+             ) supplier_contacts ON supplier_contacts.order_id = po.id
+            """;
+    }
+
+    private String purchaseProgressJoin() {
+        return """
+             LEFT JOIN (
+               SELECT purchase.id AS order_id,
+                      COALESCE(item_counts.purchased_sku_count, 0) AS purchased_sku_count,
+                      COALESCE(demand_item_counts.total_sku_count, 0) AS total_sku_count
+               FROM purchase_order purchase
+               LEFT JOIN (
+                 SELECT order_id, COUNT(*) AS purchased_sku_count
+                 FROM purchase_order_item
+                 GROUP BY order_id
+               ) item_counts ON item_counts.order_id = purchase.id
+               LEFT JOIN (
+                 SELECT demand_id, COUNT(*) AS total_sku_count
+                 FROM material_demand_item
+                 GROUP BY demand_id
+               ) demand_item_counts ON demand_item_counts.demand_id = purchase.demand_id
+               GROUP BY purchase.id
+             ) purchase_progress ON purchase_progress.order_id = po.id
+            """;
+    }
+
+    private String supplierReadinessJoin() {
+        return """
+             LEFT JOIN (
+               SELECT order_id,
+                      SUM(
+                        CASE
+                          WHEN status IN ('READY_TO_DELIVER', 'IN_TRANSIT', 'WAITING_SUPPLY', 'WAITING_SERVICE', 'SUPPLYING', 'IN_SERVICE', 'IN_PROGRESS', 'SUPPLIED', 'PARTIALLY_SUPPLIED', 'COMPLETED')
+                          THEN 1 ELSE 0
+                        END
+                      ) AS ready_supplier_count,
+                      MAX(
+                        CASE
+                          WHEN status IN ('SUPPLIED', 'COMPLETED') THEN 5
+                          WHEN status IN ('PARTIALLY_SUPPLIED', 'SUPPLYING', 'IN_SERVICE', 'IN_PROGRESS') THEN 4
+                          WHEN status IN ('WAITING_SUPPLY', 'WAITING_SERVICE') THEN 3
+                          WHEN status IN ('PARTIALLY_READY', 'READY_TO_DELIVER', 'IN_TRANSIT') THEN 2
+                          WHEN status IN ('PARTIALLY_CONFIRMED', 'PREPARING') THEN 1
+                          WHEN status IS NOT NULL AND status <> 'PENDING_SUPPLIER_CONFIRM' THEN 1
+                          ELSE 0
+                        END
+                      ) AS supplier_stage_index
+               FROM purchase_order_supplier
+               GROUP BY order_id
+             ) supplier_readiness ON supplier_readiness.order_id = po.id
+            """;
+    }
+
+    private String supplierBargeProgressJoin() {
+        return """
+             LEFT JOIN (
+               SELECT linked.order_id,
+                      MAX(
+                        CASE
+                          WHEN linked.status IN ('COMPLETED') THEN 5
+                          WHEN linked.status IN ('SUPPLYING', 'IN_SERVICE', 'IN_PROGRESS', 'IN_TRANSIT') THEN 4
+                          WHEN linked.status IN ('WAITING_SUPPLY', 'WAITING_SERVICE') THEN 3
+                          ELSE 0
+                        END
+                      ) AS barge_stage_index,
+                      CASE
+                        WHEN MAX(
+                          CASE
+                            WHEN linked.status IN ('COMPLETED') THEN 5
+                            WHEN linked.status IN ('SUPPLYING', 'IN_SERVICE', 'IN_PROGRESS', 'IN_TRANSIT') THEN 4
+                            WHEN linked.status IN ('WAITING_SUPPLY', 'WAITING_SERVICE') THEN 3
+                            ELSE 0
+                          END
+                        ) >= 5 THEN 'COMPLETED'
+                        WHEN MAX(
+                          CASE
+                            WHEN linked.status IN ('COMPLETED') THEN 5
+                            WHEN linked.status IN ('SUPPLYING', 'IN_SERVICE', 'IN_PROGRESS', 'IN_TRANSIT') THEN 4
+                            WHEN linked.status IN ('WAITING_SUPPLY', 'WAITING_SERVICE') THEN 3
+                            ELSE 0
+                          END
+                        ) >= 4 THEN 'SUPPLYING'
+                        WHEN MAX(
+                          CASE
+                            WHEN linked.status IN ('COMPLETED') THEN 5
+                            WHEN linked.status IN ('SUPPLYING', 'IN_SERVICE', 'IN_PROGRESS', 'IN_TRANSIT') THEN 4
+                            WHEN linked.status IN ('WAITING_SUPPLY', 'WAITING_SERVICE') THEN 3
+                            ELSE 0
+                          END
+                        ) >= 3 THEN 'WAITING_SUPPLY'
+                        ELSE NULL
+                      END AS barge_status
+               FROM (
+                 SELECT DISTINCT COALESCE(booking.purchase_order_id, service_order.purchase_order_id, purchase_by_demand.id) AS order_id,
+                        service_order.status
+                 FROM traffic_shuttle_booking booking
+                 LEFT JOIN traffic_service_order service_order ON service_order.id = booking.traffic_service_order_id
+                 LEFT JOIN purchase_order purchase_by_demand
+                   ON purchase_by_demand.demand_id = booking.request_id
+                  AND purchase_by_demand.buyer_company_id = booking.requester_company_id
+                  AND purchase_by_demand.status <> 'DISCARDED'
+                 WHERE booking.status <> 'CANCELLED'
+                   AND (service_order.id IS NULL OR service_order.status <> 'DISCARDED')
+               ) linked
+               JOIN purchase_order_supplier pos_scope
+                 ON pos_scope.order_id = linked.order_id
+                AND pos_scope.supplier_company_id = ?
+               WHERE linked.order_id IS NOT NULL
+               GROUP BY linked.order_id
+             ) barge_progress ON barge_progress.order_id = po.id
             """;
     }
 

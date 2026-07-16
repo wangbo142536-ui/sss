@@ -33,6 +33,13 @@ record PurchaseOrderCreateRequest(
 record PurchaseOrderSelectedItemRequest(
     Long demandItemId,
     Long skuId,
+    Long supplierCompanyId,
+    String supplierName,
+    String supplierSkuCode,
+    String platformCode,
+    String impaCode,
+    String productName,
+    String specification,
     String quantity,
     BigDecimal pricingQuantity,
     BigDecimal amount,
@@ -45,11 +52,11 @@ record PurchaseOrderSelectedItemRequest(
     BigDecimal quoteMarkupPercent
 ) {
     PurchaseOrderSelectedItemRequest(Long demandItemId, Long skuId) {
-        this(demandItemId, skuId, null, null, null, null, null, null, null, null, null, null);
+        this(demandItemId, skuId, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     PurchaseOrderSelectedItemRequest(Long demandItemId, Long skuId, String quantity, BigDecimal pricingQuantity, BigDecimal amount) {
-        this(demandItemId, skuId, quantity, pricingQuantity, amount, null, null, null, null, null, null, null);
+        this(demandItemId, skuId, null, null, null, null, null, null, null, quantity, pricingQuantity, amount, null, null, null, null, null, null, null);
     }
 
     PurchaseOrderSelectedItemRequest(
@@ -63,13 +70,51 @@ record PurchaseOrderSelectedItemRequest(
         BigDecimal unitPriceUsd,
         BigDecimal amountUsd
     ) {
-        this(demandItemId, skuId, quantity, pricingQuantity, amount, selectedUnit, unitPrice, unitPriceUsd, amountUsd, null, null, null);
+        this(demandItemId, skuId, null, null, null, null, null, null, null, quantity, pricingQuantity, amount, selectedUnit, unitPrice, unitPriceUsd, amountUsd, null, null, null);
+    }
+
+    PurchaseOrderSelectedItemRequest(
+        Long demandItemId,
+        Long skuId,
+        Long supplierCompanyId,
+        String supplierName,
+        String supplierSkuCode,
+        String platformCode,
+        String impaCode,
+        String productName,
+        String specification,
+        String quantity,
+        BigDecimal pricingQuantity,
+        BigDecimal amount,
+        String selectedUnit,
+        BigDecimal unitPrice,
+        BigDecimal unitPriceUsd,
+        BigDecimal amountUsd
+    ) {
+        this(demandItemId, skuId, supplierCompanyId, supplierName, supplierSkuCode, platformCode, impaCode, productName, specification, quantity, pricingQuantity, amount, selectedUnit, unitPrice, unitPriceUsd, amountUsd, null, null, null);
     }
 }
 
 record PurchaseOrderDiscardResult(
     Long demandId,
     int discardedPurchaseOrderCount
+) {
+}
+
+record PurchaseOrderDeliveryInfoUpdateRequest(
+    String supplyPort,
+    String vesselEta,
+    String requiredDeliveryTime,
+    String deliveryContactName,
+    String deliveryContactPhone,
+    String deliveryContactEmail,
+    String buyerRemark
+) {
+}
+
+record PurchaseOrderReminderResponse(
+    Long purchaseOrderId,
+    String message
 ) {
 }
 
@@ -129,19 +174,33 @@ record PurchaseOrderSummaryResponse(
     String deliveryContactName,
     String deliveryContactPhone,
     String deliveryContactEmail,
+    String supplierContactName,
+    String supplierContactPhone,
     String strategyType,
     String strategyName,
     int supplierCount,
     int quotedSupplierCount,
     int totalSupplierCount,
     int itemCount,
+    int purchasedSkuCount,
+    int totalSkuCount,
+    int readySupplierCount,
+    int supplierStageIndex,
     BigDecimal totalAmount,
     BigDecimal totalAmountUsd,
+    BigDecimal supplierSubtotalAmount,
+    BigDecimal supplierFinalAmount,
     String currency,
     String status,
     String packagingMethod,
     Long supplierOrderId,
     String expectedReadyAt,
+    BigDecimal fixedFreightFee,
+    BigDecimal fixedCustomsFee,
+    BigDecimal fixedCraneFee,
+    BigDecimal fixedOtherFee,
+    String supplyMode,
+    String fixedProviderType,
     String buyerRemark,
     String createdAt,
     String updatedAt
@@ -172,9 +231,9 @@ record PurchaseOrderSummaryResponse(
         String updatedAt
     ) {
         this(purchaseOrderId, purchaseOrderNo, demandId, demandNo, applicationNo, null, null, null, null, null, null,
-            buyerCompanyId, buyerCompanyName, vesselName, supplyPort, vesselEta, requiredDeliveryTime, null, null, null, strategyType,
-            strategyName, supplierCount, quotedSupplierCount, totalSupplierCount, itemCount, totalAmount, BigDecimal.ZERO, currency,
-            status, null, null, null, buyerRemark, createdAt, updatedAt);
+            buyerCompanyId, buyerCompanyName, vesselName, supplyPort, vesselEta, requiredDeliveryTime, null, null, null, null, null, strategyType,
+            strategyName, supplierCount, quotedSupplierCount, totalSupplierCount, itemCount, itemCount, itemCount, 0, 0, totalAmount, BigDecimal.ZERO, null, null, currency,
+            status, null, null, null, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null, null, buyerRemark, createdAt, updatedAt);
     }
 
     PurchaseOrderSummaryResponse(
@@ -210,16 +269,25 @@ record PurchaseOrderSummaryResponse(
     ) {
         this(purchaseOrderId, purchaseOrderNo, demandId, demandNo, applicationNo, inquiryNo, materialType, demandCurrency,
             recipientCompany, handlerName, handlerEmail, buyerCompanyId, buyerCompanyName, vesselName,
-            supplyPort, vesselEta, requiredDeliveryTime, null, null, null, strategyType, strategyName, supplierCount, quotedSupplierCount,
-            totalSupplierCount, itemCount, totalAmount, BigDecimal.ZERO, currency, status, null, null, null, buyerRemark, createdAt, updatedAt);
+            supplyPort, vesselEta, requiredDeliveryTime, null, null, null, null, null, strategyType, strategyName, supplierCount, quotedSupplierCount,
+            totalSupplierCount, itemCount, itemCount, itemCount, 0, 0, totalAmount, BigDecimal.ZERO, null, null, currency, status, null, null, null,
+            BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null, null, buyerRemark, createdAt, updatedAt);
     }
 }
 
 record PurchaseOrderDetailResponse(
     PurchaseOrderSummaryResponse order,
     List<PurchaseSupplierOrderResponse> supplierOrders,
-    List<PurchaseOrderEventResponse> events
+    List<PurchaseOrderEventResponse> events,
+    List<PurchaseOrderAttachmentResponse> attachments
 ) {
+    PurchaseOrderDetailResponse(
+        PurchaseOrderSummaryResponse order,
+        List<PurchaseSupplierOrderResponse> supplierOrders,
+        List<PurchaseOrderEventResponse> events
+    ) {
+        this(order, supplierOrders, events, List.of());
+    }
 }
 
 record PurchaseSupplierOrderResponse(
@@ -342,6 +410,30 @@ record PurchaseOrderEventResponse(
     Long operatorUserId,
     Long operatorCompanyId,
     String createdAt
+) {
+}
+
+record PurchaseOrderAttachmentResponse(
+    Long attachmentId,
+    Long purchaseOrderId,
+    Long supplierOrderId,
+    String attachmentType,
+    String fileId,
+    String fileName,
+    String fileUrl,
+    String createdAt
+) {
+}
+
+record PurchaseOrderAttachmentPayload(
+    String fileId,
+    String fileName,
+    String fileUrl
+) {
+}
+
+record PurchaseOrderAttachmentSaveRequest(
+    List<PurchaseOrderAttachmentPayload> files
 ) {
 }
 

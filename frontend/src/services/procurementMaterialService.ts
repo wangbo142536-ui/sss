@@ -6,10 +6,12 @@ import type {
   MaterialComparisonStrategy,
   MaterialDemandDetail,
   MaterialDemandComparisonResponse,
+  MaterialComparisonQuoteImportResponse,
   MaterialDemandListResponse,
   MaterialDemandSavePayload,
   MaterialDemandSaveResponse,
   MaterialDemandSummary,
+  MaterialDemandTrafficService,
   MaterialMatchCandidate,
   MaterialMatchPreviewItem,
   MaterialMatchPreviewResponse,
@@ -260,6 +262,11 @@ function normalizeDemandSummary(value: unknown): MaterialDemandSummary | null {
     inquiryNo: readString(value, "inquiryNo"),
     materialType: readString(value, "materialType"),
     currency: readString(value, "currency"),
+    fixedFreightFee: readNumber(value, "fixedFreightFee"),
+    fixedCustomsFee: readNumber(value, "fixedCustomsFee"),
+    fixedCraneFee: readNumber(value, "fixedCraneFee"),
+    fixedOtherFee: readNumber(value, "fixedOtherFee"),
+    trafficService: normalizeTrafficService(value.trafficService),
     recipientCompany: readString(value, "recipientCompany"),
     handlerName: readString(value, "handlerName"),
     handlerEmail: readString(value, "handlerEmail"),
@@ -280,6 +287,62 @@ function normalizeDemandSummary(value: unknown): MaterialDemandSummary | null {
     createdAt: readString(value, "createdAt"),
     updatedAt: readString(value, "updatedAt")
   };
+}
+
+function normalizeTrafficService(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  const cargos = Array.isArray(value.cargos)
+    ? value.cargos
+        .filter(isRecord)
+        .map((item) => ({
+          cargoName: readString(item, "cargoName"),
+          weightKg: readNumber(item, "weightKg"),
+          volumeCbm: readNumber(item, "volumeCbm")
+        }))
+    : [];
+  return {
+    trafficServiceOrderId: readNumber(value, "trafficServiceOrderId"),
+    bookingId: readNumber(value, "bookingId"),
+    departurePoint: readString(value, "departurePoint"),
+    destinationPoint: readString(value, "destinationPoint"),
+    startTime: readString(value, "startTime"),
+    returnTime: readString(value, "returnTime"),
+    serviceNodes: normalizeTrafficServiceNodes(value.serviceNodes),
+    supplyMode: readString(value, "supplyMode"),
+    supplyAddress: readString(value, "supplyAddress"),
+    supplyRemark: readString(value, "supplyRemark"),
+    fixedProviderType: readString(value, "fixedProviderType"),
+    fixedProviderId: readString(value, "fixedProviderId") || readNumber(value, "fixedProviderId"),
+    fixedProviderName: readString(value, "fixedProviderName"),
+    shuttleNo: readString(value, "shuttleNo"),
+    trafficVesselName: readString(value, "trafficVesselName"),
+    seaArea: readString(value, "seaArea"),
+    anchorageCode: readString(value, "anchorageCode"),
+    anchorageName: readString(value, "anchorageName"),
+    useTime: readString(value, "useTime"),
+    serviceType: readString(value, "serviceType"),
+    passengerType: readString(value, "passengerType"),
+    passengerCount: readNumber(value, "passengerCount"),
+    cargoType: readString(value, "cargoType"),
+    returnTrip: readBoolean(value, "returnTrip"),
+    allowShare: readBoolean(value, "allowShare"),
+    basePrice: readNumber(value, "basePrice"),
+    sharedPrice: readNumber(value, "sharedPrice"),
+    remark: readString(value, "remark"),
+    cargos
+  };
+}
+
+function normalizeTrafficServiceNodes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .map((node) => ({
+      nodeName: readString(node, "nodeName") || readString(node, "name"),
+      startTime: readString(node, "startTime") || readString(node, "start"),
+      endTime: readString(node, "endTime") || readString(node, "end")
+    }))
+    .filter((node) => node.nodeName || node.startTime || node.endTime);
 }
 
 function normalizeDemandList(payload: unknown): MaterialDemandListResponse {
@@ -513,12 +576,13 @@ export async function uploadMaterialMatchPreview(file: File): Promise<MaterialMa
   return normalizeMatchPreview(payload);
 }
 
-export async function listMaterialDemands(query: { keyword?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; size?: number } = {}): Promise<MaterialDemandListResponse> {
+export async function listMaterialDemands(query: { keyword?: string; status?: string; dateFrom?: string; dateTo?: string; stage?: string; page?: number; size?: number } = {}): Promise<MaterialDemandListResponse> {
   const params = new URLSearchParams();
   if (query.keyword?.trim()) params.set("keyword", query.keyword.trim());
   if (query.status?.trim()) params.set("status", query.status.trim());
   if (query.dateFrom?.trim()) params.set("dateFrom", query.dateFrom.trim());
   if (query.dateTo?.trim()) params.set("dateTo", query.dateTo.trim());
+  if (query.stage?.trim()) params.set("stage", query.stage.trim());
   if (query.page) params.set("page", String(query.page));
   if (query.size) params.set("size", String(query.size));
   const endpoint = params.size ? `${MATERIAL_DEMAND_ENDPOINT}?${params.toString()}` : MATERIAL_DEMAND_ENDPOINT;
@@ -552,6 +616,11 @@ export async function saveMaterialComparisonQuotes(
   payload: {
     strategyType?: string;
     markupPercent?: number;
+    fixedFreightFee?: number;
+    fixedCustomsFee?: number;
+    fixedCraneFee?: number;
+    fixedOtherFee?: number;
+    trafficService?: MaterialDemandTrafficService;
     items: Array<{
       demandItemId?: number | string;
       skuId?: number;
@@ -597,6 +666,38 @@ export async function exportMaterialQuoteTemplate(demandId: number | string): Pr
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function importMaterialQuoteQuantities(demandId: number | string, file: File): Promise<MaterialComparisonQuoteImportResponse> {
+  const session = getAuthSession();
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/quote-import`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {})
+    },
+    body: formData
+  });
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw createApiError(response, payload);
+  }
+  const unwrapped = unwrapPayload(payload);
+  const source = isRecord(unwrapped) ? unwrapped : {};
+  const itemsSource = Array.isArray(source.items) ? source.items : [];
+  return {
+    demandId: readNumber(source, "demandId"),
+    matchedCount: readNumber(source, "matchedCount"),
+    items: itemsSource
+      .filter(isRecord)
+      .map((item) => ({
+        demandItemId: readNumber(item, "demandItemId"),
+        sourceRowNumber: readNumber(item, "sourceRowNumber"),
+        quantity: readString(item, "quantity")
+      }))
+  };
 }
 
 export async function listMaterialDemandItemSupplierCandidates(demandId: number | string, itemId: number | string): Promise<MaterialComparisonCandidate[]> {

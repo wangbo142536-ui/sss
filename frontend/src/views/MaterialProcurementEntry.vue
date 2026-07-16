@@ -37,7 +37,7 @@ type SupplyInfoItem = {
   key: DemandFormKey;
   label: string;
   placeholder: string;
-  type: "text" | "select" | "datetime" | "handler";
+  type: "text" | "datetime" | "handler";
   required?: boolean;
 };
 const demandForm = ref({
@@ -57,7 +57,6 @@ const invalidDemandField = ref<DemandFormKey | "">("");
 const invalidMaterialRowKey = ref("");
 const invalidMaterialField = ref<"quantity" | "unit" | "">("");
 const demandInputRefs = ref<Partial<Record<DemandFormKey, HTMLElement>>>({});
-const portOptions = ref<DictionaryItem[]>([]);
 const unitOptions = ref<DictionaryItem[]>([]);
 const progressOverlayVisible = ref(false);
 const progressPercent = ref(0);
@@ -73,7 +72,7 @@ const supplyInfo = computed<SupplyInfoItem[]>(() => [
   { key: "inquiryNo" as const, label: t("page.materials.inquiryNo"), placeholder: t("page.materials.inquiryNoPlaceholder"), type: "text" },
   { key: "materialType" as const, label: t("page.materials.materialType"), placeholder: t("page.materials.materialTypePlaceholder"), type: "text" },
   { key: "currency" as const, label: t("page.materials.currency"), placeholder: t("page.materials.currencyPlaceholder"), type: "text" },
-  { key: "supplyPortCode" as const, label: t("page.materials.supplyPort"), placeholder: t("page.materials.supplyPortPlaceholder"), type: "select", required: true },
+  { key: "supplyPortCode" as const, label: t("page.materials.supplyPort"), placeholder: t("page.materials.supplyPortPlaceholder"), type: "text", required: true },
   { key: "vesselEta" as const, label: t("page.materials.vesselEta"), placeholder: t("page.materials.vesselEtaPlaceholder"), type: "datetime", required: true },
   { key: "recipientCompany" as const, label: t("page.materials.recipientCompany"), placeholder: t("page.materials.recipientCompanyPlaceholder"), type: "text" },
   { key: "handlerName" as const, label: t("page.materials.handlerContact"), placeholder: t("page.materials.handlerNamePlaceholder"), type: "handler" }
@@ -427,11 +426,6 @@ function normalizeUnitValue(value: unknown): string {
   return matched?.itemName || text;
 }
 
-function dictionaryOptionLabel(item: DictionaryItem): string {
-  const code = item.itemValue || item.itemCode;
-  return code && code !== item.itemName ? `${item.itemName} / ${code}` : item.itemName;
-}
-
 function unitDictionaryOptionLabel(item: DictionaryItem): string {
   if (language.value === "en-US") {
     return item.itemNameEn || item.itemValue || item.itemName || item.itemCode;
@@ -443,41 +437,11 @@ function unitOptionValue(item: DictionaryItem): string {
   return item.itemName || item.itemValue || item.itemCode;
 }
 
-function selectedPortName(): string {
-  const selected = portOptions.value.find((item) => item.itemCode === demandForm.value.supplyPortCode || item.itemValue === demandForm.value.supplyPortCode);
-  return selected?.itemName || demandForm.value.supplyPortName || demandForm.value.supplyPortCode || "";
-}
-
-const hasCustomSupplyPort = computed(() => {
-  const code = demandForm.value.supplyPortCode.trim();
-  if (!code) return false;
-  return !portOptions.value.some((item) => item.itemCode === code || item.itemValue === code);
-});
-
-function normalizePortText(value?: string | null): string {
-  return String(value ?? "").replace(/[^A-Za-z0-9\u4e00-\u9fa5]/g, "").toUpperCase();
-}
-
-function matchedPortOption(rawPort?: string): DictionaryItem | undefined {
-  const normalized = normalizePortText(rawPort);
-  if (!normalized) return undefined;
-  return portOptions.value.find((item) =>
-    [item.itemCode, item.itemName, item.itemValue, item.itemNameEn]
-      .map(normalizePortText)
-      .some((value) => value === normalized)
-  );
-}
-
 function applySuggestedPort(rawPort?: string): void {
   const text = String(rawPort ?? "").trim();
   if (!text) return;
-  const matched = matchedPortOption(text);
-  demandForm.value.supplyPortCode = matched?.itemCode || text;
-  demandForm.value.supplyPortName = matched?.itemName || text;
-}
-
-function handleSupplyPortChange(): void {
-  demandForm.value.supplyPortName = selectedPortName();
+  demandForm.value.supplyPortCode = text;
+  demandForm.value.supplyPortName = text;
   handleDemandInput("supplyPortCode");
 }
 
@@ -496,18 +460,8 @@ function applyHeaderContextToDemandForm(preview: MaterialMatchPreviewResponse): 
 
 async function loadProcurementDictionaries(): Promise<void> {
   try {
-    const [ports, units] = await Promise.all([
-      listPublicDictionaryItems("PORT"),
-      listPublicDictionaryItems("UNIT")
-    ]);
-    portOptions.value = ports;
+    const units = await listPublicDictionaryItems("UNIT");
     unitOptions.value = units;
-    if (demandForm.value.supplyPortCode) {
-      demandForm.value.supplyPortName = selectedPortName();
-    }
-    if (demandForm.value.supplyPortName && hasCustomSupplyPort.value) {
-      applySuggestedPort(demandForm.value.supplyPortName);
-    }
     if (matchPreview.value) {
       matchPreview.value = {
         ...matchPreview.value,
@@ -515,7 +469,6 @@ async function loadProcurementDictionaries(): Promise<void> {
       };
     }
   } catch {
-    portOptions.value = [];
     unitOptions.value = [];
   }
 }
@@ -688,6 +641,7 @@ async function persistDemand(showSuccess: boolean): Promise<MaterialDemandSaveRe
   const nextPreview = refreshPreviewStats(items);
   if (nextPreview) matchPreview.value = nextPreview;
   matchConfirmed.value = true;
+  const supplyPort = demandForm.value.supplyPortCode.trim();
 
   try {
     const response = await saveMaterialDemand({
@@ -701,8 +655,8 @@ async function persistDemand(showSuccess: boolean): Promise<MaterialDemandSaveRe
       handlerName: demandForm.value.handlerName.trim() || undefined,
       handlerEmail: demandForm.value.handlerEmail.trim() || undefined,
       vesselName: demandForm.value.vesselName.trim(),
-      supplyPortCode: demandForm.value.supplyPortCode.trim(),
-      supplyPortName: selectedPortName(),
+      supplyPortCode: supplyPort,
+      supplyPortName: supplyPort,
       vesselEta: demandForm.value.vesselEta.trim(),
       sourceFileName: selectedFileName.value,
       sourceFileId: selectedSourceFileId.value || undefined,
@@ -772,6 +726,7 @@ async function loadDemandDetail(id: string): Promise<void> {
     demandId.value = detail.demand.demandId;
     demandNo.value = detail.demand.demandNo;
     demandStatus.value = detail.demand.status || "";
+    const supplyPort = detail.demand.supplyPortCode || detail.demand.supplyPortName || "";
     demandForm.value = {
       applicationNo: detail.demand.applicationNo || "",
       inquiryNo: detail.demand.inquiryNo || "",
@@ -781,11 +736,10 @@ async function loadDemandDetail(id: string): Promise<void> {
       handlerName: detail.demand.handlerName || "",
       handlerEmail: detail.demand.handlerEmail || "",
       vesselName: detail.demand.vesselName || "",
-      supplyPortCode: detail.demand.supplyPortCode || "",
-      supplyPortName: detail.demand.supplyPortName || "",
+      supplyPortCode: supplyPort,
+      supplyPortName: supplyPort,
       vesselEta: detail.demand.vesselEta || ""
     };
-    if (demandForm.value.supplyPortCode) demandForm.value.supplyPortName = selectedPortName();
     selectedFileName.value = detail.demand.sourceFileName || "";
     selectedSourceFileId.value = detail.demand.sourceFileId || "";
     matchPreview.value = normalizeMaterialPreviewDefaults({
@@ -795,7 +749,7 @@ async function loadDemandDetail(id: string): Promise<void> {
       vesselName: detail.demand.vesselName,
       materialType: detail.demand.materialType,
       currency: detail.demand.currency,
-      suggestedPort: detail.demand.supplyPortName,
+      suggestedPort: supplyPort,
       eta: detail.demand.vesselEta,
       recipientCompany: detail.demand.recipientCompany,
       handlerName: detail.demand.handlerName,
@@ -934,29 +888,37 @@ onBeforeUnmount(() => {
   <div class="material-workbench">
     <section class="material-stage" :aria-label="t('nav.materials')">
       <section class="command-head">
+        <div class="supply-upload-row">
+          <div
+            :class="['drop-zone', 'supply-drop-zone', { 'is-loading': isUploading, 'has-error': uploadError, 'is-disabled': isDemandActionBusy || isDemandReadonly }]"
+            role="button"
+            tabindex="0"
+            @click="openFilePicker"
+            @keydown.enter.prevent="openFilePicker"
+            @keydown.space.prevent="openFilePicker"
+            @dragover.prevent
+            @drop.prevent="handleDrop"
+          >
+            <input ref="fileInputRef" class="file-input" type="file" accept=".xlsx,.xls" :disabled="isDemandActionBusy || isDemandReadonly" @change="handleFileChange" />
+            <i aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 15V4m0 0 4 4m-4-4-4 4" />
+                <path d="M4 15v4h16v-4" />
+              </svg>
+            </i>
+            <div>
+              <strong>{{ isUploading ? t("page.materials.matching") : t("page.materials.uploadTitle") }}</strong>
+              <p>{{ selectedFileName || t("page.materials.uploadHint") }}</p>
+            </div>
+          </div>
+          <p v-if="uploadError" class="upload-error supply-upload-error">{{ t("page.materials.uploadFailed") }}: {{ uploadError }}</p>
+        </div>
         <div class="supply-strip" :aria-label="t('compare.mainInfo')">
           <div v-for="item in supplyInfo" :key="item.key" class="supply-item">
             <label>
               <span :class="{ 'required-field-label': item.required }"><i v-if="item.required" aria-hidden="true">*</i>{{ item.label }}</span>
-              <select
-                v-if="item.type === 'select'"
-                :ref="(element) => setDemandInputRef(item.key, element)"
-                v-model="demandForm[item.key]"
-                :class="{ 'is-invalid': invalidDemandField === item.key }"
-                :disabled="isDemandActionBusy || isDemandReadonly"
-                :aria-invalid="invalidDemandField === item.key"
-                @change="handleSupplyPortChange"
-              >
-                <option value="">{{ item.placeholder }}</option>
-                <option v-if="hasCustomSupplyPort" :value="demandForm.supplyPortCode">
-                  {{ demandForm.supplyPortName || demandForm.supplyPortCode }}
-                </option>
-                <option v-for="port in portOptions" :key="port.id || port.itemCode" :value="port.itemCode">
-                  {{ dictionaryOptionLabel(port) }}
-                </option>
-              </select>
               <StableDateTimeInput
-                v-else-if="item.type === 'datetime'"
+                v-if="item.type === 'datetime'"
                 :ref="(element) => setDemandInputRef(item.key, element)"
                 v-model="demandForm[item.key]"
                 mode="datetime"
@@ -996,36 +958,12 @@ onBeforeUnmount(() => {
               />
             </label>
           </div>
-          <div class="supply-upload-item">
-            <div
-              :class="['drop-zone', 'supply-drop-zone', { 'is-loading': isUploading, 'has-error': uploadError, 'is-disabled': isDemandActionBusy || isDemandReadonly }]"
-              role="button"
-              tabindex="0"
-              @click="openFilePicker"
-              @keydown.enter.prevent="openFilePicker"
-              @keydown.space.prevent="openFilePicker"
-              @dragover.prevent
-              @drop.prevent="handleDrop"
-            >
-              <input ref="fileInputRef" class="file-input" type="file" accept=".xlsx,.xls" :disabled="isDemandActionBusy || isDemandReadonly" @change="handleFileChange" />
-              <i aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M12 15V4m0 0 4 4m-4-4-4 4" />
-                  <path d="M4 15v4h16v-4" />
-                </svg>
-              </i>
-              <div>
-                <strong>{{ isUploading ? t("page.materials.matching") : t("page.materials.uploadTitle") }}</strong>
-                <p>{{ selectedFileName || t("page.materials.uploadHint") }}</p>
-              </div>
-            </div>
-            <p v-if="uploadError" class="upload-error supply-upload-error">{{ t("page.materials.uploadFailed") }}: {{ uploadError }}</p>
-          </div>
         </div>
       </section>
 
       <section class="workspace-grid" :aria-label="t('nav.materials')">
-        <aside :class="['insight-panel', 'match-panel', { 'is-expanded': isMatchExpanded }]">
+        <Teleport to="body" :disabled="!isMatchExpanded">
+          <aside :class="['insight-panel', 'match-panel', { 'is-expanded': isMatchExpanded }]">
           <div class="panel-head">
             <div class="match-title-line">
               <h2>{{ t("page.materials.matchDetail") }}</h2>
@@ -1232,7 +1170,8 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-        </aside>
+          </aside>
+        </Teleport>
       </section>
     </section>
 
@@ -1326,6 +1265,19 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .material-workbench {
+  --material-glass-border: rgba(180, 217, 245, 0.82);
+  --material-glass-surface:
+    radial-gradient(circle at 100% 0%, rgba(59, 149, 232, 0.14), transparent 34%),
+    radial-gradient(circle at 4% 100%, rgba(47, 195, 214, 0.09), transparent 38%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.68), rgba(218, 239, 253, 0.46)),
+    rgba(220, 239, 250, 0.5);
+  --material-glass-soft:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.64), rgba(231, 246, 255, 0.42)),
+    rgba(255, 255, 255, 0.34);
+  --material-glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    inset 0 -1px 0 rgba(111, 176, 224, 0.16),
+    0 18px 44px rgba(42, 107, 164, 0.13);
   min-height: 0;
   min-width: 0;
   max-width: 100%;
@@ -1345,10 +1297,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #cfe4f7;
+  border: 1px solid var(--material-glass-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 18px 54px rgba(30, 86, 140, 0.12);
+  background: var(--material-glass-surface);
+  box-shadow: var(--material-glass-shadow);
+  backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .command-head {
@@ -1365,12 +1318,14 @@ onBeforeUnmount(() => {
 }
 
 .supply-strip,
+.supply-upload-row,
 .upload-panel,
 .insight-panel,
 .signal-card {
-  border: 1px solid #d7e7f5;
-  background: #ffffff;
-  box-shadow: 0 10px 28px rgba(38, 96, 148, 0.08);
+  border: 1px solid var(--material-glass-border);
+  background: var(--material-glass-surface);
+  box-shadow: var(--material-glass-shadow);
+  backdrop-filter: blur(16px) saturate(1.18);
 }
 
 .supply-strip {
@@ -1379,13 +1334,29 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(226, 244, 255, 0.58)),
+    var(--material-glass-surface);
+}
+
+.supply-upload-row {
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 16px;
+}
+
+.supply-upload-row .supply-drop-zone {
+  min-height: 74px;
 }
 
 .supply-item {
   min-width: 0;
   padding: 10px 12px;
   border-radius: 12px;
-  background: linear-gradient(180deg, #f2f8ff 0%, #ffffff 100%);
+  border: 1px solid rgba(184, 219, 245, 0.82);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(12px) saturate(1.12);
 }
 
 .supply-upload-item {
@@ -1404,9 +1375,10 @@ onBeforeUnmount(() => {
 
 .supply-item span,
 .signal-card span {
-  color: #1d72d2;
+  color: #0069c8;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 950;
+  line-height: 1.2;
 }
 
 .supply-item .required-field-label {
@@ -1422,18 +1394,30 @@ onBeforeUnmount(() => {
 }
 
 .supply-item input,
-.supply-item select {
+.supply-item select,
+.supply-item textarea {
   width: 100%;
-  height: 32px;
   margin-top: 7px;
-  border: 1px solid #cfe4f7;
+  border: 1px solid #a9d3f2;
   border-radius: 9px;
   padding: 0 10px;
   color: #153655;
   font-size: 15px;
   font-weight: 800;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.94);
   outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.supply-item input,
+.supply-item select {
+  height: 32px;
+}
+
+.supply-item textarea {
+  min-height: 82px;
+  padding-top: 10px;
+  resize: vertical;
 }
 
 .handler-contact-fields {
@@ -1454,7 +1438,8 @@ onBeforeUnmount(() => {
 }
 
 .supply-item input:focus,
-.supply-item select:focus {
+.supply-item select:focus,
+.supply-item textarea:focus {
   border-color: #1d72d2;
   box-shadow: 0 0 0 3px rgba(29, 114, 210, 0.12);
 }
@@ -1610,11 +1595,13 @@ onBeforeUnmount(() => {
   align-content: center;
   justify-items: center;
   text-align: center;
-  border: 1px dashed #8dbfed;
+  border: 1px dashed rgba(126, 184, 232, 0.86);
   border-radius: 16px;
-  background:
-    radial-gradient(circle at center top, rgba(29, 114, 210, 0.12), transparent 42%),
-    #f6fbff;
+  background: var(--material-glass-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 10px 24px rgba(51, 120, 180, 0.1);
+  backdrop-filter: blur(12px) saturate(1.14);
   cursor: pointer;
 }
 
@@ -1747,15 +1734,22 @@ onBeforeUnmount(() => {
 
 .match-panel.is-expanded {
   position: fixed;
-  inset: 24px;
-  z-index: 900;
+  inset: 18px;
+  z-index: 1400;
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: calc(100dvh - 36px);
+  box-sizing: border-box;
   padding: 20px;
   border-radius: 22px;
-  border-color: #b8d8f3;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(247, 251, 255, 0.98)),
-    #ffffff;
-  box-shadow: 0 30px 100px rgba(20, 58, 94, 0.26);
+  border-color: var(--material-glass-border);
+  background: var(--material-glass-surface);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(111, 176, 224, 0.16),
+    0 30px 100px rgba(20, 58, 94, 0.22);
+  backdrop-filter: blur(22px) saturate(1.22);
   animation: match-card-rise 260ms cubic-bezier(0.18, 0.9, 0.22, 1) both;
 }
 
@@ -1771,6 +1765,8 @@ onBeforeUnmount(() => {
 
 .match-panel.is-expanded .match-list {
   animation-delay: 70ms;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .match-title-line {
@@ -1911,13 +1907,16 @@ onBeforeUnmount(() => {
   max-width: 100%;
   min-height: 0;
   margin-top: 12px;
-  border: 1px solid #b9d8f2;
+  border: 1px solid var(--material-glass-border);
   border-radius: 16px;
   overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: #ffffff;
-  box-shadow: 0 10px 22px rgba(58, 123, 177, 0.06);
+  background: rgba(245, 251, 255, 0.54);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 14px 30px rgba(58, 123, 177, 0.1);
+  backdrop-filter: blur(14px) saturate(1.16);
 }
 
 .match-list-scroll {
@@ -1990,10 +1989,13 @@ onBeforeUnmount(() => {
   padding: 0 12px;
   border-bottom: 1px solid #a8cfee;
   color: #1d72d2;
-  background: linear-gradient(180deg, #edf8ff 0%, #dff1ff 100%);
+  background:
+    linear-gradient(180deg, rgba(235, 248, 255, 0.88) 0%, rgba(215, 237, 253, 0.72) 100%);
   font-size: 12px;
   font-weight: 900;
-  box-shadow: inset 0 -1px 0 #a8cfee;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    inset 0 -1px 0 rgba(168, 207, 238, 0.7);
 }
 
 .match-row {
@@ -2008,16 +2010,16 @@ onBeforeUnmount(() => {
 .match-row:hover,
 .match-row:focus-visible,
 .match-row.is-open {
-  background: #eef7ff;
+  background: rgba(229, 244, 255, 0.74);
   outline: none;
 }
 
 .match-row:nth-child(odd) {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.46);
 }
 
 .match-row:nth-child(even) {
-  background: #f7fbff;
+  background: rgba(235, 248, 255, 0.42);
 }
 
 .match-list-head > *,
@@ -2217,7 +2219,10 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 14px 16px;
   border-top: 1px solid #d9eaf7;
-  background: #f7fbff;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(225, 242, 255, 0.42)),
+    rgba(235, 248, 255, 0.36);
+  backdrop-filter: blur(12px) saturate(1.12);
   animation: match-content-in 160ms ease-out;
 }
 
@@ -2226,7 +2231,9 @@ onBeforeUnmount(() => {
   padding: 12px;
   border: 1px solid #d2e7f8;
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--material-glass-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px) saturate(1.12);
 }
 
 .match-detail-summary {
@@ -2267,7 +2274,9 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   border: 1px solid #cfe7fb;
   border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f5fbff 100%);
+  background: var(--material-glass-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px) saturate(1.12);
 }
 
 .raw-source-row span,
@@ -2534,12 +2543,13 @@ onBeforeUnmount(() => {
 .material-search-dialog {
   width: min(720px, 100%);
   padding: 20px;
-  border: 1px solid #cfe4f7;
+  border: 1px solid var(--material-glass-border);
   border-radius: 20px;
-  background:
-    radial-gradient(circle at 12% 8%, rgba(29, 114, 210, 0.1), transparent 34%),
-    #ffffff;
-  box-shadow: 0 24px 70px rgba(22, 62, 101, 0.24);
+  background: var(--material-glass-surface);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 24px 70px rgba(22, 62, 101, 0.2);
+  backdrop-filter: blur(18px) saturate(1.18);
 }
 
 .modal-head {

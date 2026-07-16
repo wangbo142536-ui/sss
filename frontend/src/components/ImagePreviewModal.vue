@@ -45,7 +45,7 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="open" class="modal-backdrop" role="presentation" @click="$emit('close')">
+      <div v-if="open" class="modal-backdrop image-preview-backdrop" role="presentation" @click="$emit('close')">
         <section class="image-preview-modal" role="dialog" aria-modal="true" @click.stop>
           <header>
             <div>

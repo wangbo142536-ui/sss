@@ -30,6 +30,19 @@ public class ShopController {
         return shopService.profile(authorizationHeader);
     }
 
+    @GetMapping("/suppliers")
+    public SupplierListResponse suppliers(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestParam(value = "keyword", required = false) String keyword,
+        @RequestParam(value = "port", required = false) String port,
+        @RequestParam(value = "category", required = false) String category,
+        @RequestParam(value = "status", required = false) String status,
+        @RequestParam(value = "page", defaultValue = "1") int page,
+        @RequestParam(value = "size", defaultValue = "50") int size
+    ) {
+        return shopService.listSuppliers(authorizationHeader, keyword, port, category, status, page, size);
+    }
+
     @PutMapping("/profile")
     public ShopProfileResponse saveProfile(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,

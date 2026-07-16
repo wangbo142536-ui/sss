@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/procurement/material-demands")
@@ -61,12 +62,13 @@ public class MaterialDemandController {
         @RequestParam(value = "dateTo", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
         @RequestParam(value = "inquiryDateFrom", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inquiryDateFrom,
         @RequestParam(value = "inquiryDateTo", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inquiryDateTo,
+        @RequestParam(value = "stage", required = false) String stage,
         @RequestParam(value = "page", defaultValue = "1") int page,
         @RequestParam(value = "size", defaultValue = "20") int size
     ) {
         LocalDate resolvedDateFrom = inquiryDateFrom == null ? dateFrom : inquiryDateFrom;
         LocalDate resolvedDateTo = inquiryDateTo == null ? dateTo : inquiryDateTo;
-        return materialDemandService.list(authorizationHeader, keyword, status, resolvedDateFrom, resolvedDateTo, page, size);
+        return materialDemandService.list(authorizationHeader, keyword, status, resolvedDateFrom, resolvedDateTo, stage, page, size);
     }
 
     @GetMapping("/{id}")
@@ -105,6 +107,15 @@ public class MaterialDemandController {
             .contentLength(file.fileSize())
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.fileName().replace("\"", "") + "\"")
             .body(file.resource());
+    }
+
+    @PostMapping(value = "/{id}/quote-import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public MaterialComparisonQuoteImportResponse importQuote(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long id,
+        @RequestParam("file") MultipartFile file
+    ) {
+        return materialQuoteExportService.importQuote(authorizationHeader, id, file);
     }
 
     @GetMapping("/{id}/items/{itemId}/supplier-candidates")

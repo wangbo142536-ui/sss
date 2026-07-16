@@ -26,9 +26,15 @@ watch(sidebarExpanded, (expanded) => {
   }
 });
 
+const routeMatches = (item: WorkbenchMenuItem) => {
+  if (!item.route) return false;
+  if (route.path === item.route) return true;
+  return item.route !== "/traffic-boat" && route.path.startsWith(`${item.route}/`);
+};
+
 const findActiveMenu = (items: WorkbenchMenuItem[]): WorkbenchMenuItem | undefined => {
   for (const item of items) {
-    if (item.route && (route.path === item.route || route.path.startsWith(`${item.route}/`))) return item;
+    if (routeMatches(item)) return item;
     const child = findActiveMenu(item.children ?? []);
     if (child) return child;
   }

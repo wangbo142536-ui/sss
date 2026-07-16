@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -15,6 +16,22 @@ public class CompanyProfileRepository {
 
     public CompanyProfileRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostConstruct
+    void ensureValueAddedServiceTable() {
+        jdbcTemplate.execute(
+            """
+            CREATE TABLE IF NOT EXISTS company_value_added_service (
+              company_id BIGINT NOT NULL PRIMARY KEY,
+              freight_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+              customs_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+              crane_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+              remark VARCHAR(500) NULL,
+              updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+        );
     }
 
     public Optional<EnterpriseProfileResponse> findProfile(long companyId) {
@@ -233,6 +250,142 @@ public class CompanyProfileRepository {
         ).stream().findFirst();
     }
 
+    public List<CompanyVesselResponse> listVessels(long companyId, String status) {
+        return jdbcTemplate.query(
+            """
+            SELECT id, company_id, vessel_name, vessel_type,
+                   DATE_FORMAT(build_date, '%Y-%m-%d') AS build_date,
+                   DATE_FORMAT(next_maintenance_date, '%Y-%m-%d') AS next_maintenance_date,
+                   capacity, status, remark, created_at, updated_at
+            FROM company_vessel
+            WHERE company_id = ? AND status = ?
+            ORDER BY updated_at DESC, id DESC
+            """,
+            (rs, rowNum) -> vessel(rs),
+            companyId,
+            status
+        );
+    }
+
+    public CompanyVesselResponse createVessel(long companyId, CompanyVesselSaveRequest request) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO company_vessel
+              (company_id, vessel_name, vessel_type, build_date, next_maintenance_date, capacity, status, remark)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            companyId,
+            request.vesselName(),
+            request.vesselType(),
+            request.buildDate(),
+            request.nextMaintenanceDate(),
+            request.capacity(),
+            value(request.status(), CompanyProfileService.DEFAULT_VESSEL_STATUS),
+            request.remark()
+        );
+        return listVessels(companyId, value(request.status(), CompanyProfileService.DEFAULT_VESSEL_STATUS)).stream().findFirst().orElseThrow();
+    }
+
+    public CompanyValueAddedServiceResponse findValueAddedServices(long companyId) {
+        return jdbcTemplate.query(
+            """
+            SELECT company_id, freight_price, customs_price, crane_price, remark, updated_at
+            FROM company_value_added_service
+            WHERE company_id = ?
+            """,
+            (rs, rowNum) -> valueAddedService(rs),
+            companyId
+        ).stream().findFirst().orElse(new CompanyValueAddedServiceResponse(
+            companyId,
+            java.math.BigDecimal.ZERO,
+            java.math.BigDecimal.ZERO,
+            java.math.BigDecimal.ZERO,
+            null,
+            null
+        ));
+    }
+
+    public CompanyValueAddedServiceResponse saveValueAddedServices(long companyId, CompanyValueAddedServiceSaveRequest request) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO company_value_added_service (company_id, freight_price, customs_price, crane_price, remark)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              freight_price = VALUES(freight_price),
+              customs_price = VALUES(customs_price),
+              crane_price = VALUES(crane_price),
+              remark = VALUES(remark),
+              updated_at = CURRENT_TIMESTAMP
+            """,
+            companyId,
+            request.freightPrice(),
+            request.customsPrice(),
+            request.cranePrice(),
+            request.remark()
+        );
+        return findValueAddedServices(companyId);
+    }
+
+    public Optional<CompanyVesselResponse> updateVessel(long companyId, long vesselId, CompanyVesselSaveRequest request) {
+        CompanyVesselResponse current = findVessel(companyId, vesselId).orElse(null);
+        if (current == null) {
+            return Optional.empty();
+        }
+        int updated = jdbcTemplate.update(
+            """
+            UPDATE company_vessel
+            SET vessel_name = ?,
+                vessel_type = ?,
+                build_date = ?,
+                next_maintenance_date = ?,
+                capacity = ?,
+                status = ?,
+                remark = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND id = ?
+            """,
+            value(request.vesselName(), current.vesselName()),
+            request.vesselType() == null ? current.vesselType() : request.vesselType(),
+            request.buildDate() == null ? current.buildDate() : request.buildDate(),
+            request.nextMaintenanceDate() == null ? current.nextMaintenanceDate() : request.nextMaintenanceDate(),
+            request.capacity() == null ? current.capacity() : request.capacity(),
+            value(request.status(), current.status()),
+            request.remark() == null ? current.remark() : request.remark(),
+            companyId,
+            vesselId
+        );
+        return updated == 0 ? Optional.empty() : findVessel(companyId, vesselId);
+    }
+
+    public boolean softDeleteVessel(long companyId, long vesselId) {
+        return jdbcTemplate.update(
+            """
+            UPDATE company_vessel
+            SET status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND id = ?
+            """,
+            CompanyProfileService.DELETED_VESSEL_STATUS,
+            companyId,
+            vesselId
+        ) > 0;
+    }
+
+    public Optional<CompanyVesselResponse> findVessel(long companyId, long vesselId) {
+        return jdbcTemplate.query(
+            """
+            SELECT id, company_id, vessel_name, vessel_type,
+                   DATE_FORMAT(build_date, '%Y-%m-%d') AS build_date,
+                   DATE_FORMAT(next_maintenance_date, '%Y-%m-%d') AS next_maintenance_date,
+                   capacity, status, remark, created_at, updated_at
+            FROM company_vessel
+            WHERE company_id = ? AND id = ?
+            """,
+            (rs, rowNum) -> vessel(rs),
+            companyId,
+            vesselId
+        ).stream().findFirst();
+    }
+
     private EnterpriseProfileResponse profile(ResultSet rs) throws SQLException {
         return new EnterpriseProfileResponse(
             rs.getLong("id"),
@@ -274,6 +427,33 @@ public class CompanyProfileRepository {
             rs.getString("contact_email"),
             rs.getString("status"),
             string(rs.getTimestamp("created_at")),
+            string(rs.getTimestamp("updated_at"))
+        );
+    }
+
+    private CompanyVesselResponse vessel(ResultSet rs) throws SQLException {
+        return new CompanyVesselResponse(
+            rs.getLong("id"),
+            rs.getLong("company_id"),
+            rs.getString("vessel_name"),
+            rs.getString("vessel_type"),
+            rs.getString("build_date"),
+            rs.getString("next_maintenance_date"),
+            rs.getString("capacity"),
+            rs.getString("status"),
+            rs.getString("remark"),
+            string(rs.getTimestamp("created_at")),
+            string(rs.getTimestamp("updated_at"))
+        );
+    }
+
+    private CompanyValueAddedServiceResponse valueAddedService(ResultSet rs) throws SQLException {
+        return new CompanyValueAddedServiceResponse(
+            rs.getLong("company_id"),
+            rs.getBigDecimal("freight_price"),
+            rs.getBigDecimal("customs_price"),
+            rs.getBigDecimal("crane_price"),
+            rs.getString("remark"),
             string(rs.getTimestamp("updated_at"))
         );
     }

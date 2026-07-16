@@ -7,7 +7,7 @@ withDefaults(
     open: boolean;
     title: string;
     subtitle?: string;
-    width?: "default" | "wide";
+    width?: "default" | "compact" | "wide";
   }>(),
   {
     subtitle: "",

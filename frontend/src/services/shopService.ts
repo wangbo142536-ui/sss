@@ -2,6 +2,7 @@ import { ApiError, getAuthSession } from "@/services/authService";
 
 export const shopEndpoints = {
   profile: "/api/shop/profile",
+  suppliers: "/api/shop/suppliers",
   skus: "/api/shop/skus",
   skuBatchUpsert: "/api/shop/skus/batch-upsert",
   skuDetail: (skuId: string | number) => `/api/shop/skus/${encodeURIComponent(String(skuId))}`,
@@ -79,6 +80,10 @@ export function updateShopProfile(payload: ShopPayload) {
 
 export function listShopSkus(params: ShopQueryParams = {}) {
   return requestShopJson(`${shopEndpoints.skus}${buildQuery(params)}`, { method: "GET" });
+}
+
+export function listShopSuppliers(params: ShopQueryParams = {}) {
+  return requestShopJson(`${shopEndpoints.suppliers}${buildQuery(params)}`, { method: "GET" });
 }
 
 export function createShopSku(payload: ShopPayload) {

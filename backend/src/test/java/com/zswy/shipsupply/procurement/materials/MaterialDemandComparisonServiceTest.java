@@ -205,6 +205,24 @@ class MaterialDemandComparisonServiceTest {
     }
 
     @Test
+    void usesCodeIndexBeforeNameFallbackForLargeComparisonPools() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "611705", "Flat Nose Plier", "160MM", "3")));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            sku(1L, 24L, "Supplier A", "A-CODED", "Flat Nose Plier", "611705", "9.00", "99", "ON_SHELF"),
+            sku(2L, 25L, "Supplier B", "B-NAME-ONLY", "Flat Nose Plier", "999999", "1.00", "99", "ON_SHELF")
+        ));
+
+        MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
+
+        assertThat(response.items().get(0).candidates()).extracting(MaterialSupplierCandidate::impaCode)
+            .containsExactly("611705");
+        assertThat(response.items().get(0).lowestCandidate().supplierName()).isEqualTo("Supplier A");
+    }
+
+    @Test
     void invalidQuantityUsesOneForPricingAndReturnsNote() {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));

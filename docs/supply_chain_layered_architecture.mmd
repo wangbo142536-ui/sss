@@ -1,52 +1,57 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#f3f7fc","mainBkg":"#ffffff","primaryColor":"#ffffff","primaryTextColor":"#0b2239","primaryBorderColor":"#b7cce4","clusterBkg":"#f8fbff","clusterBorder":"#cbdaf0","lineColor":"transparent","edgeLabelBackground":"transparent","fontFamily":"Microsoft YaHei, PingFang SC, Arial, sans-serif","titleColor":"#0b2239"},"flowchart":{"nodeSpacing":30,"rankSpacing":34,"padding":18,"curve":"linear"}}}%%
 flowchart TB
-  subgraph L1["01 用户与生态接入层"]
-    buyer["船代企业<br/>采购、下单、付款、融资"]
-    supplier["供货商企业<br/>SKU、报价、备货、供船、回款"]
-    barge["驳船/交通艇/运输<br/>调度、送船、签收、异常"]
-    crew["船员服务<br/>登轮、接送、港区服务"]
-    gov["政府侧<br/>补贴、监管、资质、港口/海事/海关协同"]
-    bank["银行/金融机构<br/>征信、授信、审批、放款、还款"]
-    third["三方生态<br/>气象、AIS、保险、电子签章、支付、税务"]
+  title["海事综合服务平台<br/>面向地方政府与海运市场，覆盖代理、采购、运输、船员、金融、海关、边检、税务、监管、船舶动态与 AI 数据协同"]
+
+  subgraph L1["01 生态接入层"]
+    gov["政府侧<br/>产业运行、补贴政策、市场监管、政策协同"]
+    portReg["口岸监管端<br/>海关、边检、海事、港航、市场监管"]
+    agent["船代企业<br/>船舶代理、采购委托、服务协调、单证协同"]
+    supplier["供货商企业<br/>报价、备货、供船、QC、QA、回款"]
+    serviceProvider["运输/船员/港口服务商<br/>驳船、交通艇、登轮、维修、港口作业"]
+    financeEco["金融/征信/税务生态<br/>银行、征信、保险、支付、票税服务"]
+    dataAi["三方数据和 AI 服务<br/>AIS、气象、电子签章、OCR/大模型"]
   end
 
-  subgraph L2["02 门户与协同入口层"]
-    workbench["业务工作台<br/>角色菜单、待办、状态、权限"]
-    buyerPortal["船代采购门户<br/>需求导入、比价、订单、归档"]
-    supplierPortal["供货商门户<br/>报价、供采、产品、履约、QC、QA"]
-    opsPortal["运营/政府/金融协同门户<br/>审核、补贴、融资、征信、税务、风控"]
+  subgraph L2["02 门户协同入口层"]
+    govPortal["政府治理门户<br/>驾驶舱、产业分析、补贴管理、政策发放、风险态势"]
+    portPortal["口岸监管门户<br/>海关、边检、海事、港航、税务协同"]
+    agentPortal["代理服务门户<br/>船舶服务申请、采购、单证、费用归档"]
+    providerPortal["市场服务商门户<br/>供货、运输、船员、港口作业、QC/QA"]
+    financePortal["金融征信税务门户<br/>授信、征信、放款、票税核验、对账"]
     apiGateway["开放接口/API 网关<br/>三方接入、数据交换、回调"]
   end
 
-  subgraph L3["03 业务应用层"]
-    procurement["船供采购<br/>物料/伙食、标准编码、大模型 SKU 匹配、报价准备"]
-    supplierMgmt["供应商与店铺<br/>企业档案、SKU、联系人、资质"]
-    inquiry["询价报价<br/>询价单、报价模板、报价保存、原模板导出"]
-    compare["比价决策<br/>最低混供、集中采购、利润报价、币种切换"]
-    order["采购/供采订单<br/>主单、供货商子单、联系人快照、状态聚合"]
-    fulfillment["港口履约与送船<br/>备货、供船、驳船调度、签收图片"]
-    settlement["费用结算与单证归档<br/>发票、付款、税务、单证、核销资料"]
-    financeApp["供应链金融<br/>应付金额、预付、融资、放款、还款"]
-    govApp["政府补贴与监管<br/>补贴核验、资质信用、税务合规、征信协同"]
+  subgraph L3["03 海事业务应用层"]
+    procurementService["采购服务<br/>物料/伙食清单导入、询价比价、下单、结算归档"]
+    crewService["船员服务<br/>登轮、下船、接送、住宿、体检、边检协同"]
+    transportService["驳船服务<br/>锚地配送、交通艇、航线调度、签收、异常上报"]
+    customsService["海关服务<br/>报关报备、船供物资合规、通关单证、核验回执"]
+    borderService["边检服务<br/>人员申报、登轮许可、出入境核验、联检协同"]
+    maritimeService["海事服务<br/>船舶报备、航行通告、海事协同、异常处置"]
+    portShippingService["港航服务<br/>作业许可、作业计划、白名单"]
+    supervisionService["监管服务<br/>企业资质、服务质量、投诉处置、异常事件、合规留痕"]
+    financeService["金融服务<br/>供应链金融、预付、融资、授信、征信、还款"]
+    taxService["税务服务<br/>发票、票税合规、纳税信用、税务核验"]
+    weatherService["气象服务<br/>气象潮汐、锚地窗口、靠离泊预警"]
+    vesselDynamicService["船舶动态服务<br/>AIS 船期、船舶动态、靠离泊状态"]
   end
 
   subgraph L4["04 中台能力层"]
-    standard["标准主数据<br/>IMPA/MSG、伙食分类、港口、单位、币种、状态字典"]
+    standard["标准主数据<br/>IMPA/MSG、服务目录、港口、单位、币种、状态字典"]
     match["大模型 SKU 匹配<br/>标准编码校验、名称规格归一、异常复核"]
-    pricing["报价与价格引擎<br/>多单位价格、利润率、汇率、供应商小计"]
-    workflow["流程与状态引擎<br/>需求、比价、订单、供采、履约、废弃"]
-    permission["组织权限中心<br/>企业、成员、角色、菜单、数据范围"]
-    fileDoc["文件与单证中心<br/>原始模板、图片、资质、发票、归档"]
+    pricing["报价价格引擎<br/>多单位价格、利润率、汇率、供应商小计"]
+    workflow["流程状态引擎<br/>申请、审批、订单、履约、联检、归档"]
+    fileDoc["文件单证中心<br/>模板、图片、资质、发票、报关/边检/税务单证"]
     risk["征信风控授信<br/>订单真实性、企业资质、征信、税务、履约记录"]
-    aiModel["AI 模型能力<br/>清单识别、报价解析、大模型 SKU 匹配、风控辅助"]
   end
 
   subgraph L5["05 数据基座层"]
-    masterData["主数据<br/>企业、用户、供应商、港口、字典"]
-    skuData["商品与标准库数据<br/>IMPA 物料、伙食品类、供应商 SKU、多单位价格"]
-    tradeData["交易数据<br/>需求单、询价、报价、比价、订单"]
-    fulfillData["履约与结算数据<br/>备货、供船、签收、费用、发票、单证"]
-    financeData["金融/征信/补贴数据<br/>融资、预付、放款、还款、补贴、授信、征信"]
-    externalData["模型与外部数据<br/>模型结果、气象、AIS/船期、海关、保险、支付、税务"]
+    masterData["主数据<br/>企业、用户、供应商、港口"]
+    skuData["商品与标准库数据<br/>IMPA、伙食品类、SKU、单位等"]
+    tradeData["交易数据<br/>需求、询价、报价、比价、订单"]
+    serviceData["业务数据<br/>船员、驳船、执法等"]
+    financeData["金融/征信/补贴数据<br/>融资、放款、还款、补贴、征信"]
+    externalData["外部数据<br/>海关、边检、海事、港航、气象等"]
   end
 
   subgraph L6["06 技术基础设施层"]
@@ -54,58 +59,22 @@ flowchart TB
     backend["后端服务<br/>Java + Spring Boot 模块化单体"]
     db["数据库<br/>MySQL 8.0"]
     cache["缓存与会话<br/>Redis / Token"]
-    storage["文件存储<br/>模板、图片、资质、归档单证"]
-    integration["集成基础设施<br/>API、Webhook、批量导入导出"]
-    security["安全与运维<br/>认证、权限、CORS、日志、备份、监控"]
+    storage["文件存储<br/>模板、图片、资质、归档"]
+    integration["集成与模型服务<br/>API、Webhook、模型网关"]
+    security["安全与运维<br/>认证、权限、日志、备份、监控"]
   end
 
-  buyer --> workbench
-  supplier --> supplierPortal
-  barge --> workbench
-  crew --> workbench
-  gov --> opsPortal
-  bank --> opsPortal
-  third --> apiGateway
+  %% Invisible layout anchors only. They preserve top-to-bottom layering without showing arrows.
+  title ~~~ gov
+  gov ~~~ govPortal
+  govPortal ~~~ procurementService
+  procurementService ~~~ standard
+  standard ~~~ masterData
+  masterData ~~~ frontend
 
-  workbench --> buyerPortal
-  workbench --> supplierPortal
-  buyerPortal --> procurement
-  supplierPortal --> supplierMgmt
-  opsPortal --> financeApp
-  opsPortal --> govApp
-  apiGateway --> procurement
-  apiGateway --> fulfillment
-
-  procurement --> inquiry --> compare --> order --> fulfillment --> settlement
-  supplierMgmt --> inquiry
-  order --> financeApp
-  financeApp --> bank
-  govApp --> financeApp
-  govApp --> settlement
-
-  procurement --> standard
-  inquiry --> pricing
-  compare --> pricing
-  procurement --> match
-  order --> workflow
-  fulfillment --> workflow
-  settlement --> fileDoc
-  financeApp --> risk
-  govApp --> risk
-
-  standard --> masterData
-  standard --> skuData
-  match --> skuData
-  pricing --> skuData
-  workflow --> tradeData
-  fileDoc --> fulfillData
-  risk --> financeData
-  aiModel --> externalData
-  apiGateway --> externalData
-
-  frontend --> backend
-  backend --> db
-  backend --> cache
-  backend --> storage
-  backend --> integration
-  backend --> security
+  classDef gold fill:#fff8ed,stroke:#e3a344,stroke-width:1.8px,color:#102033
+  classDef purple fill:#f8f5ff,stroke:#9b83ea,stroke-width:1.8px,color:#102033
+  classDef title fill:transparent,stroke:transparent,color:#0b2239,font-size:26px,font-weight:700
+  class financePortal gold
+  class apiGateway purple
+  class title title

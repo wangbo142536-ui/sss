@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,6 +23,8 @@ public class PurchaseOrderService {
     static final String PENDING_SUPPLIER_CONFIRM = "PENDING_SUPPLIER_CONFIRM";
     static final String PREPARING = "PREPARING";
     static final String READY_TO_DELIVER = "READY_TO_DELIVER";
+    static final String IN_TRANSIT = "IN_TRANSIT";
+    static final String WAITING_SUPPLY = "WAITING_SUPPLY";
     static final String SUPPLIED = "SUPPLIED";
     static final String REJECTED = "REJECTED";
     static final String DISCARDED = "DISCARDED";
@@ -32,15 +35,30 @@ public class PurchaseOrderService {
     private final CurrentUserService currentUserService;
     private final MaterialDemandComparisonService comparisonService;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final FulfillmentAttachmentService fulfillmentAttachmentService;
+    private final SettlementOrderService settlementOrderService;
 
+    @Autowired
     public PurchaseOrderService(
         CurrentUserService currentUserService,
         MaterialDemandComparisonService comparisonService,
-        PurchaseOrderRepository purchaseOrderRepository
+        PurchaseOrderRepository purchaseOrderRepository,
+        FulfillmentAttachmentService fulfillmentAttachmentService,
+        SettlementOrderService settlementOrderService
     ) {
         this.currentUserService = currentUserService;
         this.comparisonService = comparisonService;
         this.purchaseOrderRepository = purchaseOrderRepository;
+        this.fulfillmentAttachmentService = fulfillmentAttachmentService;
+        this.settlementOrderService = settlementOrderService;
+    }
+
+    PurchaseOrderService(
+        CurrentUserService currentUserService,
+        MaterialDemandComparisonService comparisonService,
+        PurchaseOrderRepository purchaseOrderRepository
+    ) {
+        this(currentUserService, comparisonService, purchaseOrderRepository, null, null);
     }
 
     @Transactional
@@ -56,7 +74,10 @@ public class PurchaseOrderService {
         }
         String strategyType = normalizeStrategy(request == null ? null : request.strategyType());
         return purchaseOrderRepository.findActiveByDemandAndStrategy(currentUser.companyId(), demandId, strategyType)
-            .map(this::existingResponse)
+            .map(existing -> {
+                ensureSettlementChain(currentUser, existing.purchaseOrderId());
+                return existingResponse(existing);
+            })
             .orElseGet(() -> createNewOrder(authorizationHeader, currentUser, demandId, strategyType, request));
     }
 
@@ -89,8 +110,36 @@ public class PurchaseOrderService {
 
     public PurchaseOrderDetailResponse buyerDetail(String authorizationHeader, Long orderId) {
         CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        repairBargeLinkAndSettlement(currentUser, orderId);
         return purchaseOrderRepository.findBuyerDetail(currentUser.companyId(), orderId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PURCHASE_ORDER_NOT_FOUND"));
+    }
+
+    @Transactional
+    public PurchaseOrderDetailResponse updateDeliveryInfo(
+        String authorizationHeader,
+        Long orderId,
+        PurchaseOrderDeliveryInfoUpdateRequest request
+    ) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (orderId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PURCHASE_ORDER_ID_REQUIRED");
+        }
+        boolean updated = purchaseOrderRepository.updateDeliveryInfo(currentUser.companyId(), orderId, request);
+        if (!updated) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PURCHASE_ORDER_NOT_FOUND");
+        }
+        return buyerDetail(authorizationHeader, orderId);
+    }
+
+    public PurchaseOrderReminderResponse remindSuppliers(String authorizationHeader, Long orderId) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (orderId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PURCHASE_ORDER_ID_REQUIRED");
+        }
+        purchaseOrderRepository.findBuyerDetail(currentUser.companyId(), orderId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PURCHASE_ORDER_NOT_FOUND"));
+        return new PurchaseOrderReminderResponse(orderId, null);
     }
 
     public PurchaseOrderListResponse listSupplier(
@@ -167,6 +216,21 @@ public class PurchaseOrderService {
     }
 
     @Transactional
+    public PurchaseOrderDetailResponse saveSupplierCustomsDocuments(
+        String authorizationHeader,
+        Long orderId,
+        Long supplierOrderId,
+        PurchaseOrderAttachmentSaveRequest request
+    ) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (purchaseOrderRepository.isOrderDiscarded(orderId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "PURCHASE_ORDER_DISCARDED");
+        }
+        return purchaseOrderRepository.saveSupplierCustomsDocuments(currentUser.companyId(), currentUser.userId(), orderId, supplierOrderId, request)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SUPPLIER_ORDER_NOT_FOUND"));
+    }
+
+    @Transactional
     public PurchaseOrderDetailResponse markSupplierSupplied(
         String authorizationHeader,
         Long orderId,
@@ -174,13 +238,30 @@ public class PurchaseOrderService {
         PurchaseSupplierSupplyCompleteRequest request
     ) {
         CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
-        if (request == null || (optionalText(request.deliveryImageFileId()) == null && optionalText(request.deliveryImageUrl()) == null)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "DELIVERY_IMAGE_REQUIRED");
-        }
         if (purchaseOrderRepository.isOrderDiscarded(orderId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "PURCHASE_ORDER_DISCARDED");
         }
-        return purchaseOrderRepository.markSupplierSupplied(currentUser.companyId(), currentUser.userId(), orderId, supplierOrderId, request)
+        String fileId = request == null ? null : optionalText(request.deliveryImageFileId());
+        String fileUrl = request == null ? null : optionalText(request.deliveryImageUrl());
+        if (fulfillmentAttachmentService != null && (fileId != null || fileUrl != null)) {
+            fulfillmentAttachmentService.saveLegacySupplierImage(
+                currentUser.companyId(), currentUser.userId(), orderId, supplierOrderId, fileId, fileUrl
+            );
+        }
+        PurchaseSupplierSupplyCompleteRequest safeRequest = request == null
+            ? new PurchaseSupplierSupplyCompleteRequest(null, null, null)
+            : request;
+        return purchaseOrderRepository.markSupplierSupplied(currentUser.companyId(), currentUser.userId(), orderId, supplierOrderId, safeRequest)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SUPPLIER_ORDER_NOT_FOUND"));
+    }
+
+    @Transactional
+    public PurchaseOrderDetailResponse markSupplierWaitingSupply(String authorizationHeader, Long orderId, Long supplierOrderId) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (purchaseOrderRepository.isOrderDiscarded(orderId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "PURCHASE_ORDER_DISCARDED");
+        }
+        return purchaseOrderRepository.markSupplierWaitingSupply(currentUser.companyId(), currentUser.userId(), orderId, supplierOrderId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SUPPLIER_ORDER_NOT_FOUND"));
     }
 
@@ -234,7 +315,7 @@ public class PurchaseOrderService {
             List<OrderableLine> supplierLines = entry.getValue();
             MaterialSupplierCandidate first = supplierLines.get(0).candidate();
             String supplierOrderNo = orderNo + "-S" + String.format("%02d", supplierIndex++);
-            BigDecimal subtotal = amount(supplierLines);
+            BigDecimal subtotal = costAmount(supplierLines);
             supplierOrders.put(first.companyId(), new PurchaseSupplierOrderDraft(
                 supplierOrderNo,
                 first.companyId(),
@@ -269,8 +350,8 @@ public class PurchaseOrderService {
             strategyName(strategyType),
             supplierOrders.size(),
             items.size(),
-            amount(lines),
-            amountUsd(lines),
+            costAmount(lines),
+            costAmountUsd(lines),
             CNY,
             PENDING_SUPPLIER_CONFIRM,
             optionalText(request == null ? null : request.buyerRemark()),
@@ -279,7 +360,9 @@ public class PurchaseOrderService {
             items
         );
         PurchaseOrderDetailResponse saved = purchaseOrderRepository.insertOrder(draft);
+        repairBargeLinkAndSettlement(currentUser, saved.order().purchaseOrderId());
         purchaseOrderRepository.markDemandOrdered(currentUser.companyId(), demandId);
+        ensureSettlementChain(currentUser, saved.order().purchaseOrderId());
         return new PurchaseOrderCreateResponse(
             saved.order().purchaseOrderId(),
             saved.order().purchaseOrderNo(),
@@ -292,6 +375,20 @@ public class PurchaseOrderService {
             "/orders/" + saved.order().purchaseOrderId(),
             false
         );
+    }
+
+    private void ensureSettlementChain(CurrentUserContext currentUser, Long purchaseOrderId) {
+        if (settlementOrderService != null) {
+            settlementOrderService.ensureForPurchaseOrder(currentUser.companyId(), currentUser.userId(), purchaseOrderId);
+        }
+    }
+
+    private void repairBargeLinkAndSettlement(CurrentUserContext currentUser, Long purchaseOrderId) {
+        if (purchaseOrderId == null) {
+            return;
+        }
+        purchaseOrderRepository.linkBargeBookingToPurchaseOrder(currentUser.companyId(), purchaseOrderId);
+        ensureSettlementChain(currentUser, purchaseOrderId);
     }
 
     private List<OrderableLine> orderableLines(MaterialDemandComparisonResponse comparison, String strategyType, List<PurchaseOrderSelectedItemRequest> selectedItems) {
@@ -331,7 +428,43 @@ public class PurchaseOrderService {
         return item.candidates().stream()
             .filter(candidate -> selectedItem.skuId().equals(candidate.skuId()))
             .findFirst()
-            .orElse(null);
+            .orElseGet(() -> selectedCandidateSnapshot(selectedItem));
+    }
+
+    private MaterialSupplierCandidate selectedCandidateSnapshot(PurchaseOrderSelectedItemRequest selectedItem) {
+        if (selectedItem.skuId() == null || selectedItem.supplierCompanyId() == null || selectedItem.unitPrice() == null) {
+            return null;
+        }
+        return new MaterialSupplierCandidate(
+            selectedItem.skuId(),
+            selectedItem.supplierCompanyId(),
+            firstText(selectedItem.supplierName(), "-"),
+            selectedItem.supplierSkuCode(),
+            selectedItem.productName(),
+            selectedItem.impaCode(),
+            selectedItem.platformCode(),
+            null,
+            null,
+            List.of(),
+            selectedItem.specification(),
+            selectedItem.unitPrice(),
+            CNY,
+            "\u00A5",
+            null,
+            selectedItem.selectedUnit(),
+            null,
+            null,
+            null,
+            "ON_SHELF",
+            "SNAPSHOT",
+            "SELECTED",
+            "Selected SKU snapshot",
+            selectedItem.selectedUnit(),
+            selectedItem.unitPriceUsd(),
+            selectedItem.amount(),
+            selectedItem.amountUsd(),
+            List.of()
+        );
     }
 
     private PurchaseOrderItemDraft itemDraft(String supplierOrderNo, OrderableLine line) {
@@ -342,10 +475,11 @@ public class PurchaseOrderService {
         BigDecimal unitPriceUsd = selectedUnitPriceUsd(line);
         BigDecimal supplierCostAmount = unitPrice.multiply(pricingQuantity);
         BigDecimal actualQuotePrice = selectedActualQuotePrice(line, unitPrice);
-        BigDecimal amount = selectedQuoteAmount(line, actualQuotePrice.multiply(pricingQuantity));
-        BigDecimal amountUsd = selectedAmountUsd(line, divideUsd(amount));
+        BigDecimal amount = supplierCostAmount;
+        BigDecimal amountUsd = unitPriceUsd == null ? divideUsd(amount) : unitPriceUsd.multiply(pricingQuantity);
         BigDecimal quoteMarkupPercent = selectedQuoteMarkupPercent(line, unitPrice, actualQuotePrice);
-        BigDecimal quoteProfitAmount = amount.subtract(supplierCostAmount);
+        BigDecimal actualQuoteAmount = selectedQuoteAmount(line, actualQuotePrice.multiply(pricingQuantity));
+        BigDecimal quoteProfitAmount = actualQuoteAmount.subtract(supplierCostAmount);
         String unit = firstText(line.selectedItem() == null ? null : line.selectedItem().selectedUnit(), candidate.selectedUnit(), item.unit());
         return new PurchaseOrderItemDraft(
             supplierOrderNo,
@@ -390,15 +524,21 @@ public class PurchaseOrderService {
         );
     }
 
-    private BigDecimal amount(List<OrderableLine> lines) {
+    private BigDecimal costAmount(List<OrderableLine> lines) {
         return lines.stream()
-            .map(line -> selectedQuoteAmount(line, selectedActualQuotePrice(line, selectedUnitPrice(line)).multiply(pricingQuantity(line))))
+            .map(line -> selectedUnitPrice(line).multiply(pricingQuantity(line)))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private BigDecimal amountUsd(List<OrderableLine> lines) {
+    private BigDecimal costAmountUsd(List<OrderableLine> lines) {
         return lines.stream()
-            .map(line -> selectedAmountUsd(line, divideUsd(selectedQuoteAmount(line, selectedActualQuotePrice(line, selectedUnitPrice(line)).multiply(pricingQuantity(line))))))
+            .map(line -> {
+                BigDecimal unitPriceUsd = selectedUnitPriceUsd(line);
+                if (unitPriceUsd != null) {
+                    return unitPriceUsd.multiply(pricingQuantity(line));
+                }
+                return divideUsd(selectedUnitPrice(line).multiply(pricingQuantity(line)));
+            })
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 

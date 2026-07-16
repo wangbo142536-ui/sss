@@ -14,6 +14,8 @@ public class CompanyProfileService {
     static final String DELETED_QUALIFICATION_STATUS = "DELETED";
     static final String DEFAULT_CONTACT_STATUS = "ACTIVE";
     static final String DELETED_CONTACT_STATUS = "DELETED";
+    static final String DEFAULT_VESSEL_STATUS = "ACTIVE";
+    static final String DELETED_VESSEL_STATUS = "DELETED";
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final CurrentUserService currentUserService;
@@ -99,6 +101,47 @@ public class CompanyProfileService {
         }
     }
 
+    public CompanyVesselListResponse vessels(String authorizationHeader, String status) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        return new CompanyVesselListResponse(companyProfileRepository.listVessels(currentUser.companyId(), vesselStatus(status)));
+    }
+
+    public CompanyValueAddedServiceResponse valueAddedServices(String authorizationHeader, Long companyId) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        long targetCompanyId = companyId == null ? currentUser.companyId() : companyId;
+        return companyProfileRepository.findValueAddedServices(targetCompanyId);
+    }
+
+    @Transactional
+    public CompanyValueAddedServiceResponse saveValueAddedServices(String authorizationHeader, CompanyValueAddedServiceSaveRequest request) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        return companyProfileRepository.saveValueAddedServices(currentUser.companyId(), normalizeValueAddedServices(request));
+    }
+
+    @Transactional
+    public CompanyVesselResponse createVessel(String authorizationHeader, CompanyVesselSaveRequest request) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        return companyProfileRepository.createVessel(currentUser.companyId(), validateVessel(request));
+    }
+
+    @Transactional
+    public CompanyVesselResponse updateVessel(String authorizationHeader, Long vesselId, CompanyVesselSaveRequest request) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (vesselId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VESSEL_ID_REQUIRED: vessel id required");
+        }
+        return companyProfileRepository.updateVessel(currentUser.companyId(), vesselId, validateVessel(request))
+            .orElseThrow(CompanyProfileService::vesselNotFound);
+    }
+
+    @Transactional
+    public void deleteVessel(String authorizationHeader, Long vesselId) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (vesselId == null || !companyProfileRepository.softDeleteVessel(currentUser.companyId(), vesselId)) {
+            throw vesselNotFound();
+        }
+    }
+
     private CompanyQualificationSaveRequest validateQualification(CompanyQualificationSaveRequest request, boolean requireFile) {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "QUALIFICATION_REQUIRED: qualification required");
@@ -155,6 +198,51 @@ public class CompanyProfileService {
         return blank(status) ? null : status.trim().toUpperCase(java.util.Locale.ROOT);
     }
 
+    private CompanyVesselSaveRequest validateVessel(CompanyVesselSaveRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VESSEL_REQUIRED: vessel required");
+        }
+        if (blank(request.vesselName())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VESSEL_NAME_REQUIRED: vessel name required");
+        }
+        return new CompanyVesselSaveRequest(
+            trim(request.vesselName()),
+            trim(request.vesselType()),
+            trim(request.buildDate()),
+            trim(request.nextMaintenanceDate()),
+            trim(request.capacity()),
+            normalizeVesselStatus(request.status()),
+            trim(request.remark())
+        );
+    }
+
+    private CompanyValueAddedServiceSaveRequest normalizeValueAddedServices(CompanyValueAddedServiceSaveRequest request) {
+        if (request == null) {
+            return new CompanyValueAddedServiceSaveRequest(java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, null);
+        }
+        return new CompanyValueAddedServiceSaveRequest(
+            nonNegative(request.freightPrice()),
+            nonNegative(request.customsPrice()),
+            nonNegative(request.cranePrice()),
+            trim(request.remark())
+        );
+    }
+
+    private java.math.BigDecimal nonNegative(java.math.BigDecimal value) {
+        if (value == null || value.compareTo(java.math.BigDecimal.ZERO) < 0) {
+            return java.math.BigDecimal.ZERO;
+        }
+        return value;
+    }
+
+    private String vesselStatus(String status) {
+        return blank(status) ? DEFAULT_VESSEL_STATUS : status.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private String normalizeVesselStatus(String status) {
+        return blank(status) ? null : status.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
     private String normalizeCode(String value) {
         return blank(value) ? null : value.trim().toUpperCase(java.util.Locale.ROOT);
     }
@@ -176,6 +264,10 @@ public class CompanyProfileService {
 
     private static ResponseStatusException contactNotFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, "CONTACT_NOT_FOUND: contact not found or access denied");
+    }
+
+    private static ResponseStatusException vesselNotFound() {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "VESSEL_NOT_FOUND: vessel not found or access denied");
     }
 
     private boolean blank(String value) {

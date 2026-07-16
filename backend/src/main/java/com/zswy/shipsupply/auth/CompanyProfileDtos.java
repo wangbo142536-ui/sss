@@ -82,3 +82,52 @@ record CompanyContactListResponse(
     List<CompanyContactResponse> items
 ) {
 }
+
+record CompanyVesselResponse(
+    Long vesselId,
+    Long companyId,
+    String vesselName,
+    String vesselType,
+    String buildDate,
+    String nextMaintenanceDate,
+    String capacity,
+    String status,
+    String remark,
+    String createdAt,
+    String updatedAt
+) {
+}
+
+record CompanyVesselSaveRequest(
+    String vesselName,
+    String vesselType,
+    String buildDate,
+    String nextMaintenanceDate,
+    String capacity,
+    String status,
+    String remark
+) {
+}
+
+record CompanyVesselListResponse(
+    List<CompanyVesselResponse> items
+) {
+}
+
+record CompanyValueAddedServiceResponse(
+    Long companyId,
+    java.math.BigDecimal freightPrice,
+    java.math.BigDecimal customsPrice,
+    java.math.BigDecimal cranePrice,
+    String remark,
+    String updatedAt
+) {
+}
+
+record CompanyValueAddedServiceSaveRequest(
+    java.math.BigDecimal freightPrice,
+    java.math.BigDecimal customsPrice,
+    java.math.BigDecimal cranePrice,
+    String remark
+) {
+}

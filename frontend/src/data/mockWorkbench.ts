@@ -12,61 +12,103 @@ export const currentUser = {
 };
 
 export const menuItems: WorkbenchMenuItem[] = [
-  { key: "dashboard", labelKey: "nav.dashboard", route: "/dashboard", icon: "DB", sortOrder: 0, roles },
   {
-    key: "materialProcurement",
-    labelKey: "nav.materialProcurement",
-    icon: "MP",
-    sortOrder: 30,
+    key: "dashboardGroup",
+    labelKey: "nav.dashboard",
+    icon: "DB",
+    sortOrder: 0,
+    roles,
+    children: [
+      { key: "dashboardGovernment", labelKey: "nav.dashboardGovernment", route: "/dashboard-government", icon: "DG", sortOrder: 0, roles },
+      { key: "dashboard", labelKey: "nav.dashboard", route: "/dashboard", icon: "DB", sortOrder: 5, roles }
+    ]
+  },
+  {
+    key: "procurementServices",
+    labelKey: "nav.procurementServices",
+    icon: "PS",
+    sortOrder: 10,
     roles: ["admin", "purchaser", "supplier"],
     children: [
-      { key: "requests", labelKey: "nav.requests", route: "/procurement/materials", icon: "RQ", sortOrder: 0, roles: ["admin", "purchaser"] },
-      { key: "inquiries", labelKey: "nav.inquiries", route: "/inquiries", icon: "IQ", sortOrder: 10, roles: ["admin", "purchaser", "supplier"] },
-      { key: "quotes", labelKey: "nav.quotes", route: "/quotes", icon: "QT", sortOrder: 20, roles: ["admin", "purchaser", "supplier"] },
-      { key: "compare", labelKey: "nav.compare", route: "/comparison", icon: "CP", sortOrder: 30, roles: ["admin", "purchaser"] },
-      { key: "orders", labelKey: "nav.orders", route: "/orders/new", icon: "PO", sortOrder: 40, roles: ["admin", "purchaser"] },
-      { key: "supplierOrders", labelKey: "nav.supplierOrders", route: "/supplier/orders", icon: "SO", sortOrder: 50, roles: ["supplier"] }
+      {
+        key: "materialProcurement",
+        labelKey: "nav.materialProcurement",
+        icon: "MP",
+        sortOrder: 0,
+        roles: ["admin", "purchaser", "supplier"],
+        children: [
+          { key: "requests", labelKey: "nav.requests", route: "/procurement/materials", icon: "RQ", sortOrder: 0, roles: ["admin", "purchaser"] },
+          { key: "inquiries", labelKey: "nav.inquiries", route: "/inquiries", icon: "IQ", sortOrder: 10, roles: ["admin", "purchaser", "supplier"] },
+          { key: "quotes", labelKey: "nav.quotes", route: "/quotes", icon: "QT", sortOrder: 20, roles: ["admin", "purchaser", "supplier"] },
+          { key: "compare", labelKey: "nav.compare", route: "/comparison", icon: "CP", sortOrder: 30, roles: ["admin", "purchaser"] },
+          { key: "orders", labelKey: "nav.orders", route: "/orders/new", icon: "PO", sortOrder: 40, roles: ["admin", "purchaser"] },
+          { key: "supplierOrders", labelKey: "nav.supplierOrders", route: "/supplier/orders", icon: "SO", sortOrder: 50, roles: ["admin", "supplier"] },
+          { key: "settlements", labelKey: "nav.settlements", route: "/settlements", icon: "ST", sortOrder: 60, roles: ["admin", "purchaser"] },
+          { key: "supplierSettlements", labelKey: "nav.supplierSettlements", route: "/supplier/settlements", icon: "SS", sortOrder: 70, roles: ["admin", "supplier"] },
+          { key: "evaluations", labelKey: "nav.evaluations", route: "/evaluations", icon: "EV", sortOrder: 80, roles: ["admin", "purchaser"] }
+        ]
+      },
+      {
+        key: "foodProcurement",
+        labelKey: "nav.foodProcurement",
+        icon: "FP",
+        sortOrder: 10,
+        roles: ["admin", "purchaser"],
+        children: [
+          { key: "food", labelKey: "nav.food", route: "/procurement/food", icon: "FD", sortOrder: 0, roles: ["admin", "purchaser"] },
+          { key: "foodInquiries", labelKey: "nav.foodInquiries", route: "/food/inquiries", icon: "IQ", sortOrder: 10, roles: ["admin", "purchaser"] },
+          { key: "foodQuotes", labelKey: "nav.foodQuotes", route: "/food/quotes", icon: "QT", sortOrder: 20, roles: ["admin", "purchaser"] },
+          { key: "foodCompare", labelKey: "nav.foodCompare", route: "/food/comparison", icon: "CP", sortOrder: 30, roles: ["admin", "purchaser"] },
+          { key: "foodOrders", labelKey: "nav.foodOrders", route: "/food/orders", icon: "PO", sortOrder: 40, roles: ["admin", "purchaser"] }
+        ]
+      }
     ]
   },
   {
-    key: "foodProcurement",
-    labelKey: "nav.foodProcurement",
-    icon: "FP",
-    sortOrder: 40,
-    roles: ["admin", "purchaser"],
+    key: "trafficService",
+    labelKey: "nav.bargeServices",
+    icon: "BS",
+    sortOrder: 20,
+    roles: ["admin", "operator", "supplier"],
     children: [
-      { key: "food", labelKey: "nav.food", route: "/procurement/food", icon: "FD", sortOrder: 0, roles: ["admin", "purchaser"] },
-      { key: "foodInquiries", labelKey: "nav.foodInquiries", route: "/food/inquiries", icon: "IQ", sortOrder: 10, roles: ["admin", "purchaser"] },
-      { key: "foodQuotes", labelKey: "nav.foodQuotes", route: "/food/quotes", icon: "QT", sortOrder: 20, roles: ["admin", "purchaser"] },
-      { key: "foodCompare", labelKey: "nav.foodCompare", route: "/food/comparison", icon: "CP", sortOrder: 30, roles: ["admin", "purchaser"] },
-      { key: "foodOrders", labelKey: "nav.foodOrders", route: "/food/orders", icon: "PO", sortOrder: 40, roles: ["admin", "purchaser"] }
+      { key: "trafficBoat", labelKey: "nav.trafficBoat", route: "/traffic-boat", icon: "TB", sortOrder: 0, roles: ["admin", "operator", "supplier"] },
+      { key: "trafficBoatMyServices", labelKey: "nav.trafficBoatMyServices", route: "/traffic-boat/my-services", icon: "MS", sortOrder: 5, roles: ["admin", "purchaser", "operator", "supplier"] },
+      { key: "bargeSettlements", labelKey: "nav.settlements", route: "/traffic-boat/settlements", icon: "ST", sortOrder: 10, roles: ["admin", "operator", "supplier"] }
     ]
   },
+  { key: "customsServices", labelKey: "nav.customsServices", route: "/customs-services", icon: "CS", sortOrder: 30, roles },
+  { key: "portShippingServices", labelKey: "nav.portShippingServices", route: "/port-shipping-services", icon: "PH", sortOrder: 35, roles },
   {
-    key: "supplierProducts",
-    labelKey: "nav.supplierProducts",
-    route: "/shop/products",
-    icon: "SKU",
-    sortOrder: 50,
-    roles: ["admin", "purchaser", "supplier"]
+    key: "regulatoryServices",
+    labelKey: "nav.regulatoryServices",
+    icon: "RS",
+    sortOrder: 40,
+    roles,
+    children: [
+      { key: "qualitySupervision", labelKey: "nav.qualitySupervision", route: "/regulatory/quality", icon: "QS", sortOrder: 0, roles }
+    ]
   },
-  { key: "crewServices", labelKey: "nav.crewServices", route: "/crew-services", icon: "CS", sortOrder: 80, roles: ["admin", "purchaser", "operator"] },
-  { key: "delivery", labelKey: "nav.delivery", route: "/delivery-tasks", icon: "DL", sortOrder: 90, roles: ["admin", "operator"] },
-  { key: "settlements", labelKey: "nav.settlements", route: "/settlements", icon: "FN", sortOrder: 100, roles: ["admin", "finance"] },
-  { key: "supplyChainFinance", labelKey: "nav.supplyChainFinance", route: "/supply-chain-finance", icon: "SCF", sortOrder: 105, roles: ["admin", "purchaser", "finance"] },
+  { key: "borderInspectionServices", labelKey: "nav.borderInspectionServices", route: "/border-inspection-services", icon: "BI", sortOrder: 45, roles },
+  { key: "maritimeServices", labelKey: "nav.maritimeServices", route: "/maritime-services", icon: "MS", sortOrder: 50, roles },
+  { key: "crewServices", labelKey: "nav.crewServices", route: "/crew-services", icon: "USE", sortOrder: 55, roles: ["admin", "purchaser", "operator"] },
+  { key: "taxServices", labelKey: "nav.taxServices", route: "/tax-services", icon: "TX", sortOrder: 60, roles },
+  { key: "financialServices", labelKey: "nav.financialServices", route: "/financial-services", icon: "FN", sortOrder: 70, roles },
+  { key: "weatherServices", labelKey: "nav.weatherServices", route: "/weather-services", icon: "WT", sortOrder: 80, roles },
+  { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, roles },
   {
     key: "basicManagement",
     labelKey: "nav.basicManagement",
-    icon: "BM",
-    sortOrder: 110,
-    roles: ["admin", "purchaser"],
+    icon: "BSV",
+    sortOrder: 100,
+    roles: ["admin", "purchaser", "supplier"],
     children: [
-      { key: "impa", labelKey: "nav.impa", route: "/standard-library/impa", icon: "IM", sortOrder: 0, roles: ["admin", "purchaser"] },
-      { key: "suppliers", labelKey: "nav.suppliers", route: "/suppliers", icon: "SP", sortOrder: 10, roles: ["admin", "purchaser"] },
-      { key: "registrations", labelKey: "nav.registrations", route: "/admin/registrations", icon: "RG", sortOrder: 20, roles: ["admin"] },
-      { key: "permissions", labelKey: "nav.permissions", route: "/admin/permissions", icon: "PM", sortOrder: 30, roles: ["admin"] },
-      { key: "menuManagement", labelKey: "nav.menuManagement", route: "/admin/menus", icon: "MN", sortOrder: 40, roles: ["admin"] },
-      { key: "dataDictionary", labelKey: "nav.dataDictionary", route: "/admin/dictionaries", icon: "DD", sortOrder: 50, roles: ["admin"] }
+      { key: "supplierProducts", labelKey: "nav.supplierProducts", route: "/shop/products", icon: "SKU", sortOrder: 0, roles: ["admin", "purchaser", "supplier"] },
+      { key: "impa", labelKey: "nav.impa", route: "/standard-library/impa", icon: "IM", sortOrder: 10, roles: ["admin", "purchaser"] },
+      { key: "suppliers", labelKey: "nav.suppliers", route: "/suppliers", icon: "SP", sortOrder: 20, roles: ["admin", "purchaser"] },
+      { key: "registrations", labelKey: "nav.registrations", route: "/admin/registrations", icon: "RG", sortOrder: 30, roles: ["admin"] },
+      { key: "permissions", labelKey: "nav.permissions", route: "/admin/permissions", icon: "PM", sortOrder: 40, roles: ["admin"] },
+      { key: "menuManagement", labelKey: "nav.menuManagement", route: "/admin/menus", icon: "MN", sortOrder: 50, roles: ["admin"] },
+      { key: "dataDictionary", labelKey: "nav.dataDictionary", route: "/admin/dictionaries", icon: "DD", sortOrder: 60, roles: ["admin"] }
     ]
   }
 ];

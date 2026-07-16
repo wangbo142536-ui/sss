@@ -1,6 +1,6 @@
 export default {
   app: {
-    name: "船供海事服务平台",
+    name: "海事一站式综合服务平台",
     workbench: "业务工作台",
     lightMode: "浅色蓝调"
   },
@@ -164,8 +164,8 @@ export default {
         action: "进入驳船管理"
       },
       platform: {
-        title: "船供海事服务平台",
-        subtitle: "保障最后一公里",
+        title: "海事一站式综合服务平台",
+        subtitle: "统筹协同、融通聚力、同舟共济、聚势赋能、保障最后一公里",
         action: "进入服务入口"
       }
     }
@@ -179,9 +179,11 @@ export default {
   },
   nav: {
     dashboard: "Dashboard",
-    basicManagement: "基础管理",
-    materialProcurement: "物料采购",
-    foodProcurement: "伙食采购管理",
+    dashboardGovernment: "Dashboard 政",
+    basicManagement: "基础服务",
+    procurementServices: "采购服务",
+    materialProcurement: "物料采购服务",
+    foodProcurement: "伙食采购服务",
     impa: "IMPA 标准库",
     suppliers: "供货商信息",
     supplierProducts: "企业管理",
@@ -190,10 +192,27 @@ export default {
     quotes: "报价管理",
     compare: "比价管理",
     orders: "采购管理",
-    supplierOrders: "供采管理",
+    supplierOrders: "采购管理 - 供货商",
+    supplierSettlements: "结算管理 - 供货商",
+    evaluations: "评价体系",
     supplyChainFinance: "供应链金融",
+    customsServices: "海关服务",
+    portShippingServices: "港航服务",
+    borderInspectionServices: "边检服务",
+    maritimeServices: "海事服务",
     crewServices: "船员服务",
-    delivery: "驳船管理",
+    delivery: "驳船服务",
+    transportManagement: "驳船服务",
+    bargeServices: "驳船服务",
+    trafficBoat: "服务大厅",
+    trafficBoatMyServices: "我的服务",
+    trafficRoutes: "驳船管理",
+    regulatoryServices: "监管服务",
+    qualitySupervision: "质量监督",
+    taxServices: "税务服务",
+    financialServices: "金融服务",
+    weatherServices: "气象服务",
+    vesselDynamicsServices: "船舶动态服务",
     settlements: "结算管理",
     registrations: "注册审核",
     permissions: "权限管理",
@@ -443,6 +462,30 @@ export default {
         phonePlaceholder: "请输入联系人电话",
         emailPlaceholder: "请输入邮箱",
         updatedAt: "更新时间"
+      },
+      vessel: {
+        title: "船舶管理",
+        add: "新增船舶",
+        empty: "暂无企业船舶。",
+        created: "船舶已新增。",
+        updated: "船舶已更新。",
+        deleted: "船舶已删除。",
+        createFailed: "船舶新增失败。",
+        updateFailed: "船舶更新失败。",
+        deleteFailed: "船舶删除失败。",
+        deleteConfirm: "确认删除这艘船舶？",
+        nameRequired: "请填写船名。",
+        vesselName: "船名",
+        vesselType: "船舶类型",
+        buildDate: "建造时间",
+        nextMaintenanceDate: "下次保养时间",
+        capacity: "载客/能力",
+        namePlaceholder: "请输入船名",
+        typePlaceholder: "请输入船舶类型",
+        capacityPlaceholder: "请输入载客或载重信息"
+      },
+      trafficService: {
+        title: "驳船管理"
       },
       exceptionQueue: "异常处理区",
       exceptionHint: "可选择候选、手动录入平台编码，或标记暂不处理。",
@@ -881,7 +924,8 @@ export default {
     risk: "风险",
     score: "评分",
     owner: "负责人",
-    updatedAt: "更新时间"
+    updatedAt: "更新时间",
+    remark: "备注"
   },
   attr: {
     spec: "规格",
@@ -1056,6 +1100,14 @@ export default {
     matchCount: "匹配数量",
     totalAmount: "总金额",
     costAmount: "成本价格",
+    fixedFeeTitle: "补给费用",
+    fixedFeeTotal: "补给费用",
+    fixedFee: {
+      freight: "运费",
+      customs: "报关费",
+      crane: "吊机费",
+      other: "其他费用"
+    },
     quoteTotal: "报价合计",
     profitAmount: "利润",
     vs: "VS",
@@ -1162,8 +1214,10 @@ export default {
       retry: "重试",
       supplierConfirm: "确认",
       supplierReject: "拒绝",
-      markReady: "备货完成",
-      markSupplied: "供货完成"
+      remind: "提醒",
+      markReady: "提交",
+      markSupplied: "供货完成",
+      uploadCustomsDocuments: "上传报关资料"
     },
     dialog: {
       title: "确认下单",
@@ -1174,7 +1228,7 @@ export default {
       removedSkuCount: "移出SKU数量",
       orderableCount: "下单SKU数量",
       excludedCount: "移出SKU数量",
-      supplierSubtotal: "供货商小计",
+      supplierSubtotal: "供货商入选",
       unitPendingConfirm: "单位待确认（{count}）",
       pricingQuantityFallback: "计价数量按 1（{count}）",
       confirmTitle: "供货商确认",
@@ -1208,7 +1262,7 @@ export default {
       remark: "备注",
       deliveryAddress: "送达具体地址",
       expectedReadyAt: "预计备货完成时间",
-      supplierRemark: "供货商备注",
+      supplierRemark: "备注",
       discountType: "折扣类型",
       discountValue: "折扣值",
       rejectReason: "拒绝原因",
@@ -1217,7 +1271,15 @@ export default {
       unit: "单位",
       unitPrice: "单价",
       amount: "金额",
-      flags: "提示"
+      flags: "提示",
+      quoteAmount: "报价金额",
+      costAmount: "成本金额",
+      fixedFee: "补给费用",
+      profitAmount: "利润",
+      total: "总计",
+      customsService: "报关",
+      craneService: "吊机",
+      trafficBoatService: "交通艇"
     },
     filter: {
       keyword: "关键词",
@@ -1229,15 +1291,19 @@ export default {
     },
     section: {
       basicInfo: "基础信息",
-      supplierConfirm: "供货商确认",
+      supplierConfirm: "供应情况",
       items: "采购明细",
-      timeline: "时间轴"
+      timeline: "时间轴",
+      qc: "QC",
+      customsDocuments: "报关资料",
+      otherServices: "驳船管理"
     },
     status: {
       PENDING_SUPPLIER_CONFIRM: "待确认",
       PARTIALLY_CONFIRMED: "部分确认",
       PREPARING: "备货中",
-      READY_TO_DELIVER: "备货完成",
+      READY_TO_DELIVER: "运输中",
+      IN_TRANSIT: "运输中",
       PARTIALLY_READY: "部分备货完成",
       SUPPLIED: "已供船",
       PARTIALLY_SUPPLIED: "部分已供船",
@@ -1248,7 +1314,8 @@ export default {
       COMPLETED: "已完成"
     },
     statusSupplier: {
-      READY_TO_DELIVER: "待供船",
+      READY_TO_DELIVER: "运输中",
+      IN_TRANSIT: "运输中",
       PARTIALLY_READY: "部分待供船"
     },
     packaging: {
@@ -1256,6 +1323,9 @@ export default {
       UNIFIED_PACKAGING: "平台统一",
       SUPPLIER_PACKAGING: "独自包装",
       MULTIPLE: "多种包装"
+    },
+    serviceMode: {
+      package: "包干"
     },
     discount: {
       AMOUNT: "按金额",
@@ -1274,7 +1344,14 @@ export default {
     },
     notice: {
       created: "采购单已生成。",
-      idempotent: "该方案已生成采购单。"
+      idempotent: "该方案已生成采购单。",
+      qcRequired: "系统随机抽取 5 件内容，请上传图片证明包装和品质完好。",
+      customsDocuments: "请上传本单报关资料，可一次选择多个文件。",
+      customsRequired: "报关资料待上传",
+      customsSaved: "报关资料已保存",
+      deliveryInfoSaved: "采购信息已保存",
+      remindSending: "正在发送邮件提醒...",
+      remindSent: "已发送邮件提醒"
     },
     error: {
       noOrderableItems: "暂无可下单商品",
@@ -1294,6 +1371,8 @@ export default {
       rejectReasonRequired: "请填写拒绝原因",
       deliveryImageRequired: "请上传供货完成照片",
       supplierActionFailed: "供货商操作失败",
+      saveDetailFailed: "采购信息保存失败",
+      remindFailed: "发送提醒失败",
       notFound: "采购单不存在或无权查看。",
       supplierOrderNotFound: "供货商子单不存在或无权操作。"
     },
@@ -1478,6 +1557,296 @@ export default {
     saveFailed: "数据字典保存失败",
     deleteFailed: "数据字典停用失败",
     required: "请填写必填字段"
+  },
+  trafficService: {
+    title: "驳船管理",
+    empty: "暂无服务",
+    emptyPrice: "暂无锚地价格",
+    filter: {
+      keyword: "关键词",
+      keywordPlaceholder: "搜索单号、锚地或备注",
+      anchoragePlaceholder: "搜索锚地名称或编码"
+    },
+    field: {
+      serviceNo: "服务单号",
+      seaArea: "海域",
+      anchorage: "锚地",
+      useTime: "用艇时间",
+      serviceType: "接送类型",
+      passengerType: "人员类型",
+      passengerCount: "乘客数量",
+      cargoType: "货物类型",
+      returnTrip: "是否返程",
+      allowShare: "是否拼单",
+      basePrice: "基础价格",
+      sharedPrice: "拼船价",
+      supplier: "服务商",
+      feeType: "类型",
+      destination: "目的地",
+      planTime: "计划时间",
+      freightAmount: "金额",
+      price: "价格",
+      businessInfo: "业务信息",
+      businessContact: "业务联系人",
+      acceptedAt: "接单时间",
+      trafficVessel: "交通艇名",
+      handler: "办理人员",
+      supplierMessage: "服务商留言",
+      departureTime: "出发时间",
+      arrivalTime: "抵达时间",
+      returnStartTime: "返程开始",
+      returnEndTime: "返程结束",
+      signPhoto: "签单照片",
+      pickupPhoto: "接送照片",
+      returnArrivalPhoto: "返程抵达照片",
+      cargoName: "货物名称",
+      weightKg: "重量(kg)",
+      volumeCbm: "体积(方)"
+    },
+    seaArea: {
+      north: "北部海域",
+      south: "南部海域"
+    },
+    serviceType: {
+      personnel: "人员接送",
+      goods: "物品接送"
+    },
+    passengerType: {
+      normal: "普通",
+      jointInspection: "联检"
+    },
+    cargoType: {
+      cargo: "物品接送",
+      supply: "供货接送"
+    },
+    status: {
+      active: "启用",
+      pendingConfirm: "待确认",
+      confirmed: "待服务",
+      waitingService: "待服务",
+      discarded: "废弃"
+    },
+    dialog: {
+      createTitle: "新增服务",
+      queryFreightTitle: "查询运费",
+      editTitle: "查看明细",
+      subtitle: "维护锚地、用艇时间、拼船和交通船价格。",
+      compareSubtitle: "选择锚地和抛锚时间，系统筛选可用驳船服务并写入运费。"
+    },
+    section: {
+      basicInfo: "基础信息",
+      businessInfo: "业务信息",
+      cargo: "货物信息",
+      transport: "驳船管理",
+      supplement: "补充信息",
+      handling: "办理信息"
+    },
+    action: {
+      addCargo: "新增货物"
+    },
+    placeholder: {
+      anchorage: "请选择锚地",
+      passengerCount: "一人数",
+      remark: "出发码头及其他注意信息",
+      supplierMessage: "请输入服务商留言",
+      photoUrl: "填写图片地址"
+    },
+    notice: {
+      created: "服务已新增",
+      updated: "服务已保存",
+      confirmed: "交通艇服务已确认",
+      discarded: "服务已废弃",
+      priceSaved: "锚地价格已保存",
+      pricesSaved: "驳船服务报价已保存"
+    },
+    error: {
+      loadFailed: "服务加载失败",
+      saveFailed: "服务保存失败",
+      confirmFailed: "交通艇服务确认失败",
+      discardFailed: "服务废弃失败",
+      anchorageRequired: "请选择锚地",
+      priceNotFound: "当前锚地暂无可用交通艇价格"
+    }
+  },
+  trafficMarketplace: {
+    tab: {
+      requests: "用艇需求",
+      shuttles: "驳船拼船",
+      serviceHall: "驳船服务",
+      myOrders: "我的服务",
+      myServices: "我的服务"
+    },
+    field: {
+      requestNo: "需求单号",
+      quoteAmount: "报价",
+      availableStartTime: "可用时间",
+      availableReturnTime: "可返程时间",
+      shuttleNo: "驳船号",
+      route: "路线",
+      departurePoint: "出发点",
+      destinationPoint: "目的地",
+      destinationSeaArea: "海域",
+      destinationAnchorage: "目的锚地",
+      startTime: "启动时间",
+      returnTime: "返回时间",
+      contact: "联系人",
+      contactPhone: "联系电话",
+      message: "报价说明",
+      passengerCapacity: "载客人数",
+      cargoCapacityKg: "载货重量(kg)",
+      cargoCapacityCbm: "载货体积(方)",
+      serviceNode: "节点",
+      nodeStartTime: "开始时间",
+      nodeEndTime: "结束时间",
+      currentShareCount: "当前拼船数量"
+    },
+    status: {
+      draft: "待发布",
+      pendingPublish: "待发布",
+      published: "已发布",
+      sharing: "发布中",
+      quoting: "报价中",
+      awarded: "已选中",
+      orderCreated: "已生成订单",
+      cancelled: "已取消",
+      submitted: "已报价",
+      updated: "已更新",
+      selected: "已选择",
+      rejected: "未选择",
+      withdrawn: "已撤回",
+      full: "执行中",
+      closed: "已关闭",
+      completed: "已完成",
+      finished: "结束",
+      availableShare: "可拼",
+      joinedShare: "已拼",
+      missedShare: "未拼"
+    },
+    action: {
+      createRequest: "发布用艇需求",
+      publishRequest: "发布需求",
+      selectQuote: "选择报价",
+      quote: "报价",
+      submitQuote: "提交报价",
+      withdrawQuote: "撤回",
+      createShuttle: "发布驳船",
+      publishShuttle: "发布",
+      addShuttleNode: "添加节点",
+      closeShuttle: "关闭驳船",
+      bookShuttle: "预订"
+    },
+    dialog: {
+      requestTitle: "发布交通艇使用需求",
+      requestSubtitle: "发布后会进入服务大厅，交通艇服务公司可领取并报价。",
+      quoteTitle: "提交交通艇报价",
+      quoteSubtitle: "船代侧默认推荐最低报价，也可手动选择其他报价。",
+      shuttleTitle: "驳船服务",
+      shuttleSubtitle: "设置锚地、启动时间、返回时间和拼船价格。"
+    },
+    section: {
+      requestServices: "船代需求",
+      requestServicesHint: "船代发布的临时用艇需求，可查看明细并提交报价。",
+      shuttleServices: "驳船服务",
+      shuttleServicesHint: "固定锚地与时间的拼船驳船服务，按班次浏览。",
+      shuttleManagement: "驳船管理",
+      shuttleManagementHint: "发布和管理本公司的驳船化拼船服务，大厅同步可见。",
+      shuttleNodes: "驳船服务节点",
+      orderManagement: "结算管理",
+      orderManagementHint: "处理船代选择报价或预订驳船后生成的交通艇订单。"
+    },
+    notice: {
+      requestCreated: "用艇需求已发布",
+      requestCancelled: "用艇需求已取消",
+      quoteSaved: "报价已提交",
+      quoteSelected: "报价已选择并生成订单",
+      quoteWithdrawn: "报价已撤回",
+      shuttleCreated: "驳船拼船服务已发布",
+      shuttleSaved: "驳船拼船服务已保存为草稿",
+      shuttlePublished: "驳船拼船服务已发布",
+      shuttleClosed: "驳船拼船服务已关闭",
+      shuttleBooked: "驳船拼船已预订"
+    },
+    error: {
+      loadFailed: "交通艇市场数据加载失败",
+      saveFailed: "用艇需求保存失败",
+      cancelFailed: "用艇需求取消失败",
+      selectFailed: "报价选择失败",
+      quoteFailed: "报价提交失败",
+      shuttleFailed: "驳船拼船操作失败"
+    },
+    emptyRequests: "暂无用艇需求",
+    emptyQuotes: "暂无报价",
+    emptyShuttles: "暂无驳船拼船服务",
+    unit: {
+      person: "人"
+    },
+    shuttleAdminTitle: "驳船化拼船运输服务",
+    shuttleAdminSubtitle: "交通艇服务商可发布固定锚地、启动/返回时间和拼船价格。",
+    placeholder: {
+      departurePoint: "例如：沈家门码头",
+      destinationPoint: "例如：绿华山锚地",
+      serviceNode: "例如：节点一",
+      shuttleSearch: "搜索船名、单号"
+    }
+  },
+  trafficFeeType: {
+    freight: "运费",
+    customs: "报关费",
+    crane: "吊机费"
+  },
+  trafficRoute: {
+    title: "订单规划",
+    subtitle: "把同一天、同海域的驳船服务订单编排成一条拼船路线。",
+    empty: "暂无路线",
+    emptyStops: "暂无站点",
+    emptyOrders: "暂无待规划订单",
+    mapPlaceholder: "路线地图",
+    mapHint: "一期先按站点顺序展示路线，后续接入真实地图。",
+    filter: {
+      keyword: "搜索路线或服务商",
+      serviceDate: "服务日期"
+    },
+    field: {
+      routeNo: "路线号",
+      routeName: "路线名称",
+      serviceDate: "服务日期",
+      supplier: "服务商",
+      vessel: "交通艇",
+      departure: "计划出发",
+      finish: "计划完成",
+      orderCount: "订单数",
+      totalIncome: "收入",
+      estimatedCost: "成本",
+      estimatedProfit: "预估利润",
+      stop: "站点",
+      plannedTime: "计划服务时间",
+      contact: "联系人",
+      amount: "金额"
+    },
+    status: {
+      draft: "草稿",
+      ready: "已确认",
+      inProgress: "执行中",
+      completed: "已完成",
+      discarded: "废弃",
+      planned: "已规划"
+    },
+    action: {
+      create: "新建路线",
+      addStop: "加入路线",
+      confirm: "确认路线",
+      start: "开始执行",
+      complete: "完成路线",
+      discard: "废弃路线"
+    },
+    notice: {
+      created: "路线已创建",
+      updated: "路线已更新"
+    },
+    error: {
+      loadFailed: "路线加载失败",
+      saveFailed: "路线保存失败"
+    }
   },
   registration: {
     pendingList: "待审核企业列表",

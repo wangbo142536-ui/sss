@@ -144,7 +144,7 @@ function normalizeSession(payload: unknown): AuthSession {
   const roles = readArray(unwrapped, ["roles", "roleCodes", "authorities"]);
   const permissions = readArray(unwrapped, ["permissions", "permissionCodes", "permissionPoints"]);
   const menus = normalizeMenus(unwrapped.menus);
-  const defaultRoute = readString(unwrapped, ["defaultRoute", "defaultPath", "homePath", "redirectTo"]) || "/dashboard";
+  const defaultRoute = readString(unwrapped, ["defaultRoute", "defaultPath", "homePath", "redirectTo"]) || "/dashboard-government";
   const companyRecord = company ? (company as Record<string, unknown>) : {};
   const userRecord = user ? (user as Record<string, unknown>) : {};
   const profileStatus = normalizeProfileStatus(
@@ -358,7 +358,7 @@ export function resolveAuthRoute(session: AuthSession): string {
     return "/onboarding/company-profile";
   }
 
-  return session.defaultRoute || "/dashboard";
+  return session.defaultRoute === "/dashboard" ? "/dashboard-government" : session.defaultRoute || "/dashboard-government";
 }
 
 export function saveAuthSession(session: AuthSession): void {

@@ -89,6 +89,7 @@ class MaterialDemandControllerTest {
             "SAVED",
             LocalDate.of(2026, 6, 1),
             LocalDate.of(2026, 6, 30),
+            "COMPARISON",
             1,
             20
         )).thenReturn(new MaterialDemandListResponse(List.of(summary), 1, 20, 1L));
@@ -99,6 +100,7 @@ class MaterialDemandControllerTest {
                 .param("status", "SAVED")
                 .param("inquiryDateFrom", "2026-06-01")
                 .param("inquiryDateTo", "2026-06-30")
+                .param("stage", "COMPARISON")
                 .param("page", "1")
                 .param("size", "20"))
             .andExpect(status().isOk())

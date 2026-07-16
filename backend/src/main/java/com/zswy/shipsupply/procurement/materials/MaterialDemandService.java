@@ -64,6 +64,7 @@ public class MaterialDemandService {
         String status,
         LocalDate dateFrom,
         LocalDate dateTo,
+        String stage,
         int page,
         int size
     ) {
@@ -76,6 +77,7 @@ public class MaterialDemandService {
             optionalText(status),
             dateFrom,
             dateTo,
+            optionalText(stage),
             safePage,
             safeSize
         );
@@ -111,6 +113,7 @@ public class MaterialDemandService {
         required(request.vesselName(), "vesselName");
         LocalDate inquiryDate = compatibleInquiryDate(request.vesselEta(), request.inquiryDate());
         List<MaterialDemandItemRequest> items = request.items() == null ? List.of() : request.items().stream().map(this::validatedItem).toList();
+        SupplyPortValue supplyPort = normalizeSupplyPort(request.supplyPortCode(), request.supplyPortName());
         return new MaterialDemandSaveRequest(
             request.demandId(),
             request.demandNo(),
@@ -122,16 +125,36 @@ public class MaterialDemandService {
             optionalText(request.handlerName()),
             optionalText(request.handlerEmail()),
             request.vesselName().trim(),
-            optionalText(request.supplyPortCode()),
-            optionalText(request.supplyPortName()),
+            supplyPort.code(),
+            supplyPort.name(),
             optionalText(request.vesselEta()),
             inquiryDate.toString(),
             optionalText(request.sourceFileName()),
             optionalText(request.sourceFileId()),
             optionalText(request.documentType()),
             request.headerRowIndex() == null ? 0 : request.headerRowIndex(),
+            request.trafficService(),
             items
         );
+    }
+
+    private SupplyPortValue normalizeSupplyPort(String code, String name) {
+        String safeCode = optionalText(code);
+        String safeName = optionalText(name);
+        if (isSulanghuPort(safeCode) || isSulanghuPort(safeName)) {
+            return new SupplyPortValue("SULANGHU", "衢山港区/SULANGHU");
+        }
+        return new SupplyPortValue(safeCode, safeName);
+    }
+
+    private boolean isSulanghuPort(String value) {
+        String normalized = value == null ? "" : value.replaceAll("[^A-Za-z0-9\\u4e00-\\u9fa5]", "").toUpperCase();
+        return normalized.equals("SULANGHU")
+            || normalized.equals("SHULANGHU")
+            || normalized.contains("鼠浪湖");
+    }
+
+    private record SupplyPortValue(String code, String name) {
     }
 
     private MaterialDemandItemRequest validatedItem(MaterialDemandItemRequest item) {

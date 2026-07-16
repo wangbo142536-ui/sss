@@ -1105,6 +1105,35 @@ public class AuthRepository {
         return files.stream().findFirst();
     }
 
+    public boolean hasBusinessFileAccess(String fileId, Long companyId, boolean regulatory) {
+        if (fileId == null || fileId.isBlank() || companyId == null) return false;
+        String jsonNeedle = "%\"fileId\":\"" + fileId + "\"%";
+        Long count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(*) FROM (
+              SELECT attachment.id
+              FROM fulfillment_attachment attachment
+              LEFT JOIN purchase_order purchase ON purchase.id = attachment.purchase_order_id
+              WHERE attachment.file_id = ?
+                AND (attachment.provider_company_id = ? OR purchase.buyer_company_id = ?)
+              UNION ALL
+              SELECT settlement.id
+              FROM settlement_order settlement
+              WHERE settlement.invoice_attachments_json LIKE ?
+                AND (settlement.provider_company_id = ? OR settlement.buyer_company_id = ?)
+              UNION ALL
+              SELECT evaluation.id
+              FROM service_evaluation evaluation
+              WHERE evaluation.attachments_json LIKE ?
+                AND (? = 1 OR evaluation.provider_company_id = ? OR evaluation.buyer_company_id = ?)
+            ) accessible_file
+            """, Long.class,
+            fileId, companyId, companyId,
+            jsonNeedle, companyId, companyId,
+            jsonNeedle, regulatory ? 1 : 0, companyId, companyId
+        );
+        return count != null && count > 0;
+    }
+
     public void replaceCompanyQualifications(long companyId, List<String> fileIds) {
         jdbcTemplate.update("DELETE FROM company_qualification WHERE company_id = ?", companyId);
         for (String fileId : fileIds) {
