@@ -166,6 +166,7 @@ export interface MaterialDemandTrafficCargo {
 export interface MaterialDemandTrafficService {
   trafficServiceOrderId?: number;
   bookingId?: number;
+  selectedNodeIndex?: number;
   departurePoint?: string;
   destinationPoint?: string;
   startTime?: string;

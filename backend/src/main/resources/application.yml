@@ -17,6 +17,9 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
 ship-supply:
+  procurement:
+    food:
+      development-open-supplier-scope: false
   standard-library:
     category-tree-max-level: 2
   redis:

@@ -63,7 +63,10 @@ const progressPercent = ref(0);
 const progressStageIndex = ref(0);
 const progressState = ref<"running" | "success" | "failed">("running");
 const progressResult = ref<MaterialMatchPreviewResponse | null>(null);
+const progressElapsedSeconds = ref(0);
 let progressTimer: number | undefined;
+let progressElapsedTimer: number | undefined;
+let progressStartedAt = 0;
 const DEFAULT_MATERIAL_QUANTITY = "1";
 const DEFAULT_MATERIAL_UNIT = "个";
 
@@ -782,8 +785,25 @@ function clearProgressTimer(): void {
   }
 }
 
+function stopProgressElapsedTimer(): void {
+  if (progressElapsedTimer !== undefined) {
+    window.clearInterval(progressElapsedTimer);
+    progressElapsedTimer = undefined;
+  }
+}
+
+function startProgressElapsedTimer(): void {
+  stopProgressElapsedTimer();
+  progressElapsedSeconds.value = 0;
+  progressStartedAt = Date.now();
+  progressElapsedTimer = window.setInterval(() => {
+    progressElapsedSeconds.value = Math.floor((Date.now() - progressStartedAt) / 1000);
+  }, 1000);
+}
+
 function startProgressOverlay(): void {
   clearProgressTimer();
+  startProgressElapsedTimer();
   progressOverlayVisible.value = true;
   progressPercent.value = 8;
   progressStageIndex.value = 0;
@@ -834,6 +854,7 @@ async function handleFile(file?: File): Promise<void> {
     matchPreview.value = preview;
     progressResult.value = preview;
     clearProgressTimer();
+    stopProgressElapsedTimer();
     progressStageIndex.value = 3;
     progressPercent.value = 100;
     progressState.value = "success";
@@ -842,10 +863,12 @@ async function handleFile(file?: File): Promise<void> {
   } catch (error) {
     matchPreview.value = null;
     clearProgressTimer();
+    stopProgressElapsedTimer();
     progressState.value = "failed";
     uploadError.value = error instanceof Error && error.message ? error.message : t("page.materials.uploadFailed");
     await delay(600);
   } finally {
+    stopProgressElapsedTimer();
     progressOverlayVisible.value = false;
     isUploading.value = false;
     if (fileInputRef.value) fileInputRef.value.value = "";
@@ -880,6 +903,7 @@ watch(
 
 onBeforeUnmount(() => {
   clearProgressTimer();
+  stopProgressElapsedTimer();
 });
 </script>
 
@@ -1211,6 +1235,11 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div v-if="progressOverlayVisible" class="match-progress-backdrop" role="status" aria-live="polite">
         <section class="match-progress-panel" :class="`is-${progressState}`">
+          <div class="match-progress-timer" :aria-label="t('page.materials.progressElapsedLabel')">
+            <span>{{ t("page.materials.progressElapsedLabel") }}</span>
+            <strong>{{ progressElapsedSeconds }}</strong>
+            <small>{{ t("page.materials.progressSecondsUnit") }}</small>
+          </div>
           <div class="match-progress-head">
             <span>{{ t("page.materials.progressKicker") }}</span>
             <h2>{{ progressState === "failed" ? t("page.materials.progressFailedTitle") : t("page.materials.progressTitle") }}</h2>
@@ -2584,6 +2613,7 @@ onBeforeUnmount(() => {
 }
 
 .match-progress-panel {
+  position: relative;
   width: min(680px, 100%);
   padding: 24px;
   border: 1px solid rgba(168, 207, 238, 0.9);
@@ -2592,6 +2622,40 @@ onBeforeUnmount(() => {
     radial-gradient(circle at 14% 0%, rgba(29, 114, 210, 0.12), transparent 36%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 251, 255, 0.98));
   box-shadow: 0 30px 90px rgba(39, 94, 143, 0.2);
+}
+
+.match-progress-timer {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  min-width: 86px;
+  height: 40px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 8px;
+  background: rgba(234, 246, 255, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(132, 190, 232, 0.72);
+  color: #0f5f9d;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-progress-timer span {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.match-progress-timer strong {
+  color: #0f2c4c;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.match-progress-timer small {
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .match-progress-panel.is-failed {
@@ -2781,6 +2845,14 @@ onBeforeUnmount(() => {
   .ship-progress-fill {
     animation: none;
     transition-duration: 0ms;
+  }
+}
+
+@media (max-width: 560px) {
+  .match-progress-timer {
+    position: static;
+    width: fit-content;
+    margin: -4px 0 12px auto;
   }
 }
 

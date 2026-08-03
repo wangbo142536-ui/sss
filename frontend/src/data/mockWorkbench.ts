@@ -28,7 +28,7 @@ export const menuItems: WorkbenchMenuItem[] = [
     labelKey: "nav.procurementServices",
     icon: "PS",
     sortOrder: 10,
-    roles: ["admin", "purchaser", "supplier"],
+    roles,
     children: [
       {
         key: "materialProcurement",
@@ -53,13 +53,17 @@ export const menuItems: WorkbenchMenuItem[] = [
         labelKey: "nav.foodProcurement",
         icon: "FP",
         sortOrder: 10,
-        roles: ["admin", "purchaser"],
+        roles,
         children: [
-          { key: "food", labelKey: "nav.food", route: "/procurement/food", icon: "FD", sortOrder: 0, roles: ["admin", "purchaser"] },
-          { key: "foodInquiries", labelKey: "nav.foodInquiries", route: "/food/inquiries", icon: "IQ", sortOrder: 10, roles: ["admin", "purchaser"] },
-          { key: "foodQuotes", labelKey: "nav.foodQuotes", route: "/food/quotes", icon: "QT", sortOrder: 20, roles: ["admin", "purchaser"] },
-          { key: "foodCompare", labelKey: "nav.foodCompare", route: "/food/comparison", icon: "CP", sortOrder: 30, roles: ["admin", "purchaser"] },
-          { key: "foodOrders", labelKey: "nav.foodOrders", route: "/food/orders", icon: "PO", sortOrder: 40, roles: ["admin", "purchaser"] }
+          { key: "food", labelKey: "nav.food", route: "/procurement/food", icon: "FD", sortOrder: 0, roles },
+          { key: "foodInquiries", labelKey: "nav.foodInquiries", route: "/food/inquiries", icon: "IQ", sortOrder: 10, roles },
+          { key: "foodQuotes", labelKey: "nav.foodQuotes", route: "/food/quotes", icon: "QT", sortOrder: 20, roles },
+          { key: "foodCompare", labelKey: "nav.foodCompare", route: "/food/comparison", icon: "CP", sortOrder: 30, roles },
+          { key: "foodOrders", labelKey: "nav.foodOrders", route: "/food/orders", icon: "PO", sortOrder: 40, roles },
+          { key: "foodSupplierOrders", labelKey: "nav.foodSupplierOrders", route: "/supplier/food/orders", icon: "SO", sortOrder: 50, roles },
+          { key: "foodSettlements", labelKey: "nav.foodSettlements", route: "/food/settlements", icon: "ST", sortOrder: 60, roles },
+          { key: "foodSupplierSettlements", labelKey: "nav.foodSupplierSettlements", route: "/supplier/food/settlements", icon: "SS", sortOrder: 70, roles },
+          { key: "foodEvaluations", labelKey: "nav.foodEvaluations", route: "/food/evaluations", icon: "EV", sortOrder: 80, roles }
         ]
       }
     ]
@@ -95,6 +99,16 @@ export const menuItems: WorkbenchMenuItem[] = [
   { key: "financialServices", labelKey: "nav.financialServices", route: "/financial-services", icon: "FN", sortOrder: 70, roles },
   { key: "weatherServices", labelKey: "nav.weatherServices", route: "/weather-services", icon: "WT", sortOrder: 80, roles },
   { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, roles },
+  {
+    key: "platformOperations",
+    labelKey: "nav.platformOperations",
+    icon: "OP",
+    sortOrder: 95,
+    roles: ["admin", "supplier"],
+    children: [
+      { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, roles: ["admin", "supplier"] }
+    ]
+  },
   {
     key: "basicManagement",
     labelKey: "nav.basicManagement",

@@ -34,6 +34,7 @@ const draftHour = ref("09");
 const draftMinute = ref("00");
 const rootRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLButtonElement | null>(null);
+const popoverRef = ref<HTMLElement | null>(null);
 const popoverStyle = ref<Record<string, string>>({});
 
 const labels = {
@@ -165,6 +166,7 @@ function handleDocumentPointer(event: PointerEvent): void {
   if (!open.value) return;
   const target = event.target;
   if (target instanceof Node && rootRef.value?.contains(target)) return;
+  if (target instanceof Node && popoverRef.value?.contains(target)) return;
   close();
 }
 
@@ -191,13 +193,14 @@ defineExpose({
 
 <template>
   <span ref="rootRef" class="stable-datetime" :class="{ 'is-open': open, 'is-disabled': disabled, 'is-invalid': invalid }">
-    <button ref="triggerRef" type="button" class="stable-datetime-trigger" :disabled="disabled" @click="toggle">
+    <button ref="triggerRef" type="button" class="stable-datetime-trigger" :disabled="disabled" @click.stop="toggle">
       <span :class="{ 'stable-datetime-placeholder': !displayValue }">{{ displayValue || placeholder }}</span>
       <svg class="stable-datetime-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M7 3v4M17 3v4M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
       </svg>
     </button>
-    <div v-if="open" class="stable-datetime-popover" :style="popoverStyle">
+    <Teleport to="body">
+    <div v-if="open" ref="popoverRef" class="stable-datetime-popover" :style="popoverStyle" @click.stop>
       <div class="stable-datetime-row">
         <span>{{ labels.date }}</span>
         <div class="stable-datetime-date-grid">
@@ -241,5 +244,6 @@ defineExpose({
         <button type="button" class="is-primary" @pointerdown.prevent.stop="apply">{{ labels.confirm }}</button>
       </footer>
     </div>
+    </Teleport>
   </span>
 </template>

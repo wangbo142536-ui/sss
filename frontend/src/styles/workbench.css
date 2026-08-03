@@ -191,6 +191,12 @@ select:focus-visible {
   stroke-width: 2;
 }
 
+.ui-icon-button__glyph {
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .ui-icon-button:hover {
   border-color: var(--color-primary-500);
   background: #eef8ff;
@@ -645,9 +651,22 @@ select:focus-visible {
 
 .sidebar-submenu {
   display: grid;
+  position: relative;
   gap: 3px;
   min-width: 0;
   padding-left: 8px;
+}
+
+.sidebar-submenu::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 2px;
+  width: 2px;
+  background: var(--color-primary-600);
+  content: "";
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .sidebar-child-item {
@@ -656,6 +675,10 @@ select:focus-visible {
 
 .sidebar-submenu-nested {
   padding-left: 18px;
+}
+
+.sidebar-submenu-nested::before {
+  left: 8px;
 }
 
 .sidebar-sublink {
@@ -9944,8 +9967,12 @@ select:focus-visible {
   content: "";
 }
 
-.purchase-order-barge-card__route em:first-child::before {
+.purchase-order-barge-card__route em.is-selected::before {
   background: #16a360;
+}
+
+.purchase-order-barge-card__route em.is-selected b {
+  color: #087d54;
 }
 
 .purchase-order-barge-card__route em b {
@@ -13143,6 +13170,12 @@ select:focus-visible {
   background: linear-gradient(180deg, #ffffff, #f4faff);
 }
 
+.compare-traffic-shuttle-card.is-selected {
+  border-color: rgba(18, 166, 106, 0.72);
+  background: linear-gradient(180deg, #f7fffb, #edfdf5);
+  box-shadow: 0 0 0 2px rgba(18, 166, 106, 0.12), 0 12px 28px rgba(18, 166, 106, 0.1);
+}
+
 .compare-traffic-shuttle-card .traffic-shuttle-visual-title {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) max-content minmax(190px, 1fr);
@@ -14005,6 +14038,15 @@ select:focus-visible {
 .evaluation-editor header span {
   color: #60768b;
   font-size: 12px;
+}
+
+.evaluation-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .evaluation-card__order {

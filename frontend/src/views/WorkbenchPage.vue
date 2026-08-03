@@ -158,7 +158,13 @@ import {
 import { getImpaStandardCategories, getImpaStandardItems } from "@/services/standardLibraryService";
 import { createSettlementBatch, deleteSettlement, listSettlements, paySettlement, settleSettlement, submitSettlementInvoice, updateSettlement } from "@/services/settlementService";
 import { deleteFulfillmentAttachment, listBargeShuttleAttachments, listPurchaseFulfillmentAttachments, saveBargeNodeAttachments, saveSupplierFulfillmentAttachments } from "@/services/fulfillmentService";
-import { listServiceEvaluations, reviewServiceEvaluation, submitServiceEvaluation } from "@/services/evaluationService";
+import {
+  listRegulatoryFoodEvaluations,
+  listServiceEvaluations,
+  reviewRegulatoryFoodEvaluation,
+  reviewServiceEvaluation,
+  submitServiceEvaluation
+} from "@/services/evaluationService";
 import type { CompanyMember, CompanyMemberStatus, CompanyRole } from "@/services/companyMemberService";
 import type { DictionaryItem, DictionaryItemPayload, DictionaryType, DictionaryTypePayload } from "@/services/dataDictionaryService";
 import type { AdminRegistration, AdminUser, PermissionMenuNode, PermissionPoint, PermissionRole } from "@/services/permissionService";
@@ -4144,6 +4150,19 @@ const purchaseOrderBargeNodeRows = computed(() => {
     : compareTrafficServiceForm.value.serviceNodes || [];
   return nodes.length ? nodes : defaultTrafficShuttleNodes();
 });
+const purchaseOrderBargeSelectedNodeIndex = computed(() => {
+  const nodes = purchaseOrderBargeNodeRows.value;
+  const savedIndex = Number(compareTrafficServiceForm.value.selectedNodeIndex);
+  if (Number.isInteger(savedIndex) && savedIndex >= 0 && savedIndex < nodes.length) return savedIndex;
+
+  const bookingId = Number(compareTrafficServiceForm.value.bookingId || 0);
+  const booking = purchaseOrderLinkedBarge.value?.bookings?.find((item) => Number(item.bookingId) === bookingId);
+  const bookingIndex = Number(booking?.nodeIndex);
+  if (Number.isInteger(bookingIndex) && bookingIndex >= 0 && bookingIndex < nodes.length) return bookingIndex;
+
+  const bookingTime = normalizeCompareText(booking?.nodeTime || booking?.remark);
+  return bookingTime ? nodes.findIndex((node) => trafficShuttleNodeTimeLabel(node) === bookingTime) : -1;
+});
 
 const loadCompareSupplierValueServices = async () => {
   const options = compareSupplierProviderOptions.value;
@@ -5519,7 +5538,6 @@ watch(
   }
 );
 
-const purchaseDetailSupplierRows = computed(() => (purchaseOrderDetail.value?.supplierOrders ?? []) as unknown as Record<string, unknown>[]);
 const purchaseSupplierPendingStatuses = new Set(["PENDING_SUPPLIER_CONFIRM"]);
 const purchaseSupplierReadyStatuses = new Set(["READY_TO_DELIVER", "PARTIALLY_READY", "IN_TRANSIT", "WAITING_SUPPLY"]);
 const purchaseSupplierShipmentActionStatuses = new Set(["READY_TO_DELIVER", "PARTIALLY_READY"]);
@@ -5551,8 +5569,16 @@ const getPurchaseSupplierExecutionTime = (row: PurchaseSupplierOrder) => {
   if (!purchaseSupplierPendingStatuses.has(status)) return formatExecutionTimeText(row.confirmedAt || row.expectedReadyAt);
   return formatExecutionTimeText(row.expectedReadyAt);
 };
+const purchaseDetailScopedSupplierOrders = computed(() => {
+  const rows = purchaseOrderDetail.value?.supplierOrders ?? [];
+  if (purchaseOrderWorkspaceMode.value === "supplier" && supplierDetailCurrentOrder.value) {
+    return [supplierDetailCurrentOrder.value];
+  }
+  return rows;
+});
+const purchaseDetailSupplierRows = computed(() => purchaseDetailScopedSupplierOrders.value as unknown as Record<string, unknown>[]);
 const purchaseDetailSupplierCards = computed(() =>
-  (purchaseOrderDetail.value?.supplierOrders ?? []).map((row) => {
+  purchaseDetailScopedSupplierOrders.value.map((row) => {
     const status = String(row.status || "").toUpperCase();
     const isPending = purchaseSupplierPendingStatuses.has(status);
     const isRejected = purchaseSupplierRejectedStatuses.has(status);
@@ -5575,7 +5601,7 @@ const purchaseDetailItemRows = computed(() => {
   if (purchaseOrderWorkspaceMode.value === "supplier" && supplierDetailCurrentOrder.value) {
     return (supplierDetailCurrentOrder.value.items ?? []) as unknown as Record<string, unknown>[];
   }
-  return (purchaseOrderDetail.value?.supplierOrders ?? []).flatMap((supplier) => supplier.items) as unknown as Record<string, unknown>[];
+  return purchaseDetailScopedSupplierOrders.value.flatMap((supplier) => supplier.items) as unknown as Record<string, unknown>[];
 });
 const supplierDetailDialogItems = computed(() => {
   const row = supplierDetailDialogRow.value as PurchaseSupplierOrder | null;
@@ -5603,12 +5629,13 @@ const latestPurchaseTimestamp = (values: Array<string | undefined | null>) => {
   return sortedValues[sortedValues.length - 1] || "";
 };
 const purchaseDetailActiveSupplierOrders = computed(() =>
-  (purchaseOrderDetail.value?.supplierOrders ?? []).filter(
+  purchaseDetailScopedSupplierOrders.value.filter(
     (supplier) => !purchaseSupplierRejectedStatuses.has(String(supplier.status || "").toUpperCase())
   )
 );
 const purchaseTrafficWaitingCompletedStatuses = new Set(["IN_TRANSIT", "IN_PROGRESS", "IN_SERVICE", "SUPPLYING", "COMPLETED"]);
 const purchaseTrafficSupplyingCompletedStatuses = new Set(["COMPLETED"]);
+const purchaseTrafficStartedStatuses = new Set(["IN_TRANSIT", "IN_PROGRESS", "IN_SERVICE", "SUPPLYING", "EXECUTING", "COMPLETED"]);
 const purchaseDetailExecutionProgress = computed<Record<PurchaseExecutionStageKey, { completed: number; total: number }>>(() => {
   const suppliers = purchaseDetailActiveSupplierOrders.value;
   const supplierStatuses = suppliers.map((supplier) => String(supplier.status || "").toUpperCase());
@@ -5647,7 +5674,7 @@ const purchaseDetailExecutionProgress = computed<Record<PurchaseExecutionStageKe
   };
 });
 const purchaseDetailExecutionStageKey = computed<PurchaseExecutionStageKey>(() => {
-  const orderStatus = String(purchaseOrderDetail.value?.order.status || "").toUpperCase();
+  const orderStatus = String(purchaseOrderDetailStatus.value || "").toUpperCase();
   if (!orderStatus || orderStatus === "PENDING_SUPPLIER_CONFIRM") return "confirming";
   if (["PARTIALLY_CONFIRMED", "PREPARING"].includes(orderStatus)) return "stocking";
   if (["PARTIALLY_READY", "READY_TO_DELIVER", "IN_TRANSIT"].includes(orderStatus)) return "transporting";
@@ -5665,12 +5692,16 @@ const purchaseDetailExecutionStageIndex = computed(() =>
   Math.max(0, purchaseExecutionStageDefinitions.findIndex((stage) => stage.key === purchaseDetailExecutionStageKey.value))
 );
 const purchaseDetailExecutionStageTimes = computed<Record<PurchaseExecutionStageKey, string>>(() => {
-  const suppliers = purchaseOrderDetail.value?.supplierOrders ?? [];
+  const suppliers = purchaseDetailScopedSupplierOrders.value;
   const traffic = purchaseDetailPrimaryTrafficService.value;
+  const trafficStatus = String(traffic?.status || "").toUpperCase();
+  const trafficStarted = purchaseTrafficStartedStatuses.has(trafficStatus);
   const supplierWaitingSupplyTimes = suppliers.map((supplier) => supplier.suppliedAt || supplier.readyAt || supplier.confirmedAt);
-  const trafficWaitingTime = latestPurchaseTimestamp([traffic?.useTime, traffic?.departureTime, traffic?.createdAt]);
-  const trafficWorkingTime = latestPurchaseTimestamp([traffic?.updatedAt, traffic?.arrivalTime, traffic?.returnEndTime, traffic?.departureTime, traffic?.useTime]);
-  const trafficCompletedTime = String(traffic?.status || "").toUpperCase() === "COMPLETED" ? trafficWorkingTime : "";
+  const trafficWorkingTime = trafficStarted
+    ? latestPurchaseTimestamp([traffic?.updatedAt, traffic?.arrivalTime, traffic?.returnEndTime, traffic?.departureTime, traffic?.useTime])
+    : "";
+  const trafficWaitingTime = trafficWorkingTime;
+  const trafficCompletedTime = trafficStatus === "COMPLETED" ? trafficWorkingTime : "";
   return {
     confirming: latestPurchaseTimestamp(suppliers.map((supplier) => supplier.confirmedAt)),
     stocking: latestPurchaseTimestamp(suppliers.map((supplier) => supplier.readyAt)),
@@ -5715,9 +5746,9 @@ const purchaseDetailBargeExecutionCard = computed(() => {
       : "todo";
   const statusText = trafficServiceStatusLabel(normalizedStatus);
   const statusVariant = trafficServiceStatusVariant(normalizedStatus);
-  const time = formatExecutionTimeText(
-    (row as { updatedAt?: string }).updatedAt || row.returnEndTime || row.arrivalTime || row.returnStartTime || row.departureTime || row.useTime || row.createdAt
-  );
+  const time = purchaseTrafficStartedStatuses.has(normalizedStatus)
+    ? formatExecutionTimeText((row as { updatedAt?: string }).updatedAt || row.returnEndTime || row.arrivalTime || row.returnStartTime || row.departureTime || row.useTime)
+    : "--";
   const bookingId = Number(row.bookingId || 0);
   const trafficServiceOrderId = Number(row.serviceOrderId || 0);
   const matchedAttachments = fulfillmentAttachments.value.filter((item) => {
@@ -5738,7 +5769,7 @@ const purchaseDetailBargeExecutionCard = computed(() => {
   };
 });
 const purchaseDetailExecutionSummary = computed(() => {
-  const suppliers = purchaseOrderDetail.value?.supplierOrders ?? [];
+  const suppliers = purchaseDetailScopedSupplierOrders.value;
   const confirmed = suppliers.filter((supplier) => !purchaseSupplierPendingStatuses.has(String(supplier.status || "").toUpperCase())).length;
   const ready = suppliers.filter((supplier) => purchaseSupplierReadyStatuses.has(String(supplier.status || "").toUpperCase())).length;
   const supplied = suppliers.filter((supplier) => purchaseSupplierCompletedStatuses.has(String(supplier.status || "").toUpperCase())).length;
@@ -5768,7 +5799,7 @@ const purchaseDetailFixedFeeItems = computed(() => {
 });
 const purchaseSettlementRows = computed(() => {
   const materialType = purchaseOrderDetail.value?.order.materialType || "物料供应";
-  const supplierRows: Array<{ id: string; settlementId?: number; sourceType: "SUPPLIER" | "BARGE"; sourceId?: number; provider: string; type: string; quoteAmount: number; actualAmount: number; settlementStatus: string; rawStatus: string; invoiceAttachments: BusinessAttachmentPayload[] }> = (purchaseOrderDetail.value?.supplierOrders ?? []).map((supplier) => {
+  const supplierRows: Array<{ id: string; settlementId?: number; sourceType: "SUPPLIER" | "BARGE"; sourceId?: number; provider: string; type: string; quoteAmount: number; actualAmount: number; settlementStatus: string; rawStatus: string; invoiceAttachments: BusinessAttachmentPayload[] }> = purchaseDetailScopedSupplierOrders.value.map((supplier) => {
     const amount = Number(supplier.finalAmount ?? supplier.subtotalAmount ?? 0);
     const persisted = persistedSettlementRows.value.find((row) => row.settlementType === "SUPPLIER" && row.supplierOrderId === supplier.supplierOrderId);
     return {
@@ -5855,7 +5886,7 @@ const isEvaluationPage = computed(() => ["evaluations", "regulatoryReviews", "qu
 const isRegulatoryEvaluationPage = computed(() => ["regulatoryReviews", "qualitySupervision"].includes(pageKey.value));
 const supplierDetailSettlementRows = computed(() => {
   const orderId = Number(purchaseOrderDetail.value?.order.purchaseOrderId || 0);
-  const visibleSupplierIds = new Set((purchaseOrderDetail.value?.supplierOrders || []).map((row) => Number(row.supplierOrderId)));
+  const visibleSupplierIds = new Set(purchaseDetailScopedSupplierOrders.value.map((row) => Number(row.supplierOrderId)));
   return persistedSettlementRows.value.filter((row) =>
     row.purchaseOrderId === orderId
     && row.settlementType === "SUPPLIER"
@@ -5876,6 +5907,7 @@ const filteredSettlementManagementRows = computed(() => {
 });
 const evaluationLogisticsRating = (row: ServiceEvaluation | null | undefined) =>
   Number((row as unknown as { logisticsRating?: number })?.logisticsRating || row?.rating || 0);
+const evaluationSourceLabel = (source: ServiceEvaluation["source"]) => source === "FOOD" ? "伙食采购" : "物料采购";
 const evaluationStatusLabel = (status: string) => {
   const normalized = String(status || "").toUpperCase();
   if (normalized === "PENDING_EVALUATION") return "待评价";
@@ -5898,7 +5930,7 @@ const filteredEvaluationRows = computed(() => {
   const keyword = evaluationKeyword.value.trim().toLowerCase();
   const status = evaluationStatus.value.trim().toUpperCase();
   const scopedRows = isRegulatoryEvaluationPage.value
-    ? evaluationRows.value.filter((row) => ["PENDING_REVIEW", "APPROVED"].includes(String(row.status || "").toUpperCase()))
+    ? evaluationRows.value.filter((row) => ["PENDING_REVIEW", "APPROVED", "REJECTED"].includes(String(row.status || "").toUpperCase()))
     : evaluationRows.value;
   const statusRows = status ? scopedRows.filter((row) => String(row.status || "").toUpperCase() === status) : scopedRows;
   if (!keyword) return statusRows;
@@ -5906,7 +5938,7 @@ const filteredEvaluationRows = computed(() => {
     [row.providerName, row.purchaseOrderNo, row.serviceType, row.content].some((value) => String(value || "").toLowerCase().includes(keyword))
   );
 });
-const sortedEvaluationRows = computed(() => sortNewestFirst(filteredEvaluationRows.value, ["updatedAt", "createdAt"], ["evaluationId"]));
+const sortedEvaluationRows = computed(() => sortNewestFirst(filteredEvaluationRows.value, ["updatedAt", "createdAt"], ["sourceKey", "evaluationId"]));
 const settlementManagementStatusOptions = computed(() => {
   const values = settlementManagementScope.value === "BUYER"
     ? ["PENDING_SETTLEMENT", "SETTLED", "PAID"]
@@ -5915,7 +5947,7 @@ const settlementManagementStatusOptions = computed(() => {
 });
 const evaluationStatusOptions = computed(() => {
   const values = isRegulatoryEvaluationPage.value
-    ? ["PENDING_REVIEW", "APPROVED"]
+    ? ["PENDING_REVIEW", "APPROVED", "REJECTED"]
     : ["PENDING_EVALUATION", "PENDING_REVIEW", "APPROVED", "REJECTED"];
   return values.map((value) => ({ value, label: evaluationStatusLabel(value) }));
 });
@@ -6072,12 +6104,21 @@ const loadEvaluations = async () => {
   evaluationLoading.value = true;
   evaluationError.value = "";
   try {
-    evaluationRows.value = await listServiceEvaluations(evaluationScope.value, {
+    const query = {
       keyword: evaluationKeyword.value,
       status: evaluationStatus.value,
       page: 1,
       size: 100
-    });
+    };
+    if (isRegulatoryEvaluationPage.value) {
+      const [materialRows, foodRows] = await Promise.all([
+        listServiceEvaluations("REGULATORY", query),
+        listRegulatoryFoodEvaluations(query)
+      ]);
+      evaluationRows.value = [...materialRows, ...foodRows];
+    } else {
+      evaluationRows.value = await listServiceEvaluations(evaluationScope.value, query);
+    }
   } catch {
     evaluationRows.value = [];
     evaluationError.value = "评价数据加载失败";
@@ -6116,7 +6157,11 @@ const reviewEvaluation = async (action: "approve" | "reject") => {
   if (!evaluationEditing.value) return;
   evaluationSaving.value = true;
   try {
-    await reviewServiceEvaluation(evaluationEditing.value.evaluationId, action, evaluationForm.value.reviewRemark);
+    if (evaluationEditing.value.source === "FOOD") {
+      await reviewRegulatoryFoodEvaluation(evaluationEditing.value.evaluationId, action, evaluationForm.value.reviewRemark);
+    } else {
+      await reviewServiceEvaluation(evaluationEditing.value.evaluationId, action, evaluationForm.value.reviewRemark);
+    }
     evaluationEditing.value = null;
     await loadEvaluations();
   } finally {
@@ -6283,7 +6328,7 @@ const supplierVisibleItemTotal = computed(() =>
 
 const showSupplierCustomsUpload = computed(() => {
   if (purchaseOrderWorkspaceMode.value !== "supplier") return false;
-  const order = purchaseOrderDetail.value?.supplierOrders?.[0];
+  const order = supplierDetailCurrentOrder.value;
   const status = String(order?.status || "").toUpperCase();
   return Boolean(order && ["PREPARING", "IN_TRANSIT", "READY_TO_DELIVER", "SUPPLIED"].includes(status));
 });
@@ -7580,6 +7625,7 @@ const confirmTrafficShuttleNodeReservation = async (row: TrafficShuttleService |
     if (fromCompareTrafficDialog) {
       compareTrafficServiceForm.value.trafficServiceOrderId = booked.trafficServiceOrderId;
       compareTrafficServiceForm.value.bookingId = booked.bookingId;
+      compareTrafficServiceForm.value.selectedNodeIndex = index;
       compareTrafficServiceForm.value.shuttleNo = shuttle.shuttleNo || "";
       compareTrafficServiceForm.value.trafficVesselName = shuttle.trafficVesselName || "";
       compareTrafficServiceForm.value.departurePoint = shuttle.departurePoint || "";
@@ -7636,6 +7682,7 @@ const applyCompareTrafficService = (value?: MaterialDemandTrafficService) => {
   compareTrafficServiceForm.value = {
     trafficServiceOrderId: value?.trafficServiceOrderId,
     bookingId: value?.bookingId,
+    selectedNodeIndex: value?.selectedNodeIndex,
     shuttleNo: value?.shuttleNo || "",
     trafficVesselName: value?.trafficVesselName || "",
     departurePoint: value?.departurePoint || "",
@@ -7687,6 +7734,7 @@ const normalizeCompareTrafficServicePayload = (): MaterialDemandTrafficService |
   return {
     trafficServiceOrderId: compareTrafficServiceForm.value.trafficServiceOrderId,
     bookingId: compareTrafficServiceForm.value.bookingId,
+    selectedNodeIndex: compareTrafficServiceForm.value.selectedNodeIndex,
     supplyMode: isLand ? "LAND" : "SEA",
     fixedProviderType: isLand ? "SUPPLIER" : "BARGE",
     fixedProviderId: compareFixedProvider.value.id || "",
@@ -12799,7 +12847,7 @@ const workbenchGlobalLoading = computed(() => {
         <div v-if="evaluationLoading" class="empty-state compact">{{ t('common.loading') }}</div>
         <div v-else-if="!sortedEvaluationRows.length" class="empty-state compact">暂无评价任务</div>
         <section v-else class="evaluation-card-list">
-          <article v-for="row in sortedEvaluationRows" :key="row.evaluationId" class="evaluation-card">
+          <article v-for="row in sortedEvaluationRows" :key="row.sourceKey" class="evaluation-card">
             <header>
               <div><strong>{{ row.providerName }}</strong></div>
               <StatusBadge :label="evaluationStatusLabel(row.status)" :variant="evaluationStatusVariant(row.status)" />
@@ -12820,11 +12868,13 @@ const workbenchGlobalLoading = computed(() => {
             </dl>
             <footer>
               <span>附件证明：{{ row.attachments?.length || 0 }} 个</span>
-              <IconButton v-if="pageKey === 'evaluations' && ['PENDING_EVALUATION', 'REJECTED'].includes(row.status)" icon="Pencil" label="填写评价" @click="openEvaluationEditor(row)" />
-              <IconButton v-if="pageKey === 'evaluations' && row.status === 'PENDING_REVIEW'" icon="Eye" label="查看明细" @click="openEvaluationEditor(row)" />
-              <IconButton v-if="isRegulatoryEvaluationPage && row.status === 'PENDING_REVIEW'" icon="Eye" label="审查评价" @click="openEvaluationEditor(row)" />
-              <IconButton v-if="isRegulatoryEvaluationPage && row.status === 'APPROVED'" icon="Eye" label="查看明细" @click="openEvaluationEditor(row)" />
-              <IconButton v-if="row.attachments?.length" icon="Image" label="查看证明" @click="previewBusinessAttachments('评价证明', row.attachments)" />
+              <div class="evaluation-card__actions">
+                <IconButton v-if="pageKey === 'evaluations' && ['PENDING_EVALUATION', 'REJECTED'].includes(row.status)" icon="Pencil" label="填写评价" @click="openEvaluationEditor(row)" />
+                <IconButton v-if="pageKey === 'evaluations' && row.status === 'PENDING_REVIEW'" icon="Eye" label="查看明细" @click="openEvaluationEditor(row)" />
+                <IconButton v-if="isRegulatoryEvaluationPage && row.status === 'PENDING_REVIEW'" icon="Eye" label="审查评价" @click="openEvaluationEditor(row)" />
+                <IconButton v-if="isRegulatoryEvaluationPage && row.status === 'APPROVED'" icon="Eye" label="查看明细" @click="openEvaluationEditor(row)" />
+                <IconButton v-if="row.attachments?.length" icon="Image" label="查看证明" @click="previewBusinessAttachments('评价证明', row.attachments)" />
+              </div>
             </footer>
           </article>
         </section>
@@ -14351,9 +14401,9 @@ const workbenchGlobalLoading = computed(() => {
                   <label>
                     <span>{{ t("purchaseOrder.field.deliveryContact") }}</span>
                     <select v-model="purchaseOrderForm.deliveryContactId" :disabled="purchaseOrderCreating" @change="handlePurchaseOrderContactChange">
-                      <option :value="fallbackDeliveryContactId">{{ fallbackDeliveryContact.contactName }} / {{ fallbackDeliveryContact.contactPhone }}</option>
+                      <option :value="fallbackDeliveryContactId">{{ fallbackDeliveryContact.contactName }}</option>
                       <option v-for="contact in activeCompanyContacts" :key="contact.id" :value="String(contact.contactId || contact.id)">
-                        {{ contact.contactName }} / {{ contact.contactPhone }}
+                        {{ contact.contactName }}
                       </option>
                     </select>
                   </label>
@@ -14426,7 +14476,11 @@ const workbenchGlobalLoading = computed(() => {
                       <small>{{ purchaseOrderBargeOriginTimeLabel }}</small>
                     </span>
                     <div>
-                      <em v-for="(node, index) in purchaseOrderBargeNodeRows" :key="`${node.nodeName || index}-${index}`">
+                      <em
+                        v-for="(node, index) in purchaseOrderBargeNodeRows"
+                        :key="`${node.nodeName || index}-${index}`"
+                        :class="{ 'is-selected': index === purchaseOrderBargeSelectedNodeIndex }"
+                      >
                         <b>{{ trafficShuttleNodeTimeLabel(node) }}</b>
                       </em>
                     </div>
@@ -15619,7 +15673,7 @@ const workbenchGlobalLoading = computed(() => {
 
     <DetailDrawer :open="Boolean(evaluationEditing)" :title="isRegulatoryEvaluationPage ? '评价审查' : '服务评价'" width="compact" @close="evaluationEditing = null">
       <section v-if="evaluationEditing" class="evaluation-editor">
-        <header><strong>{{ evaluationEditing.providerName }}</strong><span>{{ evaluationEditing.purchaseOrderNo }} · {{ evaluationEditing.serviceType }}</span></header>
+        <header><strong>{{ evaluationEditing.providerName }}</strong><span>{{ evaluationEditing.purchaseOrderNo }} · {{ evaluationSourceLabel(evaluationEditing.source) }}</span></header>
         <div class="evaluation-editor-ratings">
           <label>
             <span>品质</span>

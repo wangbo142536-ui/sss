@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>关于我们 - 海事一站式综合服务平台</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --ink: #102535;
+      --navy: #071d33;
+      --blue: #0e65b7;
+      --cyan: #14b8d6;
+      --gold: #f0b437;
+      --line: rgba(143, 190, 221, 0.26);
+      --muted: #607281;
+      --glass: rgba(255, 255, 255, 0.86);
+      --shadow: 0 18px 54px rgba(13, 67, 105, 0.12);
+    }
+    html {
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
+    }
+    body {
+      margin: 0;
+      min-width: 320px;
+      overflow-x: hidden;
+      color: var(--ink);
+      background: linear-gradient(180deg, #eaf1f6 0%, #f7fafc 48%, #edf3f7 100%);
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(11, 43, 70, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(11, 43, 70, 0.035) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(180deg, transparent, #000 10%, #000 84%, transparent);
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap {
+      width: calc(100% - 48px);
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .topbar {
+      height: 48px;
+      background: #172735;
+      color: #fff;
+      box-shadow: inset 0 -1px 0 rgba(148, 184, 207, 0.18);
+    }
+    .topbar .wrap {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 900;
+    }
+    .topbar-nav {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .topbar-nav a:hover {
+      color: #8bd3ff;
+    }
+    .about-hero {
+      position: relative;
+      min-height: 620px;
+      overflow: hidden;
+      color: #eff8ff;
+      background: var(--navy);
+    }
+    .about-hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(112deg, rgba(5, 18, 31, 0.96) 0%, rgba(5, 26, 43, 0.82) 44%, rgba(7, 29, 51, 0.28) 100%),
+        url("../frontend/src/assets/home-port-command.png") center / cover no-repeat;
+      filter: saturate(1.08) contrast(1.06);
+      transform: scale(1.05);
+    }
+    .about-hero::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 170px;
+      background: linear-gradient(180deg, transparent, rgba(235, 243, 248, 0.94));
+    }
+    .hero-grid {
+      position: absolute;
+      right: max(24px, calc((100vw - 1280px) / 2));
+      bottom: 104px;
+      width: min(44vw, 560px);
+      aspect-ratio: 1.7;
+      border: 1px solid rgba(139, 211, 255, 0.25);
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(139, 211, 255, 0.18) 1px, transparent 1px),
+        linear-gradient(rgba(139, 211, 255, 0.12) 1px, transparent 1px),
+        rgba(3, 18, 31, 0.2);
+      background-size: 42px 42px;
+      box-shadow: inset 0 0 46px rgba(32, 158, 220, 0.16), 0 20px 72px rgba(0, 18, 34, 0.26);
+    }
+    .hero-grid::before {
+      content: "";
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      top: 54%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(99, 203, 255, 0.92), rgba(240, 180, 55, 0.68), transparent);
+      box-shadow: 0 0 18px rgba(85, 196, 255, 0.46);
+      animation: pulse 3.8s ease-in-out infinite;
+    }
+    .hero-node {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #8bd3ff;
+      box-shadow: 0 0 0 7px rgba(139, 211, 255, 0.12), 0 0 22px rgba(139, 211, 255, 0.84);
+      animation: node 2.8s ease-in-out infinite;
+    }
+    .hero-node:nth-child(1) { left: 18%; top: 48%; }
+    .hero-node:nth-child(2) { left: 46%; top: 35%; animation-delay: 0.6s; }
+    .hero-node:nth-child(3) { left: 74%; top: 58%; animation-delay: 1.1s; background: var(--gold); }
+    .about-hero .wrap {
+      position: relative;
+      z-index: 2;
+      min-height: 620px;
+      display: flex;
+      align-items: center;
+      padding: 70px 0 96px;
+    }
+    .hero-copy {
+      max-width: 760px;
+    }
+    .kicker {
+      width: fit-content;
+      margin: 0 0 18px;
+      padding: 7px 10px;
+      border: 1px solid rgba(125, 183, 255, 0.34);
+      border-radius: 999px;
+      background: rgba(4, 20, 34, 0.54);
+      color: #8bd3ff;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    h1 {
+      max-width: 12em;
+      margin: 0;
+      font-size: clamp(42px, 5vw, 70px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+    .hero-copy p:last-child {
+      max-width: 690px;
+      margin: 22px 0 0;
+      color: #c7ddeb;
+      font-size: 18px;
+      line-height: 1.75;
+    }
+    .about-main {
+      padding: 34px 0 82px;
+    }
+    .principles {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.4fr);
+      gap: clamp(28px, 5vw, 74px);
+      align-items: start;
+    }
+    .section-title {
+      position: sticky;
+      top: 72px;
+      padding-top: 12px;
+    }
+    .section-title h2 {
+      margin: 0;
+      color: #0d2e4b;
+      font-size: clamp(32px, 4vw, 52px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .section-title p {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.85;
+    }
+    .pillar-list {
+      display: grid;
+      gap: 16px;
+    }
+    .pillar {
+      position: relative;
+      min-height: 190px;
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+      padding: 26px;
+      border: 1px solid rgba(96, 165, 250, 0.2);
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 252, 0.84)),
+        linear-gradient(90deg, rgba(14, 101, 183, 0.06), transparent);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .pillar::after {
+      content: "";
+      position: absolute;
+      left: 110px;
+      right: 26px;
+      bottom: 24px;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(14, 101, 183, 0.36), rgba(20, 184, 214, 0.12), transparent);
+    }
+    .pillar-icon {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #08243d;
+      color: #8bd3ff;
+      box-shadow: inset 0 0 0 1px rgba(139, 211, 255, 0.22), 0 14px 28px rgba(8, 36, 61, 0.16);
+    }
+    .pillar-icon svg {
+      width: 26px;
+      height: 26px;
+    }
+    .pillar h3 {
+      margin: 0 0 10px;
+      color: #102535;
+      font-size: 23px;
+      line-height: 1.25;
+    }
+    .pillar p {
+      margin: 0;
+      color: #526878;
+      font-size: 15px;
+      line-height: 1.78;
+    }
+    .site-footer {
+      padding: 28px 0 34px;
+      border-top: 1px solid rgba(143, 190, 221, 0.24);
+      color: #607281;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.28; filter: blur(0); }
+      50% { opacity: 0.9; filter: blur(0.4px); }
+    }
+    @keyframes node {
+      0%, 100% { transform: scale(0.86); opacity: 0.72; }
+      50% { transform: scale(1.18); opacity: 1; }
+    }
+    @media (max-width: 900px) {
+      .principles {
+        grid-template-columns: 1fr;
+      }
+      .section-title {
+        position: static;
+      }
+      .hero-grid {
+        display: none;
+      }
+    }
+    @media (max-width: 640px) {
+      .wrap {
+        width: calc(100vw - 28px);
+      }
+      .topbar {
+        height: auto;
+        padding: 10px 0;
+      }
+      .topbar .wrap,
+      .topbar-nav {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .about-hero,
+      .about-hero .wrap {
+        min-height: 520px;
+      }
+      h1 {
+        font-size: 34px;
+      }
+      .hero-copy p:last-child {
+        font-size: 16px;
+      }
+      .pillar {
+        grid-template-columns: 1fr;
+        min-height: 0;
+        padding: 20px;
+      }
+      .pillar::after {
+        left: 20px;
+        right: 20px;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand-link" href="maritime_integrated_service_home.html"><i data-lucide="anchor"></i>海事一站式综合服务平台</a>
+      <nav class="topbar-nav" aria-label="页面导航">
+        <a href="maritime_integrated_service_home.html">返回官网</a>
+        <a href="/login" target="_top">业务工作台</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="about-hero">
+      <div class="hero-grid" aria-hidden="true">
+        <span class="hero-node"></span>
+        <span class="hero-node"></span>
+        <span class="hero-node"></span>
+      </div>
+      <div class="wrap">
+        <div class="hero-copy">
+          <p class="kicker">ABOUT MARITIME SERVICE ECOSYSTEM</p>
+          <h1>打造新海事服务生态</h1>
+          <p>我们把分散的港航服务、订单执行智能体和交易数据沉淀连接起来，让平台从服务入口升级为可持续运营的海事服务生态。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-main">
+      <div class="wrap principles">
+        <div class="section-title">
+          <h2>我们主要做三件事</h2>
+          <p>围绕订单执行建立统一服务网络，用 Agent 提升业务处理效率，再用沉淀数据反哺服务商能力。</p>
+        </div>
+        <div class="pillar-list">
+          <article class="pillar">
+            <div class="pillar-icon"><i data-lucide="network"></i></div>
+            <div>
+              <h3>资源整合</h3>
+              <p>打造新海事服务生态，整合采购、船员、驳船、口岸监管、金融税务、气象和船舶动态等碎片化服务资源，后续持续引入港口、航运、金融、数据等外部资源。</p>
+            </div>
+          </article>
+          <article class="pillar">
+            <div class="pillar-icon"><i data-lucide="workflow"></i></div>
+            <div>
+              <h3>业务流 Agent 赋能</h3>
+              <p>以订单执行为主导，Agent 在清单导入、智能 SKU 对比、询价、报价、比价、下单和履约节点中协助处理重复判断，让采购链路更快推进。</p>
+            </div>
+          </article>
+          <article class="pillar">
+            <div class="pillar-icon"><i data-lucide="database-zap"></i></div>
+            <div>
+              <h3>数据赋能</h3>
+              <p>通过订单数据反向反哺服务商，沉淀 SKU 采购量、规格标准、价格波动和运力需求，帮助服务商调整备货与配送能力，把更多订单留在平台生态内。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">海事一站式综合服务平台 · 服务生态、订单智能、数据运营</div>
+  </footer>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>
+    if (window.lucide) window.lucide.createIcons();
+  </script>
+</body>
+</html>

@@ -5,9 +5,11 @@ import HomeView from "@/views/HomeView.vue";
 import OriginalShipSupplyHomeView from "@/views/HomeView.original-ship-supply.vue";
 import LoginView from "@/views/LoginView.vue";
 import MaterialProcurementEntry from "@/views/MaterialProcurementEntry.vue";
+import SupplierDataAnalysisPage from "@/modules/platformOperations/pages/SupplierDataAnalysisPage.vue";
 import RegisterView from "@/views/RegisterView.vue";
 import ServiceEntry from "@/views/ServiceEntry.vue";
 import WorkbenchPage from "@/views/WorkbenchPage.vue";
+import EnterpriseEntryPage from "@/modules/enterpriseEntry/pages/EnterpriseEntryPage.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +19,7 @@ export const router = createRouter({
     { path: "/主页", redirect: "/" },
     { path: "/login", name: "login", component: LoginView, meta: { title: "登录" } },
     { path: "/register", name: "register", component: RegisterView, meta: { title: "注册" } },
+    { path: "/enterprise-entry", name: "enterprise-entry", component: EnterpriseEntryPage, meta: { title: "企业入驻" } },
     {
       path: "/onboarding/company-profile",
       name: "company-onboarding",
@@ -62,13 +65,21 @@ export const router = createRouter({
     { path: "/orders", name: "orders", component: WorkbenchPage, meta: { title: "采购管理", pageKey: "orders" } },
     { path: "/orders/new", name: "new-order", component: WorkbenchPage, meta: { title: "采购管理", pageKey: "orders" } },
     { path: "/orders/:orderId", name: "order-detail", component: WorkbenchPage, meta: { title: "采购管理", pageKey: "orders" } },
-    { path: "/supplier/orders", name: "supplier-orders", component: WorkbenchPage, meta: { title: "采购管理 - 供货商", pageKey: "supplierOrders" } },
-    { path: "/supplier/orders/:orderId", name: "supplier-order-detail", component: WorkbenchPage, meta: { title: "采购管理 - 供货商", pageKey: "supplierOrders" } },
+    { path: "/supplier/orders", name: "supplier-orders", component: WorkbenchPage, meta: { title: "供货管理 - 供货商", pageKey: "supplierOrders" } },
+    { path: "/supplier/orders/:orderId", name: "supplier-order-detail", component: WorkbenchPage, meta: { title: "供货管理 - 供货商", pageKey: "supplierOrders" } },
     { path: "/supply-chain-finance", name: "supply-chain-finance", component: WorkbenchPage, meta: { title: "供应链金融", pageKey: "supplyChainFinance" } },
-    { path: "/food/inquiries", name: "food-inquiries", component: WorkbenchPage, meta: { title: "伙食询价管理", pageKey: "foodInquiries" } },
-    { path: "/food/quotes", name: "food-quotes", component: WorkbenchPage, meta: { title: "伙食报价管理", pageKey: "foodQuotes" } },
-    { path: "/food/comparison", name: "food-comparison", component: WorkbenchPage, meta: { title: "伙食比价管理", pageKey: "foodComparisonList" } },
-    { path: "/food/orders", name: "food-orders", component: WorkbenchPage, meta: { title: "伙食采购管理", pageKey: "foodOrders" } },
+      { path: "/food/inquiries", name: "food-inquiries", component: FoodProcurementEntry, meta: { title: "询价管理", foodPage: "inquiry" } },
+      { path: "/food/quotes", name: "food-quotes", component: FoodProcurementEntry, meta: { title: "报价管理", foodPage: "quote" } },
+    { path: "/food/quotes/:quoteId", name: "food-quote-detail", component: FoodProcurementEntry, meta: { title: "伙食报价单", foodPage: "quote" } },
+      { path: "/food/comparison", name: "food-comparison", component: FoodProcurementEntry, meta: { title: "比价管理", foodPage: "comparison" } },
+    { path: "/food/comparison/:demandId", name: "food-comparison-detail", component: FoodProcurementEntry, meta: { title: "伙食比价明细", foodPage: "comparison" } },
+      { path: "/food/orders", name: "food-orders", component: FoodProcurementEntry, meta: { title: "采购管理", foodPage: "order" } },
+    { path: "/food/orders/:orderId", name: "food-order-detail", component: FoodProcurementEntry, meta: { title: "伙食采购订单", foodPage: "order" } },
+      { path: "/supplier/food/orders", name: "supplier-food-orders", component: FoodProcurementEntry, meta: { title: "供货管理 - 供货商", foodPage: "order" } },
+    { path: "/supplier/food/orders/:orderId", name: "supplier-food-order-detail", component: FoodProcurementEntry, meta: { title: "伙食供货订单", foodPage: "order" } },
+      { path: "/food/settlements", name: "food-settlements", component: FoodProcurementEntry, meta: { title: "结算管理", foodPage: "settlement" } },
+      { path: "/supplier/food/settlements", name: "supplier-food-settlements", component: FoodProcurementEntry, meta: { title: "结算管理 - 供货商", foodPage: "settlement" } },
+      { path: "/food/evaluations", name: "food-evaluations", component: FoodProcurementEntry, meta: { title: "评价管理", foodPage: "evaluation" } },
     {
       path: "/delivery-tasks",
       name: "delivery-tasks",
@@ -115,7 +126,7 @@ export const router = createRouter({
     { path: "/traffic-boat/settlements", name: "barge-settlements", component: WorkbenchPage, meta: { title: "结算管理", pageKey: "bargeSettlements" } },
     { path: "/evaluations", name: "evaluations", component: WorkbenchPage, meta: { title: "评价体系", pageKey: "evaluations" } },
     { path: "/regulatory/evaluations", name: "regulatory-evaluations", component: WorkbenchPage, meta: { title: "监管服务", pageKey: "regulatoryReviews" } },
-    { path: "/regulatory/quality", name: "regulatory-quality", component: WorkbenchPage, meta: { title: "质量监督", pageKey: "qualitySupervision" } },
+    { path: "/regulatory/quality", name: "regulatory-quality", component: WorkbenchPage, meta: { title: "评价监管", pageKey: "qualitySupervision" } },
     { path: "/crew-services", name: "crew-services", component: WorkbenchPage, meta: { title: "船员服务", pageKey: "crewServices" } },
     { path: "/customs-services", name: "customs-services", component: WorkbenchPage, meta: { title: "海关服务", pageKey: "customsServices" } },
     { path: "/port-shipping-services", name: "port-shipping-services", component: WorkbenchPage, meta: { title: "港航服务", pageKey: "portShippingServices" } },
@@ -125,6 +136,12 @@ export const router = createRouter({
     { path: "/financial-services", name: "financial-services", component: WorkbenchPage, meta: { title: "金融服务", pageKey: "financialServices" } },
     { path: "/weather-services", name: "weather-services", component: WorkbenchPage, meta: { title: "气象服务", pageKey: "weatherServices" } },
     { path: "/vessel-dynamics-services", name: "vessel-dynamics-services", component: WorkbenchPage, meta: { title: "船舶动态服务", pageKey: "vesselDynamicsServices" } },
+    {
+      path: "/platform-operations/data-analysis",
+      name: "platform-operations-data-analysis",
+      component: SupplierDataAnalysisPage,
+      meta: { title: "供货商数据分析" }
+    },
     { path: "/basic-services", name: "basic-services", component: WorkbenchPage, meta: { title: "基础服务", pageKey: "basicManagement" } },
     { path: "/admin/permissions", name: "admin-permissions", component: WorkbenchPage, meta: { title: "权限管理", pageKey: "permissions" } },
     { path: "/admin/registrations", name: "admin-registrations", component: WorkbenchPage, meta: { title: "注册审核", pageKey: "registrations" } },
@@ -137,7 +154,13 @@ export const router = createRouter({
       path: "/procurement/food",
       name: "food-procurement-entry",
       component: FoodProcurementEntry,
-      meta: { title: "伙食采购入口" }
+      meta: { title: "伙食采购入口", foodPage: "demand" }
+    },
+    {
+      path: "/procurement/food/:demandId",
+      name: "food-procurement-detail",
+      component: FoodProcurementEntry,
+      meta: { title: "伙食采购需求", foodPage: "demand" }
     },
     {
       path: "/procurement/materials",

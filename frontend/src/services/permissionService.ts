@@ -309,6 +309,10 @@ const menuLabelKeysByCode: Record<string, string> = {
   FOOD_COMPARISON: "nav.foodCompare",
   FOOD_COMPARE: "nav.foodCompare",
   FOOD_ORDERS: "nav.foodOrders",
+  FOOD_SUPPLIER_ORDERS: "nav.foodSupplierOrders",
+  FOOD_SETTLEMENTS: "nav.foodSettlements",
+  FOOD_SUPPLIER_SETTLEMENTS: "nav.foodSupplierSettlements",
+  FOOD_EVALUATIONS: "nav.foodEvaluations",
   INQUIRIES: "nav.inquiries",
   INQUIRY: "nav.inquiries",
   INQUIRY_MANAGEMENT: "nav.inquiries",
@@ -346,6 +350,11 @@ const menuLabelKeysByCode: Record<string, string> = {
   weatherServices: "nav.weatherServices",
   VESSEL_DYNAMICS_SERVICES: "nav.vesselDynamicsServices",
   vesselDynamicsServices: "nav.vesselDynamicsServices",
+  PLATFORM_OPERATIONS: "nav.platformOperations",
+  platformOperations: "nav.platformOperations",
+  SUPPLIER_DATA_ANALYSIS: "nav.dataAnalysis",
+  DATA_ANALYSIS: "nav.dataAnalysis",
+  supplierDataAnalysis: "nav.dataAnalysis",
   CUSTOMS_SERVICES: "nav.customsServices",
   customsServices: "nav.customsServices",
   PORT_SHIPPING_SERVICES: "nav.portShippingServices",
@@ -373,6 +382,10 @@ const menuLabelKeysByRoute: Record<string, string> = {
   "/food/quotes": "nav.foodQuotes",
   "/food/comparison": "nav.foodCompare",
   "/food/orders": "nav.foodOrders",
+  "/supplier/food/orders": "nav.foodSupplierOrders",
+  "/food/settlements": "nav.foodSettlements",
+  "/supplier/food/settlements": "nav.foodSupplierSettlements",
+  "/food/evaluations": "nav.foodEvaluations",
   "/inquiries": "nav.inquiries",
   "/procurement/inquiries": "nav.inquiries",
   "/quotes": "nav.quotes",
@@ -390,6 +403,7 @@ const menuLabelKeysByRoute: Record<string, string> = {
   "/financial-services": "nav.financialServices",
   "/weather-services": "nav.weatherServices",
   "/vessel-dynamics-services": "nav.vesselDynamicsServices",
+  "/platform-operations/data-analysis": "nav.dataAnalysis",
   "/basic-services": "nav.basicManagement",
   "/delivery-tasks": "nav.delivery",
   "/transport/services": "nav.transportManagement",
@@ -489,15 +503,88 @@ const foodProcurementChildKeys = new Set([
   "FOOD_COMPARISON",
   "FOOD_COMPARE",
   "FOOD_ORDERS",
+  "FOOD_SUPPLIER_ORDERS",
+  "FOOD_SETTLEMENTS",
+  "FOOD_SUPPLIER_SETTLEMENTS",
+  "FOOD_EVALUATIONS",
   "food",
   "foodInquiries",
   "foodQuotes",
   "foodCompare",
-  "foodOrders"
+  "foodOrders",
+  "foodSupplierOrders",
+  "foodSettlements",
+  "foodSupplierSettlements",
+  "foodEvaluations"
 ]);
 
-const hiddenWorkbenchMenuKeys = new Set<string>(["delivery", "DELIVERY", "DELIVERY_TASKS", "supplyChainFinance", "SUPPLY_CHAIN_FINANCE"]);
-const hiddenWorkbenchMenuRoutes = new Set<string>(["/delivery-tasks", "/transport/services", "/settlement", "/supply-chain-finance"]);
+const hiddenWorkbenchMenuKeys = new Set<string>([
+  "delivery", "DELIVERY", "DELIVERY_TASKS", "supplyChainFinance", "SUPPLY_CHAIN_FINANCE"
+]);
+const hiddenWorkbenchMenuRoutes = new Set<string>([
+  "/delivery-tasks", "/transport/services", "/settlement", "/supply-chain-finance"
+]);
+
+const developmentFoodMenuTemplates: WorkbenchMenuItem[] = [
+  { key: "food", labelKey: "nav.food", route: "/procurement/food", icon: "FD", sortOrder: 0, roles },
+  { key: "foodInquiries", labelKey: "nav.foodInquiries", route: "/food/inquiries", icon: "IQ", sortOrder: 10, roles },
+  { key: "foodQuotes", labelKey: "nav.foodQuotes", route: "/food/quotes", icon: "QT", sortOrder: 20, roles },
+  { key: "foodCompare", labelKey: "nav.foodCompare", route: "/food/comparison", icon: "CP", sortOrder: 30, roles },
+  { key: "foodOrders", labelKey: "nav.foodOrders", route: "/food/orders", icon: "PO", sortOrder: 40, roles },
+  { key: "foodSupplierOrders", labelKey: "nav.foodSupplierOrders", route: "/supplier/food/orders", icon: "SO", sortOrder: 50, roles },
+  { key: "foodSettlements", labelKey: "nav.foodSettlements", route: "/food/settlements", icon: "ST", sortOrder: 60, roles },
+  { key: "foodSupplierSettlements", labelKey: "nav.foodSupplierSettlements", route: "/supplier/food/settlements", icon: "SS", sortOrder: 70, roles },
+  { key: "foodEvaluations", labelKey: "nav.foodEvaluations", route: "/food/evaluations", icon: "EV", sortOrder: 80, roles }
+];
+
+const foodProcurementParentKeys = new Set([
+  "FOOD_PROCUREMENT",
+  "FOOD_PROCUREMENT_GROUP",
+  "FOOD_PROCUREMENT_MANAGEMENT",
+  "foodProcurement",
+  "foodProcurementGroup"
+]);
+
+function developmentFoodParent(existing?: WorkbenchMenuItem): WorkbenchMenuItem {
+  const existingChildren = existing?.children || [];
+  const knownRoutes = new Set(developmentFoodMenuTemplates.map((item) => item.route));
+  const children = developmentFoodMenuTemplates.map((template) => ({
+    ...existingChildren.find((item) => item.route === template.route),
+    ...template,
+    roles: [...roles]
+  }));
+  const additionalChildren = existingChildren
+    .filter((item) => !knownRoutes.has(item.route))
+    .map((item) => ({ ...item, roles: [...roles] }));
+  return {
+    ...existing,
+    key: "foodProcurement",
+    labelKey: "nav.foodProcurement",
+    icon: existing?.icon || "FP",
+    sortOrder: existing?.sortOrder ?? 10,
+    roles: [...roles],
+    route: undefined,
+    children: sortByMenuOrder([...children, ...additionalChildren])
+  };
+}
+
+export function ensureDevelopmentFoodMenus(items: WorkbenchMenuItem[]): WorkbenchMenuItem[] {
+  let foundFoodParent = false;
+  const visit = (nodes: WorkbenchMenuItem[]): WorkbenchMenuItem[] => nodes.map((item) => {
+    if (foodProcurementParentKeys.has(item.key)) {
+      foundFoodParent = true;
+      return developmentFoodParent(item);
+    }
+    return item.children ? { ...item, children: visit(item.children) } : item;
+  });
+  const normalized = visit(items);
+  if (foundFoodParent) return normalized;
+  const procurementIndex = normalized.findIndex((item) => procurementServiceParentKeys.has(item.key));
+  if (procurementIndex < 0) return [...normalized, developmentFoodParent()];
+  return normalized.map((item, index) => index === procurementIndex
+    ? { ...item, roles: [...roles], children: sortByMenuOrder([...(item.children || []), developmentFoodParent()]) }
+    : item);
+}
 
 function ensureSettlementMenus(items: WorkbenchMenuItem[]): WorkbenchMenuItem[] {
   const templates: WorkbenchMenuItem[] = [
@@ -659,7 +746,17 @@ const fixedRootMenuTemplates: WorkbenchMenuItem[] = [
   { key: "taxServices", labelKey: "nav.taxServices", route: "/tax-services", icon: "TX", sortOrder: 60, roles },
   { key: "financialServices", labelKey: "nav.financialServices", route: "/financial-services", icon: "FN", sortOrder: 70, roles },
   { key: "weatherServices", labelKey: "nav.weatherServices", route: "/weather-services", icon: "WT", sortOrder: 80, roles },
-  { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, roles }
+  { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, roles },
+  {
+    key: "platformOperations",
+    labelKey: "nav.platformOperations",
+    icon: "OP",
+    sortOrder: 95,
+    roles: ["admin", "supplier"],
+    children: [
+      { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, roles: ["admin", "supplier"] }
+    ]
+  }
 ];
 
 function groupProcurementServiceMenus(items: WorkbenchMenuItem[]) {
@@ -712,6 +809,13 @@ function ensureDashboardGovernmentMenu(items: WorkbenchMenuItem[]) {
 
 function normalizeBargeRootMenu(items: WorkbenchMenuItem[]) {
   return items.map((item) => {
+    if (item.key === "platformOperations" || item.key === "PLATFORM_OPERATIONS") {
+      const analyticsChild = item.children?.find((child) => child.route === "/platform-operations/data-analysis" || ["SUPPLIER_DATA_ANALYSIS", "DATA_ANALYSIS", "supplierDataAnalysis"].includes(child.key));
+      const children = analyticsChild
+        ? [{ ...analyticsChild, key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: analyticsChild.icon || "DA", sortOrder: 0, roles: ["admin", "supplier"] as UserRole[] }]
+        : [{ key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, roles: ["admin", "supplier"] as UserRole[] }];
+      return { ...item, key: "platformOperations", labelKey: "nav.platformOperations", route: undefined, icon: "OP", sortOrder: 95, roles: ["admin", "supplier"] as UserRole[], children };
+    }
     if (item.key === "trafficService" || item.key === "TRAFFIC_SERVICE") {
       return { ...item, key: "trafficService", labelKey: "nav.bargeServices", icon: "BS", sortOrder: 20 };
     }
@@ -759,6 +863,7 @@ function groupBasicManagementMenus(items: WorkbenchMenuItem[]) {
     icon: "FP",
     sortOrder: 10
   });
+  items = ensureDevelopmentFoodMenus(items);
   items = groupProcurementServiceMenus(items);
   items = normalizeBargeRootMenu(items);
   const hasBasicTree = items.some((item) => item.key === "BASIC_MANAGEMENT" || item.key === "basicManagement");
@@ -791,7 +896,17 @@ const fixedPermissionRootMenuTemplates: PermissionMenuNode[] = [
   { key: "taxServices", labelKey: "nav.taxServices", route: "/tax-services", icon: "TX", sortOrder: 60, enabled: true },
   { key: "financialServices", labelKey: "nav.financialServices", route: "/financial-services", icon: "FN", sortOrder: 70, enabled: true },
   { key: "weatherServices", labelKey: "nav.weatherServices", route: "/weather-services", icon: "WT", sortOrder: 80, enabled: true },
-  { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, enabled: true }
+  { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, enabled: true },
+  {
+    key: "platformOperations",
+    labelKey: "nav.platformOperations",
+    icon: "OP",
+    sortOrder: 95,
+    enabled: true,
+    children: [
+      { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, enabled: true }
+    ]
+  }
 ];
 
 function groupProcurementServicePermissionMenus(items: PermissionMenuNode[]) {
@@ -815,11 +930,26 @@ function groupProcurementServicePermissionMenus(items: PermissionMenuNode[]) {
 }
 
 function normalizeBargeRootPermissionMenu(items: PermissionMenuNode[]) {
-  return items.map((item) =>
-    item.key === "trafficService" || item.key === "TRAFFIC_SERVICE"
+  return items.map((item) => {
+    if (item.key === "platformOperations" || item.key === "PLATFORM_OPERATIONS") {
+      const analyticsChild = item.children?.find((child) => child.route === "/platform-operations/data-analysis" || ["SUPPLIER_DATA_ANALYSIS", "DATA_ANALYSIS", "supplierDataAnalysis"].includes(child.key));
+      return {
+        ...item,
+        key: "platformOperations",
+        labelKey: "nav.platformOperations",
+        route: undefined,
+        icon: "OP",
+        sortOrder: 95,
+        enabled: true,
+        children: [analyticsChild
+          ? { ...analyticsChild, key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: analyticsChild.icon || "DA", sortOrder: 0, enabled: true }
+          : { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, enabled: true }]
+      };
+    }
+    return item.key === "trafficService" || item.key === "TRAFFIC_SERVICE"
       ? { ...item, key: "trafficService", labelKey: "nav.bargeServices", icon: "BS", sortOrder: 20 }
-      : item
-  );
+      : item;
+  });
 }
 
 function ensureFixedPermissionRootMenus(items: PermissionMenuNode[]) {

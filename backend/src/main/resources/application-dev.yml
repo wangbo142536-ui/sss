@@ -1,0 +1,4 @@
+ship-supply:
+  procurement:
+    food:
+      development-open-supplier-scope: true

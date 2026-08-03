@@ -25,6 +25,7 @@ withDefaults(
       | "MoreHorizontal"
       | "Image";
     label: string;
+    glyph?: string;
     variant?: "primary" | "secondary" | "danger" | "plain";
     type?: "button" | "submit";
     disabled?: boolean;
@@ -54,6 +55,7 @@ defineEmits<{
     @click="$emit('click', $event)"
   >
     <span v-if="loading" class="button-spinner" aria-hidden="true"></span>
+    <span v-else-if="glyph" class="ui-icon-button__glyph" aria-hidden="true">{{ glyph }}</span>
     <svg v-else viewBox="0 0 24 24" aria-hidden="true">
       <path v-if="icon === 'Search'" d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
       <path v-else-if="icon === 'Plus'" d="M12 5v14M5 12h14" />

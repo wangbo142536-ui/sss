@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="海事一站式综合服务平台，连接服务资源、订单智能与数据运营。">
+  <title>关于我们 - 海事一站式综合服务平台</title>
+  <link rel="icon" type="image/png" sizes="96x96" href="/prototypes/assets/zhoushan-maritime-ecosystem-favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,200..700,0..1,-25..0&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #191c1e;
+      --muted: #565c63;
+      --navy: #0b1c30;
+      --navy-strong: #071525;
+      --blue: #0077a8;
+      --blue-hover: #005f87;
+      --blue-soft: #c9e6ff;
+      --surface: #f7f9fb;
+      --surface-white: #ffffff;
+      --line: #d7dce1;
+      --max-width: 1280px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      overflow-x: hidden;
+      color: var(--ink);
+      background: var(--surface);
+      font-family: Manrope, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .wrap {
+      width: calc(100% - 48px);
+      max-width: var(--max-width);
+      margin: 0 auto;
+    }
+
+    .topbar {
+      height: 38px;
+      position: relative;
+      z-index: 30;
+      background: #172735;
+      color: #fff;
+      font-size: 13px;
+      box-shadow: inset 0 -1px 0 rgba(148, 184, 207, 0.18);
+    }
+
+    .topbar .wrap {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .topbar-left,
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .topbar-left {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .topbar-brand-logo {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      object-fit: contain;
+    }
+
+    .topbar-right a {
+      color: #fff;
+      font-weight: 700;
+      transition: color 180ms ease;
+    }
+
+    .topbar-right a:hover,
+    .topbar-right a:focus-visible {
+      color: #8bd3ff;
+      outline: none;
+    }
+
+    .topbar-right .is-current {
+      color: #8bd3ff;
+    }
+
+
+    .material-symbols-outlined {
+      font-variation-settings: "FILL" 0, "wght" 350, "GRAD" 0, "opsz" 32;
+    }
+
+    .hero {
+      min-height: 600px;
+      height: 80vh;
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      color: #fff;
+      background: var(--navy);
+    }
+
+    .hero-media,
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+    }
+
+    .hero-media {
+      z-index: -3;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .hero-overlay {
+      z-index: -2;
+      background:
+        linear-gradient(90deg, rgba(8, 23, 41, 0.86) 0%, rgba(8, 27, 47, 0.7) 34%, rgba(8, 27, 47, 0.26) 66%, rgba(8, 27, 47, 0.04) 100%),
+        linear-gradient(180deg, rgba(5, 16, 29, 0.1) 0%, rgba(5, 16, 29, 0.26) 100%);
+    }
+
+    .hero-content {
+      width: min(calc(100% - 48px), var(--max-width));
+      margin: 0 auto;
+      padding-bottom: 1vh;
+    }
+
+    .hero-copy {
+      width: min(760px, 68vw);
+    }
+
+    .hero h1 {
+      max-width: 10em;
+      margin: 0;
+      color: #fff;
+      font-size: clamp(42px, 4.2vw, 58px);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      text-wrap: balance;
+      text-shadow: 0 3px 18px rgba(4, 17, 30, 0.34);
+    }
+
+    .hero h1 span {
+      color: var(--blue-soft);
+    }
+
+    .hero-lead {
+      max-width: none;
+      margin: 24px 0 0;
+      color: #edf3f7;
+      font-size: clamp(17px, 1.55vw, 22px);
+      font-weight: 600;
+      line-height: 1.45;
+      white-space: nowrap;
+      text-shadow: 0 2px 12px rgba(4, 17, 30, 0.48);
+    }
+
+    .hero-cta {
+      min-width: 176px;
+      min-height: 50px;
+      margin-top: 44px;
+      padding: 0 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border: 1px solid rgba(193, 215, 230, 0.82);
+      border-radius: 9px;
+      background: rgba(244, 249, 252, 0.86);
+      color: #0b2f49;
+      box-shadow: 0 6px 8px rgba(7, 29, 47, 0.12);
+      backdrop-filter: blur(18px) saturate(1.2);
+      -webkit-backdrop-filter: blur(18px) saturate(1.2);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+
+    .hero-cta .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    .hero-cta:hover,
+    .hero-cta:focus-visible {
+      border-color: rgba(139, 211, 255, 0.92);
+      background: rgba(255, 255, 255, 0.96);
+      color: #075477;
+      outline: 3px solid rgba(201, 230, 255, 0.34);
+      outline-offset: 3px;
+    }
+
+    .hero-cta:active {
+      transform: translateY(1px);
+    }
+
+    .site-footer {
+      margin-top: 0;
+      padding: 34px 0;
+      background: var(--navy);
+      color: #d8e4ee;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
+      gap: 28px;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      max-width: 100%;
+      margin-bottom: 12px;
+    }
+
+    .footer-brand-logo {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      object-fit: contain;
+    }
+
+    .site-footer .footer-brand h3 {
+      min-width: 0;
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .site-footer h3,
+    .site-footer h4 {
+      margin: 0 0 12px;
+      color: #fff;
+    }
+
+    .site-footer p,
+    .site-footer a {
+      color: #b8c8d5;
+      font-size: 13px;
+      line-height: 1.75;
+    }
+
+    .footer-links {
+      display: grid;
+      gap: 7px;
+    }
+
+    .site-footer a:hover,
+    .site-footer a:focus-visible {
+      color: #8bd3ff;
+      outline: none;
+    }
+
+    .back-to-top {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 90;
+      width: 46px;
+      height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: rgba(7, 29, 51, 0.88);
+      color: #fff;
+      box-shadow: 0 14px 30px rgba(7, 29, 51, 0.24);
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px);
+      transition: opacity 180ms ease, transform 180ms ease, background 180ms ease;
+    }
+
+    .back-to-top .material-symbols-outlined {
+      font-size: 22px;
+    }
+
+    .back-to-top.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .back-to-top:hover,
+    .back-to-top:focus-visible {
+      background: var(--blue);
+      outline: 3px solid rgba(0, 119, 168, 0.2);
+      outline-offset: 2px;
+    }
+
+    @media (max-width: 900px) {
+      .hero-copy {
+        width: min(680px, calc(100vw - 48px));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .footer-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .wrap,
+      .hero-content {
+        width: calc(100vw - 28px);
+        max-width: var(--max-width);
+      }
+
+      .topbar {
+        height: auto;
+        padding: 9px 0;
+      }
+
+      .topbar .wrap {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .topbar-left {
+        white-space: normal;
+      }
+
+      .topbar-right {
+        gap: 8px 12px;
+      }
+
+      .hero {
+        min-height: 560px;
+        height: 82vh;
+        align-items: flex-end;
+      }
+
+      .hero-media {
+        object-position: 62% center;
+      }
+
+      .hero-overlay {
+        background: linear-gradient(180deg, rgba(8, 23, 41, 0.26) 0%, rgba(8, 23, 41, 0.72) 52%, rgba(8, 23, 41, 0.94) 100%);
+      }
+
+      .hero-content {
+        padding-bottom: 58px;
+      }
+
+      .hero-copy {
+        width: 100%;
+      }
+
+      .hero h1 {
+        max-width: 9em;
+        font-size: 38px;
+      }
+
+      .hero-lead {
+        margin-top: 18px;
+        font-size: 17px;
+        white-space: normal;
+      }
+
+      .hero-cta {
+        width: 100%;
+        margin-top: 30px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        transition-duration: 1ms !important;
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+  <link rel="stylesheet" href="maritime_about_topics.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap">
+      <div class="topbar-left">
+        <img class="topbar-brand-logo" src="/prototypes/assets/zhoushan-maritime-ecosystem-logo-dark-bg.png" alt="" aria-hidden="true">
+        <span>海事服务生态 · 保障最后一公里</span>
+      </div>
+      <div class="topbar-right">
+        <a href="/prototypes/maritime_integrated_service_home.html#policy" target="_top">政策发放</a>
+        <a href="/prototypes/maritime_integrated_service_home.html#publish" target="_top">最新动态</a>
+        <a href="/enterprise-entry" target="_top">企业入驻</a>
+        <a class="is-current" href="/prototypes/maritime_about.html" target="_top" aria-current="page">关于我们</a>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <section class="hero" aria-labelledby="about-title">
+      <img class="hero-media" src="assets/maritime-about-hero-image2.webp" alt="暮色中的智慧港口、集装箱船与海事数据网络">
+      <div class="hero-overlay" aria-hidden="true"></div>
+      <div class="hero-content">
+        <div class="hero-copy">
+          <h1 id="about-title">引领海事生态<br><span>智能化革命</span></h1>
+          <p class="hero-lead">将传统海事服务与前沿 AI 技术融合，重塑海事生态。</p>
+          <a class="hero-cta" href="/login" target="_top">
+            体验
+            <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <nav class="topic-nav" data-topic-nav aria-label="关于我们三大专题">
+      <a class="is-active" href="#topic-ecosystem" data-topic-link="topic-ecosystem"><span>01</span>资源整合</a>
+      <a href="#topic-agent" data-topic-link="topic-agent"><span>02</span>Agent赋能</a>
+      <a href="#topic-feedback" data-topic-link="topic-feedback"><span>03</span>数据反哺</a>
+    </nav>
+
+    <section class="topic-section topic-ecosystem" id="topic-ecosystem" data-topic-section aria-labelledby="ecosystem-title">
+      <div class="topic-sun" aria-hidden="true"></div>
+      <div class="topic-shell topic-grid">
+        <div class="topic-copy">
+          <p class="topic-index">初期 · 资源整合</p>
+          <h2 id="ecosystem-title">让碎片化资源<br>重塑海事生态</h2>
+          <p class="topic-lead">平台把分散在港口、船舶、服务商与监管端的能力重新连接。粒子由散沙汇聚成环，代表十二项海事服务从单点供给走向协同网络。</p>
+          <div class="topic-facts" aria-label="生态专题关键说明">
+            <span>核心服务持续开放与接入</span>
+          </div>
+        </div>
+
+        <div class="ecosystem-stage" data-webgl-stage="ecosystem">
+          <canvas class="topic-canvas" data-ecosystem-canvas aria-hidden="true"></canvas>
+          <div class="ecosystem-fallback" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="ecosystem-core" aria-hidden="true"><span>MARITIME</span><strong>海事生态</strong></div>
+          <ul class="service-orbit" aria-label="十二项海事服务">
+            <li style="--service-angle: 0deg"><span class="material-symbols-outlined">shopping_cart</span>采购供应</li>
+            <li style="--service-angle: 30deg"><span class="material-symbols-outlined">restaurant</span>伙食供应</li>
+            <li style="--service-angle: 60deg"><span class="material-symbols-outlined">groups</span>船员服务</li>
+            <li style="--service-angle: 90deg"><span class="material-symbols-outlined">shield</span>口岸监管</li>
+            <li style="--service-angle: 120deg"><span class="material-symbols-outlined">sailing</span>海事服务</li>
+            <li style="--service-angle: 150deg"><span class="material-symbols-outlined">anchor</span>港航服务</li>
+            <li style="--service-angle: 180deg"><span class="material-symbols-outlined">directions_boat</span>驳船配送</li>
+            <li style="--service-angle: 210deg"><span class="material-symbols-outlined">account_balance</span>金融服务</li>
+            <li style="--service-angle: 240deg"><span class="material-symbols-outlined">receipt_long</span>税务服务</li>
+            <li style="--service-angle: 270deg"><span class="material-symbols-outlined">cloud</span>海洋气象</li>
+            <li style="--service-angle: 300deg"><span class="material-symbols-outlined">radar</span>船舶动态</li>
+            <li style="--service-angle: 330deg"><span class="material-symbols-outlined">warehouse</span>仓储物流</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="topic-section topic-agent" id="topic-agent" data-topic-section aria-labelledby="agent-title">
+      <!-- 后续可将 src 替换为 assets/maritime-agent-harbor.webp，不影响专题结构。 -->
+      <img class="topic-scene-image" src="assets/maritime-port-shipping-service.png" alt="船舶靠港、驳船配送与吊机装卸协同作业场景" loading="lazy">
+      <div class="topic-scene-overlay" aria-hidden="true"></div>
+      <div class="topic-shell agent-grid">
+        <div class="topic-copy topic-copy-dark">
+          <p class="topic-index">中期 · Agent 赋能</p>
+          <h2 id="agent-title">Agent赋能海事<br>全生命周期</h2>
+          <p class="topic-lead">围绕船舶靠港与抛锚计划，Agent 串联驳船配送、吊机装卸和供应商履约。高速数据流不替代业务，而是让每个节点更早看见、更快推进。</p>
+          <div class="agent-scenes" aria-label="港口协同场景">
+            <span><i></i>解决未知商品货源寻找，避免大量规格不匹配</span>
+            <span><i></i>解决采购订单执行速度，减少人工比价混乱</span>
+            <span><i></i>解决运输供应时效性，加强一单多供且降低成本</span>
+          </div>
+        </div>
+
+        <div class="agent-flow" data-webgl-stage="agent">
+          <canvas class="topic-canvas" data-agent-canvas aria-hidden="true"></canvas>
+          <div class="agent-fallback-binary" aria-hidden="true"></div>
+          <div class="agent-flow-head"><span>ORDER EXECUTION</span><strong>数据网络</strong></div>
+          <ol class="agent-node-list">
+            <li><span>01</span><div><strong>清单识别</strong><small>需求自动归集</small></div></li>
+            <li><span>02</span><div><strong>规格匹配</strong><small>SKU 与历史标准比对</small></div></li>
+            <li><span>03</span><div><strong>智能询价</strong><small>服务商并行响应</small></div></li>
+            <li><span>04</span><div><strong>比价决策</strong><small>价格、时效与风险综合判断</small></div></li>
+            <li><span>05</span><div><strong>履约协同</strong><small>数据各方流转协同</small></div></li>
+          </ol>
+          <div class="agent-status" role="status"><i></i>订单执行节点实时联通</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="topic-section topic-feedback" id="topic-feedback" data-topic-section aria-labelledby="feedback-title">
+      <img class="topic-scene-image" src="assets/maritime-data-feedback.webp" alt="" aria-hidden="true" loading="lazy">
+      <div class="topic-scene-overlay" aria-hidden="true"></div>
+      <div class="topic-shell feedback-grid">
+        <div class="feedback-stage" aria-label="实时数据沉淀与服务反哺轨道">
+          <div class="feedback-core"><span>DATA LOOP</span><strong>数据持续沉淀</strong><small>每一笔真实履约都成为下一次服务优化依据</small></div>
+          <div class="feedback-orbit feedback-orbit-one" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="feedback-orbit feedback-orbit-two" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <ul class="feedback-signals">
+            <li style="--signal-angle: 12deg">SKU 规格</li>
+            <li style="--signal-angle: 72deg">价格波动</li>
+            <li style="--signal-angle: 132deg">采购频次</li>
+            <li style="--signal-angle: 192deg">企业定位</li>
+            <li style="--signal-angle: 252deg">履约时效</li>
+            <li style="--signal-angle: 312deg">服务评分</li>
+          </ul>
+        </div>
+
+        <div class="topic-copy">
+          <p class="topic-index">后期：数据反哺</p>
+          <h2 id="feedback-title">数据沉淀反哺<br>海事生态</h2>
+          <p class="topic-lead">平台沉淀规格、价格、采购量、运力和履约表现，为服务商提供备货与配送建议，也为企业提供更准确的定位，形成持续转动的数据闭环。</p>
+          <div class="feedback-outcomes" aria-label="数据反哺成果">
+            <div><span>服务商</span><strong>加强企业定位</strong></div>
+            <div><span>采购企业</span><strong>提高找货源效率</strong></div>
+            <div><span>平台生态</span><strong>通过数据完善海事全生命周期</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div>
+        <div class="footer-brand">
+          <img class="footer-brand-logo" src="/prototypes/assets/zhoushan-maritime-ecosystem-logo-dark-bg.png" alt="" aria-hidden="true">
+          <h3>海事一站式综合服务平台</h3>
+        </div>
+        <p>面向地方政府和海运市场的综合服务入口，连接企业服务、口岸监管、供应链金融、政策补贴和船供市场动态。</p>
+      </div>
+      <div>
+        <h4>企业服务</h4>
+        <div class="footer-links">
+          <a href="/prototypes/maritime_integrated_service_home.html#services" target="_top">采购服务</a>
+          <a href="/prototypes/maritime_integrated_service_home.html#services" target="_top">运输服务</a>
+          <a href="/prototypes/maritime_integrated_service_home.html#services" target="_top">船员服务</a>
+        </div>
+      </div>
+      <div>
+        <h4>政府监管</h4>
+        <div class="footer-links">
+          <a href="/prototypes/maritime_integrated_service_home.html#policy" target="_top">政策发放</a>
+          <a href="/prototypes/maritime_integrated_service_home.html#policy" target="_top">补贴核验</a>
+          <a href="/prototypes/maritime_integrated_service_home.html#policy" target="_top">市场监管</a>
+        </div>
+      </div>
+      <div>
+        <h4>平台服务</h4>
+        <div class="footer-links">
+          <a href="/prototypes/maritime_integrated_service_home.html#publish" target="_top">最新动态</a>
+          <a href="/prototypes/maritime_about.html" target="_top" aria-current="page">关于我们</a>
+          <a href="/enterprise-entry" target="_top">企业入驻</a>
+          <a href="/prototypes/maritime_integrated_service_home.html#finance" target="_top">金融服务</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" type="button" data-back-to-top aria-label="返回顶部" title="返回顶部">
+    <span class="material-symbols-outlined" aria-hidden="true">arrow_upward</span>
+  </button>
+
+  <script type="module" src="maritime_about_topics.js"></script>
+  <script>
+    const backToTop = document.querySelector("[data-back-to-top]");
+    const updateBackToTop = () => {
+      backToTop?.classList.toggle("is-visible", window.scrollY > 520);
+    };
+
+    backToTop?.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    updateBackToTop();
+    window.addEventListener("scroll", updateBackToTop, { passive: true });
+  </script>
+
+</body>
+</html>

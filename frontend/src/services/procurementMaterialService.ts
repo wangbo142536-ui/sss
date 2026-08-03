@@ -303,6 +303,7 @@ function normalizeTrafficService(value: unknown) {
   return {
     trafficServiceOrderId: readNumber(value, "trafficServiceOrderId"),
     bookingId: readNumber(value, "bookingId"),
+    selectedNodeIndex: readNumber(value, "selectedNodeIndex"),
     departurePoint: readString(value, "departurePoint"),
     destinationPoint: readString(value, "destinationPoint"),
     startTime: readString(value, "startTime"),

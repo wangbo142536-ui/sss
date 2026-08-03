@@ -169,21 +169,12 @@ public class MaterialDemandRepository {
 
     public void replaceItems(long demandId, long companyId, List<MaterialDemandItemRequest> items) {
         jdbcTemplate.update("DELETE FROM material_demand_item WHERE demand_id = ? AND company_id = ?", demandId, companyId);
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        List<Object[]> args = new ArrayList<>(items.size());
         for (MaterialDemandItemRequest item : items) {
-            jdbcTemplate.update(
-                """
-                INSERT INTO material_demand_item
-                  (demand_id, company_id, document_type, header_row_index, sequence_no,
-                   source_row_no, source_row_number, raw_columns_json, impa_code,
-                   description, size_model, quantity, unit, remarks, supplier_item_no,
-                   raw_name_spec, price, packing, stock, selected_impa_code,
-                   candidate_impa_code, candidate_name_cn, candidate_name_en,
-                   candidate_spec, match_result, match_result_name, reason, validation_status, validation_reason, has_image,
-                   image_index, image_anchor, candidates_json, actual_quote_price,
-                   actual_quote_currency, quote_markup_percent, quote_supplier_sku_id,
-                   quote_selected_unit, quote_unit_price, quote_unit_price_usd, quote_strategy_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+            args.add(new Object[] {
                 demandId,
                 companyId,
                 item.documentType(),
@@ -225,8 +216,24 @@ public class MaterialDemandRepository {
                 item.quoteUnitPrice(),
                 item.quoteUnitPriceUsd(),
                 item.quoteStrategyType()
-            );
+            });
         }
+        jdbcTemplate.batchUpdate(
+            """
+            INSERT INTO material_demand_item
+              (demand_id, company_id, document_type, header_row_index, sequence_no,
+               source_row_no, source_row_number, raw_columns_json, impa_code,
+               description, size_model, quantity, unit, remarks, supplier_item_no,
+               raw_name_spec, price, packing, stock, selected_impa_code,
+               candidate_impa_code, candidate_name_cn, candidate_name_en,
+               candidate_spec, match_result, match_result_name, reason, validation_status, validation_reason, has_image,
+               image_index, image_anchor, candidates_json, actual_quote_price,
+               actual_quote_currency, quote_markup_percent, quote_supplier_sku_id,
+               quote_selected_unit, quote_unit_price, quote_unit_price_usd, quote_strategy_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            args
+        );
     }
 
     public Optional<MaterialDemandSummaryResponse> findSummaryById(long companyId, long demandId) {

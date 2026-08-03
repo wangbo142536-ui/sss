@@ -747,7 +747,8 @@ public class MaterialMatchPreviewService {
     private class SearchCache {
 
         private final Map<String, List<ImpaItemResponse>> itemsByKeyword = new LinkedHashMap<>();
-        private List<ImpaItemResponse> allItems;
+        private List<SearchableImpaItem> searchableItems;
+        private Map<String, ImpaItemResponse> itemsByCode;
 
         private List<ImpaItemResponse> findItems(String keyword) {
             return itemsByKeyword.computeIfAbsent(keyword, this::findItemsInMemory);
@@ -757,30 +758,45 @@ public class MaterialMatchPreviewService {
             String normalizedKeyword = keyword.toUpperCase(Locale.ROOT);
             String normalizedCode = normalizeCode(keyword);
             List<ImpaItemResponse> matches = new ArrayList<>();
-            for (ImpaItemResponse item : allItems()) {
-                if (normalizeCode(item.impaCode()).equals(normalizedCode)) {
-                    matches.add(item);
-                }
+            ImpaItemResponse exactCodeItem = itemsByCode().get(normalizedCode);
+            if (exactCodeItem != null) {
+                matches.add(exactCodeItem);
             }
-            for (ImpaItemResponse item : allItems()) {
+            for (SearchableImpaItem searchable : searchableItems()) {
                 if (matches.size() >= MAX_CANDIDATES) {
                     break;
                 }
+                ImpaItemResponse item = searchable.item();
                 if (matches.stream().anyMatch(match -> match.impaCode().equals(item.impaCode()))) {
                     continue;
                 }
-                if (haystack(item).contains(normalizedKeyword)) {
+                if (searchable.haystack().contains(normalizedKeyword)) {
                     matches.add(item);
                 }
             }
             return matches;
         }
 
-        private List<ImpaItemResponse> allItems() {
-            if (allItems == null) {
-                allItems = impaItemRepository.findItems(null, null, null, 60000);
+        private List<SearchableImpaItem> searchableItems() {
+            if (searchableItems == null) {
+                searchableItems = impaItemRepository.findItems(null, null, null, 60000).stream()
+                    .map(item -> new SearchableImpaItem(item, haystack(item)))
+                    .toList();
+                itemsByCode = searchableItems.stream()
+                    .map(SearchableImpaItem::item)
+                    .collect(java.util.stream.Collectors.toMap(
+                        item -> normalizeCode(item.impaCode()),
+                        item -> item,
+                        (first, ignored) -> first,
+                        LinkedHashMap::new
+                    ));
             }
-            return allItems;
+            return searchableItems;
+        }
+
+        private Map<String, ImpaItemResponse> itemsByCode() {
+            searchableItems();
+            return itemsByCode;
         }
 
         private String haystack(ImpaItemResponse item) {
@@ -796,6 +812,9 @@ public class MaterialMatchPreviewService {
         private String nullToEmpty(String value) {
             return value == null ? "" : value;
         }
+    }
+
+    private record SearchableImpaItem(ImpaItemResponse item, String haystack) {
     }
 
     private record MatchDecision(
