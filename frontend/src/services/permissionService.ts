@@ -45,6 +45,7 @@ export type AdminRegistration = {
   companyId?: string;
   username?: string;
   companyType: string;
+  supplierServiceTypes: string[];
   companyName: string;
   contactName: string;
   phone: string;
@@ -356,13 +357,19 @@ const menuLabelKeysByCode: Record<string, string> = {
   DATA_ANALYSIS: "nav.dataAnalysis",
   supplierDataAnalysis: "nav.dataAnalysis",
   CUSTOMS_SERVICES: "nav.customsServices",
+  CUSTOMS_SERVICES_GROUP: "nav.customsServices",
   customsServices: "nav.customsServices",
+  CUSTOMS_DECLARATION: "nav.customsDeclarations",
+  CUSTOMS_DECLARATIONS: "nav.customsDeclarations",
+  customsDeclarations: "nav.customsDeclarations",
   PORT_SHIPPING_SERVICES: "nav.portShippingServices",
   portShippingServices: "nav.portShippingServices",
   BORDER_INSPECTION_SERVICES: "nav.borderInspectionServices",
   borderInspectionServices: "nav.borderInspectionServices",
   MARITIME_SERVICES: "nav.maritimeServices",
   maritimeServices: "nav.maritimeServices",
+  COMPANY_MEMBERS: "nav.companyMembers",
+  companyMembers: "nav.companyMembers",
   ADMIN_REGISTRATIONS: "nav.registrations",
   ADMIN_PERMISSION: "nav.permissions",
   ADMIN_PERMISSIONS: "nav.permissions"
@@ -371,12 +378,14 @@ const menuLabelKeysByCode: Record<string, string> = {
 const menuLabelKeysByRoute: Record<string, string> = {
   "/dashboard": "nav.dashboard",
   "/dashboard-government": "nav.dashboardGovernment",
+  "/company/members": "nav.companyMembers",
   "/procurement/materials": "nav.requests",
   "/procurement/requests": "nav.requests",
   "/standard-library/impa": "nav.impa",
   "/suppliers": "nav.suppliers",
   "/supplier-products": "nav.supplierProducts",
   "/shop/products": "nav.supplierProducts",
+  "/customs-services/declarations": "nav.customsDeclarations",
   "/procurement/food": "nav.food",
   "/food/inquiries": "nav.foodInquiries",
   "/food/quotes": "nav.foodQuotes",
@@ -739,7 +748,6 @@ const fixedRootMenuTemplates: WorkbenchMenuItem[] = [
       { key: "qualitySupervision", labelKey: "nav.qualitySupervision", route: "/regulatory/quality", icon: "QS", sortOrder: 0, roles }
     ]
   },
-  { key: "customsServices", labelKey: "nav.customsServices", route: "/customs-services", icon: "CS", sortOrder: 30, roles },
   { key: "portShippingServices", labelKey: "nav.portShippingServices", route: "/port-shipping-services", icon: "PH", sortOrder: 35, roles },
   { key: "borderInspectionServices", labelKey: "nav.borderInspectionServices", route: "/border-inspection-services", icon: "BI", sortOrder: 45, roles },
   { key: "maritimeServices", labelKey: "nav.maritimeServices", route: "/maritime-services", icon: "MS", sortOrder: 50, roles },
@@ -889,7 +897,6 @@ function groupBasicManagementMenus(items: WorkbenchMenuItem[]) {
 
 const fixedPermissionRootMenuTemplates: PermissionMenuNode[] = [
   { key: "regulatoryServices", labelKey: "nav.regulatoryServices", icon: "RS", sortOrder: 40, enabled: true },
-  { key: "customsServices", labelKey: "nav.customsServices", route: "/customs-services", icon: "CS", sortOrder: 30, enabled: true },
   { key: "portShippingServices", labelKey: "nav.portShippingServices", route: "/port-shipping-services", icon: "PH", sortOrder: 35, enabled: true },
   { key: "borderInspectionServices", labelKey: "nav.borderInspectionServices", route: "/border-inspection-services", icon: "BI", sortOrder: 45, enabled: true },
   { key: "maritimeServices", labelKey: "nav.maritimeServices", route: "/maritime-services", icon: "MS", sortOrder: 50, enabled: true },
@@ -1104,6 +1111,7 @@ function normalizeRegistration(item: unknown): AdminRegistration | null {
     companyId: readString(item, ["companyId"]),
     username: readString(item, ["username", "account"]),
     companyType: readString(item, ["companyType", "enterpriseType", "type"]),
+    supplierServiceTypes: readArray(item, ["supplierServiceTypes", "serviceTypes"]),
     companyName: readString(item, ["companyName", "enterpriseName", "name"]),
     contactName: readString(item, ["contactName", "contact", "contactPerson"]),
     phone: readString(item, ["contactPhone", "phone", "mobile"]),

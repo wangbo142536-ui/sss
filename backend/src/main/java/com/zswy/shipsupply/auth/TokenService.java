@@ -50,6 +50,14 @@ public class TokenService {
         return persistedUserId;
     }
 
+    public void invalidateUser(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        userIdsByToken.entrySet().removeIf(entry -> userId.equals(entry.getValue()));
+        authRepository.revokeUserTokens(userId);
+    }
+
     private static ResponseStatusException invalidToken() {
         return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid token");
     }

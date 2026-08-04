@@ -197,6 +197,7 @@ export default {
     evaluations: "评价体系",
     supplyChainFinance: "供应链金融",
     customsServices: "海关服务",
+    customsDeclarations: "报关管理",
     portShippingServices: "港航服务",
     borderInspectionServices: "边检服务",
     maritimeServices: "海事服务",
@@ -216,6 +217,7 @@ export default {
     platformOperations: "平台运营",
     dataAnalysis: "数据分析",
     settlements: "结算管理",
+    companyMembers: "企业成员",
     registrations: "注册审核",
     permissions: "权限管理",
     menuManagement: "菜单管理",
@@ -829,9 +831,13 @@ export default {
       accountPlaceholder: "请输入手机号或邮箱",
       accountRequired: "请输入账号。",
       companyType: "企业类型",
-      companyTypeShipAgent: "船代",
-      companyTypeSupplier: "供货商",
-      companyTypeBargeAgent: "驳船代理",
+      companyTypeShipAgent: "船舶代理",
+      companyTypeSupplier: "供应服务商",
+      companyTypeBargeAgent: "驳船服务商",
+      supplierServiceType: "供应业务",
+      supplierServiceMaterial: "物料供应服务",
+      supplierServiceFood: "伙食供货服务",
+      supplierServiceRequired: "请至少选择一项供应业务。",
       company: "企业名称",
       contact: "联系人",
       phone: "手机号",
@@ -958,6 +964,7 @@ export default {
     delivered: "已送船",
     archived: "已归档",
     active: "启用",
+    disabled: "停用",
     warning: "需关注",
     blocked: "不可比价",
     valid: "有效",
@@ -995,7 +1002,12 @@ export default {
   },
   companyMembers: {
     action: {
+      createRole: "新增角色",
       create: "新增成员",
+      edit: "编辑成员",
+      editRole: "编辑角色",
+      configureRole: "配置角色权限",
+      disableRole: "停用角色",
       assignRoles: "分配角色",
       enable: "启用",
       disable: "停用",
@@ -1003,7 +1015,10 @@ export default {
       resetPassword: "重置密码"
     },
     drawer: {
+      role: "新增角色",
+      roleEdit: "编辑角色与权限",
       create: "新增成员",
+      edit: "编辑成员",
       roles: "分配角色",
       detail: "成员详情",
       subtitle: "企业账号"
@@ -1017,7 +1032,13 @@ export default {
       contact: "联系方式",
       roles: "角色",
       source: "创建来源",
-      lastLoginAt: "最近登录"
+      lastLoginAt: "最近登录",
+      roleName: "角色名称",
+      roleCode: "角色编码"
+    },
+    tab: {
+      members: "成员账户",
+      roles: "角色管理"
     },
     filter: {
       keywordPlaceholder: "账号、姓名、手机号或邮箱"
@@ -1027,7 +1048,9 @@ export default {
       name: "请输入成员姓名",
       phone: "请输入手机号",
       email: "请输入邮箱",
-      password: "请输入初始密码"
+      password: "请输入初始密码",
+      roleName: "请输入角色名称",
+      roleCode: "可选；留空时自动生成"
     },
     status: {
       PENDING: "待邀请",
@@ -1041,14 +1064,19 @@ export default {
     confirm: {
       enable: "确定启用账号 {account}？",
       disable: "确定停用账号 {account}？停用后该成员将不能进入业务菜单。",
-      reset: "确定重置 {account} 的密码？临时密码将按后端策略发放。"
+      reset: "确定重置 {account} 的密码？临时密码将按后端策略发放。",
+      disableRole: "确定停用角色 {role}？已分配该角色的历史记录保留。"
     },
     notice: {
       created: "成员已创建，等待后端账号与角色策略生效。",
       rolesSaved: "成员角色已保存。",
       enabled: "成员已启用。",
       disabled: "成员已停用。",
-      passwordReset: "重置密码请求已提交。"
+      passwordReset: "重置密码请求已提交。",
+      updated: "成员资料已保存。",
+      roleCreated: "角色已创建。",
+      roleUpdated: "角色及菜单权限已保存。",
+      roleDisabled: "角色已停用。"
     },
     error: {
       requestFailed: "成员数据加载失败，请检查后端服务或稍后重试。",
@@ -1060,7 +1088,8 @@ export default {
       accountRequired: "请输入账号。",
       phoneRequired: "请输入手机号。",
       passwordRequired: "请输入初始密码。",
-      roleRequired: "请至少选择一个角色。"
+      roleRequired: "请至少选择一个角色。",
+      roleNameRequired: "请输入角色名称。"
     }
   },
   filter: {
@@ -1472,6 +1501,23 @@ export default {
     }
   },
   permission: {
+    companyName: "企业名称",
+    companyType: "企业类型",
+    supplierServices: "供应服务",
+    accountCount: "账户数",
+    activeAccountCount: "启用数",
+    createdAt: "创建时间",
+    registeredAdmin: "注册管理员",
+    internalAccount: "内部账户",
+    confirmEnable: "确认启用账户",
+    confirmDisable: "确认停用账户",
+    statusReasonPlaceholder: "请输入本次状态变更原因",
+    platformForbidden: "仅平台管理员可查看全部企业账户。",
+    platformLoadFailed: "企业账户数据加载失败。",
+    statusReasonRequired: "请输入状态变更原因。",
+    accountEnabled: "账户已启用。",
+    accountDisabled: "账户已停用。",
+    platformStatusFailed: "账户状态更新失败。",
     roleList: "角色列表",
     menuTree: "菜单树",
     unnamedMenu: "未命名菜单",
@@ -1486,6 +1532,7 @@ export default {
     menuOrderSaveFailed: "菜单顺序保存失败，请确认后端接口是否已完成",
     permissionPoints: "权限点列表",
     userAssignment: "用户角色分配",
+    platformAccounts: "企业账户管理",
     roleMenuPermissions: "角色菜单权限",
     accountKeyword: "账户检索",
     accountKeywordPlaceholder: "账户、姓名、手机号、邮箱",
@@ -1576,6 +1623,8 @@ export default {
       anchoragePlaceholder: "搜索锚地名称或编码"
     },
     field: {
+      roleName: "角色名称",
+      roleCode: "角色编码",
       serviceNo: "服务单号",
       seaArea: "海域",
       anchorage: "锚地",
@@ -1653,6 +1702,8 @@ export default {
       addCargo: "新增货物"
     },
     placeholder: {
+      roleName: "请输入角色名称",
+      roleCode: "选填，留空时自动生成",
       anchorage: "请选择锚地",
       passengerCount: "一人数",
       remark: "出发码头及其他注意信息",
@@ -1660,6 +1711,7 @@ export default {
       photoUrl: "填写图片地址"
     },
     notice: {
+      roleCreated: "角色已创建。",
       created: "服务已新增",
       updated: "服务已保存",
       confirmed: "交通艇服务已确认",
@@ -1668,6 +1720,7 @@ export default {
       pricesSaved: "驳船服务报价已保存"
     },
     error: {
+      roleNameRequired: "请输入角色名称。",
       loadFailed: "服务加载失败",
       saveFailed: "服务保存失败",
       confirmFailed: "交通艇服务确认失败",
@@ -1862,6 +1915,7 @@ export default {
     statusFilter: "审核状态筛选",
     account: "登录账号",
     companyType: "企业类型",
+    supplierServices: "供应服务",
     companyName: "企业名称",
     contactName: "联系人",
     phone: "联系电话",

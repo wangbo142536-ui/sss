@@ -6648,6 +6648,38 @@ select:focus-visible {
   padding: 12px;
 }
 
+.platform-account-expanded {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.platform-account-action-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, auto) minmax(260px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-soft);
+}
+
+.platform-account-action-bar strong {
+  color: var(--color-primary-900);
+  font-size: 13px;
+}
+
+.platform-account-action-bar input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  background: #fff;
+}
+
 .permission-user-expanded {
   display: grid;
   grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);

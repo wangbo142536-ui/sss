@@ -3,11 +3,13 @@ package com.zswy.shipsupply.auth;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
+import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.mock.web.MockMultipartFile;
 
 @WebMvcTest(AuthController.class)
 class AuthControllerTest {
@@ -24,6 +27,31 @@ class AuthControllerTest {
 
     @MockBean
     private AuthService authService;
+
+    @MockBean
+    private RegistrationSubmissionService registrationSubmissionService;
+
+    @Test
+    void registersAndSubmitsCompanyProfileInOneMultipartRequest() throws Exception {
+        when(registrationSubmissionService.registerAndSubmit(any(RegistrationSubmissionRequest.class), any()))
+            .thenReturn(sampleAuthResponse());
+        MockMultipartFile request = new MockMultipartFile(
+            "request",
+            "request.json",
+            MediaType.APPLICATION_JSON_VALUE,
+            """
+                {"account":"dock-agent-01","password":"secret123","confirmPassword":"secret123",
+                 "companyType":"SHIP_AGENT","supplierServiceTypes":[],"companyName":"舟山船代",
+                 "unifiedSocialCreditCode":"91330000TEST000001","contactName":"张三",
+                 "contactPhone":"13800138000","contactEmail":"test@example.com"}
+                """.getBytes(StandardCharsets.UTF_8)
+        );
+        MockMultipartFile file = new MockMultipartFile("files", "license.pdf", "application/pdf", "pdf".getBytes());
+
+        mockMvc.perform(multipart("/api/auth/register-and-submit").file(request).file(file))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.token").value("dev-token"));
+    }
 
     @Test
     void registersWithAccountPasswordOnly() throws Exception {

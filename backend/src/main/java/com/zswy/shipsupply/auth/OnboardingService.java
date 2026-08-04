@@ -48,6 +48,7 @@ public class OnboardingService {
         if (fileIds.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "qualificationFileIds is required");
         }
+        List<String> supplierServiceTypes = normalizeSupplierServiceTypes(companyType, request.supplierServiceTypes());
 
         authRepository.updateCompanyProfile(
             user.companyId(),
@@ -60,6 +61,7 @@ public class OnboardingService {
             PENDING_REVIEW,
             null
         );
+        authRepository.replaceCompanySupplierServiceTypes(user.companyId(), supplierServiceTypes);
         authRepository.updateUserStatusAndType(user.id(), PENDING_REVIEW, companyType);
         authRepository.clearUserRoles(user.id());
         authRepository.replaceCompanyQualifications(user.companyId(), fileIds);
@@ -69,7 +71,7 @@ public class OnboardingService {
             "COMPANY",
             String.valueOf(user.companyId()),
             "/api/onboarding/company-profile",
-            companyType
+            companyType + ";supplierServiceTypes=" + String.join(",", supplierServiceTypes)
         );
         return buildProfile(authRepository.getUserById(user.id()));
     }
@@ -98,7 +100,8 @@ public class OnboardingService {
                 company.contactName(),
                 company.contactPhone(),
                 company.contactEmail(),
-                company.status()
+                company.status(),
+                company.supplierServiceTypes()
             );
         }
         return company;
@@ -117,7 +120,33 @@ public class OnboardingService {
         if (upper.contains("SHIP") || value.contains("船代")) {
             return "SHIP_AGENT";
         }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only ship agent and supplier onboarding are open");
+        if (upper.contains("BARGE") || value.contains("驳船")) {
+            return "BARGE_AGENT";
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported self-service role");
+    }
+
+    private List<String> normalizeSupplierServiceTypes(String companyType, List<String> values) {
+        List<String> normalized = values == null ? List.of() : values.stream()
+            .filter(value -> value != null && !value.isBlank())
+            .map(value -> value.trim().toUpperCase(Locale.ROOT))
+            .distinct()
+            .toList();
+        if (!"SUPPLIER".equals(companyType)) {
+            if (!normalized.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SUPPLIER_SERVICE_TYPES_NOT_ALLOWED");
+            }
+            return List.of();
+        }
+        if (normalized.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SUPPLIER_SERVICE_TYPE_REQUIRED");
+        }
+        for (String value : normalized) {
+            if (!"MATERIAL".equals(value) && !"FOOD".equals(value)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_SUPPLIER_SERVICE_TYPE");
+            }
+        }
+        return normalized;
     }
 
     private String defaultRoute(String accountStatus, String companyStatus) {

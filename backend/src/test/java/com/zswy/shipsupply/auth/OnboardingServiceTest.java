@@ -74,4 +74,26 @@ class OnboardingServiceTest {
         assertThat(response.company().companyName()).isEmpty();
         assertThat(response.company().unifiedSocialCreditCode()).isNull();
     }
+
+    @Test
+    void supplierProfileRequiresAtLeastOneSupplierCapability() {
+        when(tokenService.requireUserId("Bearer token")).thenReturn(20L);
+        when(authRepository.getUserById(20L)).thenReturn(
+            new AuthenticatedUser(20L, "supplier-01", null, "hashed", "UNSPECIFIED", "PROFILE_REQUIRED", 10L)
+        );
+        CompanyProfileRequest request = new CompanyProfileRequest(
+            "SUPPLIER",
+            "舟山测试供货商",
+            "91330000TEST000001",
+            "张三",
+            "13800138000",
+            "test@example.com",
+            List.of("FILE-1"),
+            List.of()
+        );
+
+        assertThatThrownBy(() -> new OnboardingService(authRepository, tokenService).submitProfile("Bearer token", request))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("SUPPLIER_SERVICE_TYPE_REQUIRED");
+    }
 }

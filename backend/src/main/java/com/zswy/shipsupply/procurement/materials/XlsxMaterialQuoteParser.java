@@ -83,6 +83,74 @@ public class XlsxMaterialQuoteParser {
         }
     }
 
+    /**
+     * Parses one explicitly named worksheet. Shop SKU import uses this entry point so
+     * product type is decided by the fixed worksheet contract instead of row content.
+     */
+    public MaterialParsedDocument parse(Path xlsxFile, String sheetName) throws IOException {
+        try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
+            String sheetEntry = workbookSheetEntries(zipFile).get(sheetName);
+            if (sheetEntry == null) {
+                throw new IOException("Missing XLSX sheet: " + sheetName);
+            }
+            List<String> sharedStrings = readSharedStrings(zipFile);
+            Map<Integer, ImageAnchor> imageAnchorsByRow = readImageAnchors(zipFile, sheetEntry, sheetName);
+            return readRows(readXml(zipFile, sheetEntry), sharedStrings, imageAnchorsByRow);
+        }
+    }
+
+    public List<String> sheetNames(Path xlsxFile) throws IOException {
+        try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
+            return List.copyOf(workbookSheetEntries(zipFile).keySet());
+        }
+    }
+
+    public boolean hasNonBlankCells(Path xlsxFile, String sheetName) throws IOException {
+        try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
+            String sheetEntry = workbookSheetEntries(zipFile).get(sheetName);
+            if (sheetEntry == null) {
+                return false;
+            }
+            List<String> sharedStrings = readSharedStrings(zipFile);
+            NodeList rows = readXml(zipFile, sheetEntry).getElementsByTagNameNS("*", "row");
+            for (int index = 0; index < rows.getLength(); index++) {
+                if (rows.item(index) instanceof Element row
+                    && readCells(row, sharedStrings).values().stream().anyMatch(value -> !value.isBlank())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    private Map<String, String> workbookSheetEntries(ZipFile zipFile) throws IOException {
+        Document workbook = readXml(zipFile, "xl/workbook.xml");
+        Document relationships = readXml(zipFile, "xl/_rels/workbook.xml.rels");
+        Map<String, String> targetByRelationship = new HashMap<>();
+        NodeList relationshipNodes = relationships.getElementsByTagNameNS("*", "Relationship");
+        for (int index = 0; index < relationshipNodes.getLength(); index++) {
+            Element relationship = (Element) relationshipNodes.item(index);
+            targetByRelationship.put(
+                relationship.getAttribute("Id"),
+                resolveRelationshipTarget("xl/workbook.xml", relationship.getAttribute("Target"))
+            );
+        }
+        Map<String, String> entries = new LinkedHashMap<>();
+        NodeList sheetNodes = workbook.getElementsByTagNameNS("*", "sheet");
+        for (int index = 0; index < sheetNodes.getLength(); index++) {
+            Element sheet = (Element) sheetNodes.item(index);
+            String relationshipId = sheet.getAttributeNS(
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+                "id"
+            );
+            String target = targetByRelationship.get(relationshipId);
+            if (!sheet.getAttribute("name").isBlank() && target != null) {
+                entries.put(sheet.getAttribute("name"), target);
+            }
+        }
+        return entries;
+    }
+
     private List<String> readSharedStrings(ZipFile zipFile) throws IOException {
         ZipEntry entry = zipFile.getEntry("xl/sharedStrings.xml");
         if (entry == null) {
@@ -137,6 +205,101 @@ public class XlsxMaterialQuoteParser {
             imageIndex++;
         }
         return anchors;
+    }
+
+    private Map<Integer, ImageAnchor> readImageAnchors(
+        ZipFile zipFile,
+        String sheetEntry,
+        String sheetName
+    ) throws IOException {
+        String fileName = sheetEntry.substring(sheetEntry.lastIndexOf('/') + 1);
+        String relationshipsEntry = sheetEntry.substring(0, sheetEntry.lastIndexOf('/') + 1)
+            + "_rels/" + fileName + ".rels";
+        ZipEntry relationshipsZipEntry = zipFile.getEntry(relationshipsEntry);
+        if (relationshipsZipEntry == null) {
+            return Map.of();
+        }
+        Document relationships = readXml(zipFile, relationshipsZipEntry);
+        NodeList relationshipNodes = relationships.getElementsByTagNameNS("*", "Relationship");
+        String drawingEntry = null;
+        for (int index = 0; index < relationshipNodes.getLength(); index++) {
+            Element relationship = (Element) relationshipNodes.item(index);
+            if (relationship.getAttribute("Type").endsWith("/drawing")) {
+                drawingEntry = resolveRelationshipTarget(sheetEntry, relationship.getAttribute("Target"));
+                break;
+            }
+        }
+        if (drawingEntry == null || zipFile.getEntry(drawingEntry) == null) {
+            return Map.of();
+        }
+
+        Document drawing = readXml(zipFile, drawingEntry);
+        Map<String, String> mediaPathByRelId = readDrawingRelationships(zipFile, drawingEntry);
+        Map<Integer, ImageAnchor> anchors = new HashMap<>();
+        int imageIndex = 1;
+        NodeList allNodes = drawing.getDocumentElement().getChildNodes();
+        for (int index = 0; index < allNodes.getLength(); index++) {
+            Node node = allNodes.item(index);
+            if (!(node instanceof Element element)) {
+                continue;
+            }
+            String localName = element.getLocalName();
+            if (!"twoCellAnchor".equals(localName) && !"oneCellAnchor".equals(localName)) {
+                continue;
+            }
+            Integer rowNumber = firstIntegerText(element, "row");
+            Integer columnNumber = firstIntegerText(element, "col");
+            if (rowNumber == null) {
+                continue;
+            }
+            int excelRowNumber = rowNumber + 1;
+            int excelColumnNumber = columnNumber == null ? 1 : columnNumber + 1;
+            String relId = firstEmbedRelationshipId(element);
+            String mediaPath = relId == null ? null : mediaPathByRelId.get(relId);
+            anchors.putIfAbsent(
+                excelRowNumber,
+                new ImageAnchor(
+                    imageIndex,
+                    sheetName + "!R" + excelRowNumber + "C" + excelColumnNumber,
+                    mediaPath,
+                    contentType(mediaPath)
+                )
+            );
+            imageIndex++;
+        }
+        return anchors;
+    }
+
+    private Map<String, String> readDrawingRelationships(ZipFile zipFile, String drawingEntry) throws IOException {
+        String fileName = drawingEntry.substring(drawingEntry.lastIndexOf('/') + 1);
+        String relationshipsEntry = drawingEntry.substring(0, drawingEntry.lastIndexOf('/') + 1)
+            + "_rels/" + fileName + ".rels";
+        ZipEntry entry = zipFile.getEntry(relationshipsEntry);
+        if (entry == null) {
+            return Map.of();
+        }
+        Document document = readXml(zipFile, entry);
+        NodeList relationships = document.getElementsByTagNameNS("*", "Relationship");
+        Map<String, String> mediaPathByRelId = new HashMap<>();
+        for (int index = 0; index < relationships.getLength(); index++) {
+            Element relationship = (Element) relationships.item(index);
+            String id = relationship.getAttribute("Id");
+            String target = relationship.getAttribute("Target");
+            if (!id.isBlank() && !target.isBlank() && target.contains("media/")) {
+                mediaPathByRelId.put(id, resolveRelationshipTarget(drawingEntry, target));
+            }
+        }
+        return mediaPathByRelId;
+    }
+
+    private String resolveRelationshipTarget(String sourceEntry, String target) {
+        String safeTarget = target == null ? "" : target.replaceFirst("^/+", "");
+        if (target != null && target.startsWith("/")) {
+            return safeTarget;
+        }
+        Path source = Path.of(sourceEntry.replace('/', java.io.File.separatorChar));
+        Path resolved = source.getParent().resolve(safeTarget.replace('/', java.io.File.separatorChar)).normalize();
+        return resolved.toString().replace(java.io.File.separatorChar, '/');
     }
 
     private Map<String, String> readDrawingRelationships(ZipFile zipFile) throws IOException {
@@ -358,7 +521,18 @@ public class XlsxMaterialQuoteParser {
             && hasAny(normalizedHeaders, SKU_RFQ_UNIT_HEADERS)) {
             return new DetectedDocument(MaterialMatchPreviewService.DEMAND_INQUIRY, SOURCE_FORMAT_SKU_RFQ);
         }
+        if (hasHeaderAlias(valuesByColumn, DESCRIPTION_ALIASES)
+            && hasHeaderAlias(valuesByColumn, QUANTITY_ALIASES)
+            && hasHeaderAlias(valuesByColumn, UNIT_ALIASES)) {
+            return new DetectedDocument(MaterialMatchPreviewService.DEMAND_INQUIRY, SOURCE_FORMAT_SKU_RFQ);
+        }
         return null;
+    }
+
+    private boolean hasHeaderAlias(Map<String, String> valuesByColumn, List<String> aliases) {
+        return valuesByColumn.values().stream().anyMatch(header -> aliases.stream().anyMatch(alias ->
+            alias.equalsIgnoreCase(header == null ? "" : header.trim())
+        ));
     }
 
     private Map<String, String> rawColumns(

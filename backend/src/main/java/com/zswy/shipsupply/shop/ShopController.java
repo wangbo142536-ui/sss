@@ -1,6 +1,9 @@
 package com.zswy.shipsupply.shop;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -121,6 +124,16 @@ public class ShopController {
         @RequestParam("file") MultipartFile file
     ) {
         return shopService.importPreview(authorizationHeader, file);
+    }
+
+    @GetMapping("/skus/import-template")
+    public ResponseEntity<byte[]> importTemplate(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader
+    ) {
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=shop-products-template.xlsx")
+            .body(shopService.importTemplate(authorizationHeader));
     }
 
     @PostMapping("/skus/import-confirm")

@@ -39,8 +39,11 @@ public class AdminRegistrationService {
         Long operatorUserId = requirePlatformAdmin(authorizationHeader);
         AuthenticatedUser user = authRepository.getUserById(userId);
         CompanyResponse company = authRepository.getCompany(user.companyId());
-        if (!"SHIP_AGENT".equals(company.companyType()) && !"SUPPLIER".equals(company.companyType())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only ship agent and supplier can be approved");
+        if (!List.of("SHIP_AGENT", "SUPPLIER", "BARGE_AGENT").contains(company.companyType())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported registration company type");
+        }
+        if ("SUPPLIER".equals(company.companyType()) && company.supplierServiceTypes().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SUPPLIER_SERVICE_TYPE_REQUIRED");
         }
         authRepository.updateCompanyStatus(company.id(), ACTIVE, null);
         authRepository.updateUserStatusAndType(user.id(), ACTIVE, company.companyType());

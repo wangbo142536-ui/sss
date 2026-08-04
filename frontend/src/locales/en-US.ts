@@ -197,6 +197,7 @@ export default {
     evaluations: "Service Evaluation",
     supplyChainFinance: "Supply Chain Finance",
     customsServices: "Customs Services",
+    customsDeclarations: "Customs Declaration Management",
     portShippingServices: "Port & Shipping Services",
     borderInspectionServices: "Border Inspection Services",
     maritimeServices: "Maritime Services",
@@ -838,8 +839,12 @@ export default {
       accountRequired: "Enter the account.",
       companyType: "Company type",
       companyTypeShipAgent: "Ship agent",
-      companyTypeSupplier: "Supplier",
-      companyTypeBargeAgent: "Barge agent",
+      companyTypeSupplier: "Supply service provider",
+      companyTypeBargeAgent: "Barge service provider",
+      supplierServiceType: "Supply services",
+      supplierServiceMaterial: "Material supply",
+      supplierServiceFood: "Food supply",
+      supplierServiceRequired: "Select at least one supply service.",
       company: "Company",
       contact: "Contact",
       phone: "Phone",
@@ -966,6 +971,7 @@ export default {
     delivered: "Delivered",
     archived: "Archived",
     active: "Active",
+    disabled: "Disabled",
     warning: "Attention",
     blocked: "Blocked",
     valid: "Valid",
@@ -1004,6 +1010,11 @@ export default {
   companyMembers: {
     action: {
       create: "Create member",
+      createRole: "Create role",
+      edit: "Edit member",
+      editRole: "Edit role",
+      configureRole: "Configure role permissions",
+      disableRole: "Disable role",
       assignRoles: "Assign roles",
       enable: "Enable",
       disable: "Disable",
@@ -1012,6 +1023,9 @@ export default {
     },
     drawer: {
       create: "Create member",
+      edit: "Edit member",
+      role: "Create role",
+      roleEdit: "Edit role and permissions",
       roles: "Assign roles",
       detail: "Member detail",
       subtitle: "Enterprise account"
@@ -1025,7 +1039,13 @@ export default {
       contact: "Contact",
       roles: "Roles",
       source: "Source",
-      lastLoginAt: "Last login"
+      lastLoginAt: "Last login",
+      roleName: "Role name",
+      roleCode: "Role code"
+    },
+    tab: {
+      members: "Member accounts",
+      roles: "Role management"
     },
     filter: {
       keywordPlaceholder: "Account, name, phone or email"
@@ -1035,7 +1055,9 @@ export default {
       name: "Enter member name",
       phone: "Enter mobile number",
       email: "Enter email",
-      password: "Enter initial password"
+      password: "Enter initial password",
+      roleName: "Enter role name",
+      roleCode: "Optional; generated automatically when blank"
     },
     status: {
       PENDING: "Pending",
@@ -1049,14 +1071,19 @@ export default {
     confirm: {
       enable: "Enable account {account}?",
       disable: "Disable account {account}? This member will no longer access business menus.",
-      reset: "Reset password for {account}? The temporary password will be issued by the backend policy."
+      reset: "Reset password for {account}? The temporary password will be issued by the backend policy.",
+      disableRole: "Disable role {role}? Historical assignments will be retained."
     },
     notice: {
       created: "Member created. Waiting for backend role and account policy to take effect.",
       rolesSaved: "Member roles saved.",
       enabled: "Member enabled.",
       disabled: "Member disabled.",
-      passwordReset: "Password reset request submitted."
+      passwordReset: "Password reset request submitted.",
+      roleCreated: "Role created.",
+      updated: "Member profile saved.",
+      roleUpdated: "Role and menu permissions saved.",
+      roleDisabled: "Role disabled."
     },
     error: {
       requestFailed: "Member data failed to load. Check backend service or try again later.",
@@ -1068,7 +1095,8 @@ export default {
       accountRequired: "Enter the account.",
       phoneRequired: "Enter the phone number.",
       passwordRequired: "Enter the initial password.",
-      roleRequired: "Select at least one role."
+      roleRequired: "Select at least one role.",
+      roleNameRequired: "Enter the role name."
     }
   },
   filter: {
@@ -1482,11 +1510,29 @@ export default {
     menuOrderSaveFailed: "Menu order save failed. Please confirm the backend API is ready.",
     permissionPoints: "Permission Points",
     userAssignment: "User Role Assignment",
+    platformAccounts: "Enterprise Account Management",
     roleMenuPermissions: "Role Menu Permissions",
     accountKeyword: "Account Search",
     accountKeywordPlaceholder: "Username, name, phone, email",
     addAccount: "Add account",
     enterpriseAccounts: "Enterprise Accounts",
+    companyName: "Enterprise",
+    companyType: "Enterprise type",
+    supplierServices: "Supplier services",
+    accountCount: "Accounts",
+    activeAccountCount: "Active",
+    createdAt: "Created at",
+    registeredAdmin: "Registered admin",
+    internalAccount: "Internal account",
+    confirmEnable: "Enable account",
+    confirmDisable: "Disable account",
+    statusReasonPlaceholder: "Enter the reason for this status change",
+    platformForbidden: "Only platform administrators can view all enterprise accounts.",
+    platformLoadFailed: "Enterprise account data failed to load.",
+    statusReasonRequired: "Enter a status change reason.",
+    accountEnabled: "Account enabled.",
+    accountDisabled: "Account disabled.",
+    platformStatusFailed: "Account status update failed.",
     selectedUserDetail: "Selected User",
     accountUsername: "Username",
     accountName: "Name",
@@ -1858,6 +1904,7 @@ export default {
     statusFilter: "Review status filter",
     account: "Login Account",
     companyType: "Company Type",
+    supplierServices: "Supplier Services",
     companyName: "Company Name",
     contactName: "Contact",
     phone: "Phone",

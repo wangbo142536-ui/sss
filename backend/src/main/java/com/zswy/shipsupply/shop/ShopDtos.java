@@ -352,14 +352,27 @@ record ShopImportConfirmItem(
     Integer rowNo,
     String confirmedImpaCode,
     String confirmedPlatformCode,
-    String selectedRecommendationSource
+    String selectedRecommendationSource,
+    String productType
 ) {
+    ShopImportConfirmItem(
+        Integer rowNo,
+        String confirmedImpaCode,
+        String confirmedPlatformCode,
+        String selectedRecommendationSource
+    ) {
+        this(rowNo, confirmedImpaCode, confirmedPlatformCode, selectedRecommendationSource, null);
+    }
 }
 
 record ShopImportConfirmRequest(
     Long batchId,
-    List<ShopImportConfirmItem> items
+    List<ShopImportConfirmItem> items,
+    String productType
 ) {
+    ShopImportConfirmRequest(Long batchId, List<ShopImportConfirmItem> items) {
+        this(batchId, items, null);
+    }
 }
 
 record ShopImportConfirmResponse(
@@ -368,6 +381,17 @@ record ShopImportConfirmResponse(
     int totalCount,
     int successCount,
     int exceptionCount,
-    List<ShopSkuResponse> items
+    List<ShopSkuResponse> items,
+    String productType
 ) {
+    ShopImportConfirmResponse(
+        Long batchId,
+        String status,
+        int totalCount,
+        int successCount,
+        int exceptionCount,
+        List<ShopSkuResponse> items
+    ) {
+        this(batchId, status, totalCount, successCount, exceptionCount, items, null);
+    }
 }

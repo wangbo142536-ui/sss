@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.io.ByteArrayInputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -81,6 +83,24 @@ class ShopServiceTest {
     }
 
     @Test
+    void downloadsFixedMaterialAndFoodImportTemplate() throws Exception {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+
+        byte[] bytes = service.importTemplate("Bearer token");
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(2);
+            assertThat(workbook.getSheetName(0)).isEqualTo("物料");
+            assertThat(workbook.getSheetName(1)).isEqualTo("伙食");
+            assertThat(workbook.getSheet("物料").getRow(0).getCell(0).getStringCellValue())
+                .isEqualTo("Product Name");
+            assertThat(workbook.getSheet("伙食").getRow(0).getCell(1).getStringCellValue())
+                .isEqualTo("Supplier SKU Code");
+        }
+    }
+
+    @Test
     void savesProfileInCurrentCompanyScope() {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
@@ -127,7 +147,7 @@ class ShopServiceTest {
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
         when(shopRepository.findSku(22L, 100L)).thenReturn(Optional.of(sku(100L)));
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "SKU-001")).thenReturn(Optional.empty());
+        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-001")).thenReturn(Optional.empty());
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(null), any())).thenReturn(sku(101L));
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(100L), any())).thenReturn(sku(100L));
 
@@ -152,7 +172,7 @@ class ShopServiceTest {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "SKU-001")).thenReturn(Optional.of(sku(100L, "ON_SHELF")));
+        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-001")).thenReturn(Optional.of(sku(100L, "ON_SHELF")));
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(100L), any())).thenReturn(sku(100L));
 
         ShopSkuBatchUpsertResponse response = service.batchUpsertSkus("Bearer token", new ShopSkuBatchUpsertRequest(
@@ -188,7 +208,7 @@ class ShopServiceTest {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "SKU-TOP-IMG")).thenReturn(Optional.empty());
+        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-TOP-IMG")).thenReturn(Optional.empty());
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(null), any())).thenReturn(sku(101L));
 
         ShopSkuRequest request = skuRequest(
@@ -359,7 +379,7 @@ class ShopServiceTest {
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
         when(shopRepository.createBatch(22L, 5L, 10L, "quote.xlsx")).thenReturn(12L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "SKU-PLIER-001")).thenReturn(Optional.of(sku(100L, "ON_SHELF")));
+        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-PLIER-001")).thenReturn(Optional.of(sku(100L, "ON_SHELF")));
         when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000)))
             .thenReturn(List.of(new ImpaItemResponse("613001", "61", "Tools", "6130", "Flat Nose Plier", "FLAT NOSE PLIER", "160MM", "PCS")));
         when(xlsxParser.parse(any(Path.class))).thenReturn(new MaterialParsedDocument(
@@ -417,7 +437,7 @@ class ShopServiceTest {
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
         when(shopRepository.createBatch(22L, 5L, 10L, "quote.xlsx")).thenReturn(14L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "SKU-DUP")).thenReturn(Optional.empty());
+        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-DUP")).thenReturn(Optional.empty());
         when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000)))
             .thenReturn(List.of());
         when(xlsxParser.parse(any(Path.class))).thenReturn(new MaterialParsedDocument(
@@ -439,6 +459,51 @@ class ShopServiceTest {
         assertThat(response.items()).extracting(ShopImportPreviewItem::exceptionReason).containsOnly("DUPLICATE_SUPPLIER_SKU_CODE");
         assertThat(response.successCount()).isZero();
         assertThat(response.exceptionCount()).isEqualTo(2);
+    }
+
+    @Test
+    void importPreviewKeepsSameSupplierSkuSeparatedBySheetProductType() throws Exception {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
+        when(shopRepository.createBatch(22L, 5L, 10L, "dual-sheet.xlsx")).thenReturn(15L);
+        when(xlsxParser.sheetNames(any(Path.class))).thenReturn(List.of("物料", "伙食"));
+        when(xlsxParser.parse(any(Path.class), eq("物料"))).thenReturn(new MaterialParsedDocument(
+            "SUPPLIER_QUOTATION",
+            "SUPPLIER_QUOTATION",
+            1,
+            List.of(materialQuoteRow("SKU-SAME", "Paint Brush"))
+        ));
+        when(xlsxParser.parse(any(Path.class), eq("伙食"))).thenReturn(new MaterialParsedDocument(
+            "SUPPLIER_QUOTATION",
+            "SUPPLIER_QUOTATION",
+            1,
+            List.of(materialQuoteRow("SKU-SAME", "Fresh Apple"))
+        ));
+        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-SAME"))
+            .thenReturn(Optional.empty());
+        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "FOOD", "SKU-SAME"))
+            .thenReturn(Optional.empty());
+        when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000))).thenReturn(List.of());
+
+        ShopImportPreviewResponse response = service.importPreview(
+            "Bearer token",
+            new MockMultipartFile(
+                "file",
+                "dual-sheet.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                new byte[] {1, 2, 3}
+            )
+        );
+
+        assertThat(response.items()).extracting(ShopImportPreviewItem::productType)
+            .containsExactly("MATERIAL", "FOOD");
+        assertThat(response.items()).extracting(ShopImportPreviewItem::previewAction)
+            .containsOnly("INSERT");
+        ShopImportPreviewItem food = response.items().get(1);
+        assertThat(food.impaCode()).isNull();
+        assertThat(food.logicRecommendation()).isNull();
+        assertThat(food.codeStatus()).isEqualTo("CONFIRMED");
     }
 
     @Test

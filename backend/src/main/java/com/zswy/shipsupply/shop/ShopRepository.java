@@ -198,28 +198,40 @@ public class ShopRepository {
         return findSku(companyId, skuId).orElseThrow();
     }
 
-    public Optional<Long> findSkuIdBySupplierSkuCode(long companyId, long shopId, String supplierSkuCode) {
+    public Optional<Long> findSkuIdBySupplierSkuCode(
+        long companyId,
+        long shopId,
+        String productType,
+        String supplierSkuCode
+    ) {
         if (supplierSkuCode == null || supplierSkuCode.isBlank()) {
             return Optional.empty();
         }
         return jdbcTemplate.query(
-            "SELECT id FROM shop_sku WHERE company_id = ? AND shop_id = ? AND supplier_sku_code = ? LIMIT 1",
+            "SELECT id FROM shop_sku WHERE company_id = ? AND shop_id = ? AND product_type = ? AND supplier_sku_code = ? LIMIT 1",
             (rs, rowNum) -> rs.getLong("id"),
             companyId,
             shopId,
+            productType,
             supplierSkuCode
         ).stream().findFirst();
     }
 
-    public Optional<ShopSkuResponse> findSkuBySupplierSkuCode(long companyId, long shopId, String supplierSkuCode) {
+    public Optional<ShopSkuResponse> findSkuBySupplierSkuCode(
+        long companyId,
+        long shopId,
+        String productType,
+        String supplierSkuCode
+    ) {
         if (supplierSkuCode == null || supplierSkuCode.isBlank()) {
             return Optional.empty();
         }
         return jdbcTemplate.query(
-            "SELECT * FROM shop_sku WHERE company_id = ? AND shop_id = ? AND supplier_sku_code = ? LIMIT 1",
+            "SELECT * FROM shop_sku WHERE company_id = ? AND shop_id = ? AND product_type = ? AND supplier_sku_code = ? LIMIT 1",
             (rs, rowNum) -> sku(rs),
             companyId,
             shopId,
+            productType,
             supplierSkuCode
         ).stream().findFirst();
     }
@@ -449,14 +461,14 @@ public class ShopRepository {
                 """
                 INSERT INTO shop_sku_import_preview_row
                   (batch_id, company_id, shop_id, row_no, supplier_sku_code, product_name,
-                   product_type, category_code, category_name, platform_code, impa_code,
+                   product_type, source_sheet, category_code, category_name, platform_code, impa_code,
                    specification_summary, stock_qty, stock_unit, unit_price, currency,
                    packing, barcode, code_status, exception_reason, image_file_id, image_url,
                    thumbnail_url, raw_name, raw_spec, clean_name, parsed_attributes_json,
                    logic_recommendation_json, model_recommendation_json,
                    selected_recommendation_source, review_required, match_decision,
                    raw_row_json, candidate_snapshot_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, CAST(? AS JSON), NULL)
                 """,
                 batchId,
@@ -466,6 +478,7 @@ public class ShopRepository {
                 row.supplierSkuCode(),
                 row.productName(),
                 value(row.productType(), "MATERIAL"),
+                "FOOD".equals(row.productType()) ? "伙食" : "物料",
                 row.categoryCode(),
                 row.categoryName(),
                 row.platformCode(),
@@ -517,22 +530,23 @@ public class ShopRepository {
                 SET confirmed_impa_code = COALESCE(?, confirmed_impa_code),
                     confirmed_platform_code = COALESCE(?, confirmed_platform_code),
                     confirmed_recommendation_source = COALESCE(?, confirmed_recommendation_source)
-                WHERE company_id = ? AND batch_id = ? AND row_no = ?
+                WHERE company_id = ? AND batch_id = ? AND product_type = ? AND row_no = ?
                 """,
                 value(item.confirmedImpaCode(), null),
                 value(item.confirmedPlatformCode(), null),
                 value(item.selectedRecommendationSource(), null),
                 companyId,
                 batchId,
+                value(item.productType(), "MATERIAL"),
                 item.rowNo()
             );
         }
     }
 
-    public List<ShopSkuResponse> confirmBatch(long companyId, long userId, long batchId) {
+    public List<ShopSkuResponse> confirmBatch(long companyId, long userId, long batchId, String productType) {
         long shopId = ensureShop(companyId, userId);
         List<ShopSkuRequest> requests = jdbcTemplate.query(
-            "SELECT * FROM shop_sku_import_preview_row WHERE company_id = ? AND batch_id = ? ORDER BY row_no ASC",
+            "SELECT * FROM shop_sku_import_preview_row WHERE company_id = ? AND batch_id = ? AND (? IS NULL OR product_type = ?) ORDER BY product_type, row_no ASC",
             (rs, rowNum) -> new ShopSkuRequest(
                 rs.getString("product_type"),
                 rs.getString("category_code"),
@@ -566,14 +580,47 @@ public class ShopRepository {
                 rawRowWithRecognition(rs)
             ),
             companyId,
-            batchId
+            batchId,
+            productType,
+            productType
         );
         List<ShopSkuResponse> saved = requests.stream()
-            .map(request -> saveSku(companyId, shopId, userId, null, request))
+            .map(request -> {
+                Long existingSkuId = findSkuIdBySupplierSkuCode(
+                    companyId,
+                    shopId,
+                    request.productType(),
+                    request.supplierSkuCode()
+                ).orElse(null);
+                return saveSku(companyId, shopId, userId, existingSkuId, request);
+            })
             .toList();
         jdbcTemplate.update(
-            "UPDATE shop_sku_import_batch SET status = 'CONFIRMED', success_count = ?, finished_at = CURRENT_TIMESTAMP WHERE company_id = ? AND id = ?",
-            saved.size(),
+            "UPDATE shop_sku_import_preview_row SET confirmed_at = CURRENT_TIMESTAMP WHERE company_id = ? AND batch_id = ? AND (? IS NULL OR product_type = ?)",
+            companyId,
+            batchId,
+            productType,
+            productType
+        );
+        Integer total = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM shop_sku_import_preview_row WHERE company_id = ? AND batch_id = ?",
+            Integer.class,
+            companyId,
+            batchId
+        );
+        Integer confirmed = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM shop_sku_import_preview_row WHERE company_id = ? AND batch_id = ? AND confirmed_at IS NOT NULL",
+            Integer.class,
+            companyId,
+            batchId
+        );
+        int totalCount = value(total, 0);
+        int confirmedCount = value(confirmed, 0);
+        String batchStatus = confirmedCount >= totalCount ? "CONFIRMED" : "PARTIALLY_CONFIRMED";
+        jdbcTemplate.update(
+            "UPDATE shop_sku_import_batch SET status = ?, success_count = ?, finished_at = CURRENT_TIMESTAMP WHERE company_id = ? AND id = ?",
+            batchStatus,
+            confirmedCount,
             companyId,
             batchId
         );
@@ -609,12 +656,18 @@ public class ShopRepository {
     }
 
     private boolean reviewRequired(ShopImportPreviewItem row) {
+        if ("FOOD".equals(row.productType())) {
+            return false;
+        }
         return row.logicRecommendation() == null
             || !Boolean.TRUE.equals(row.logicRecommendation().available())
             || !"HIGH".equals(row.logicRecommendation().confidenceLevel());
     }
 
     private String matchDecision(ShopImportPreviewItem row) {
+        if ("FOOD".equals(row.productType())) {
+            return "NOT_APPLICABLE";
+        }
         if (row.logicRecommendation() != null && Boolean.TRUE.equals(row.logicRecommendation().available())) {
             return row.logicRecommendation().impaCode() == null ? "CATEGORY_ONLY" : "LOGIC_ONLY";
         }

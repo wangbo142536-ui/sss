@@ -6,6 +6,7 @@ export interface AuthCompany {
   type?: string;
   companyType?: string;
   status?: string;
+  supplierServiceTypes?: string[];
 }
 
 export interface AuthUser {
@@ -53,12 +54,27 @@ export interface RegisterRequest {
   account: string;
   password: string;
   confirmPassword: string;
+  companyType: string;
+  supplierServiceTypes?: string[];
+}
+
+export interface RegistrationSubmissionRequest extends RegisterRequest {
+  companyName: string;
+  unifiedSocialCreditCode: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
 }
 
 export interface RegisterOption {
   value: string;
   labelKey?: string;
   label?: string;
+}
+
+export interface RegisterConfiguration {
+  companyTypes: RegisterOption[];
+  supplierServiceTypes: RegisterOption[];
 }
 
 export type CompanyProfileStatus = "PROFILE_REQUIRED" | "PENDING_REVIEW" | "REJECTED" | "ACTIVE" | "";
@@ -80,6 +96,7 @@ export interface CompanyProfile {
   qualificationFiles: QualificationFile[];
   status?: CompanyProfileStatus;
   reviewReason?: string;
+  supplierServiceTypes: string[];
 }
 
 export interface CompanyProfileRequest {
@@ -91,4 +108,5 @@ export interface CompanyProfileRequest {
   contactEmail: string;
   qualificationFileIds: Array<string | number>;
   qualificationFiles?: QualificationFile[];
+  supplierServiceTypes: string[];
 }

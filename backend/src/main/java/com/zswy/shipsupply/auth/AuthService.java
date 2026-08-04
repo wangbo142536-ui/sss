@@ -34,8 +34,10 @@ public class AuthService {
         if (request.confirmPassword() != null && !rawPassword.equals(request.confirmPassword())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "confirmPassword does not match password");
         }
-        String userType = "UNSPECIFIED";
-        String companyType = "UNSPECIFIED";
+        String requestedCompanyType = firstText(request.companyType(), request.userType());
+        String companyType = requestedCompanyType == null ? "UNSPECIFIED" : normalizeSelfServiceRole(requestedCompanyType);
+        String userType = companyType;
+        List<String> supplierServiceTypes = normalizeSupplierServiceTypes(companyType, request.supplierServiceTypes(), requestedCompanyType != null);
         String companyName = "";
         String contactName = "";
         String phone = firstText(request.phone(), request.contactPhone());
@@ -55,7 +57,15 @@ public class AuthService {
             PROFILE_REQUIRED
         );
         authRepository.markCompanyOwner(userId);
-        authRepository.log(userId, "REGISTER", "USER", String.valueOf(userId), "/api/auth/register", "profile required");
+        authRepository.replaceCompanySupplierServiceTypes(companyId, supplierServiceTypes);
+        authRepository.log(
+            userId,
+            "REGISTER",
+            "USER",
+            String.valueOf(userId),
+            "/api/auth/register",
+            "companyType=" + companyType + ";supplierServiceTypes=" + String.join(",", supplierServiceTypes)
+        );
         return buildAuthResponse(userId, tokenService.issue(userId));
     }
 
@@ -100,18 +110,23 @@ public class AuthService {
 
     public RegisterOptionsResponse registerOptions() {
         List<OptionResponse> options = List.of(
-            new OptionResponse("SHIP_AGENT", "船代"),
-            new OptionResponse("SUPPLIER", "供货商")
+            new OptionResponse("SHIP_AGENT", "船舶代理"),
+            new OptionResponse("SUPPLIER", "供应服务商"),
+            new OptionResponse("BARGE_AGENT", "驳船服务商")
         );
         List<OptionResponse> qualificationTypes = List.of(
             new OptionResponse("BUSINESS_LICENSE", "营业执照"),
             new OptionResponse("SERVICE_QUALIFICATION", "服务资质"),
             new OptionResponse("OTHER", "其他资质")
         );
-        return new RegisterOptionsResponse(options, options, qualificationTypes);
+        List<OptionResponse> supplierServiceTypes = List.of(
+            new OptionResponse("MATERIAL", "物料供应服务"),
+            new OptionResponse("FOOD", "伙食供货服务")
+        );
+        return new RegisterOptionsResponse(options, options, qualificationTypes, supplierServiceTypes);
     }
 
-    private AuthResponse buildAuthResponse(Long userId, String token) {
+    AuthResponse buildAuthResponse(Long userId, String token) {
         AuthenticatedUser user = authRepository.getUserById(userId);
         CompanyResponse company = authRepository.getCompany(user.companyId());
         boolean active = ACTIVE.equals(user.status()) && ACTIVE.equals(company.status());
@@ -154,10 +169,33 @@ public class AuthService {
 
     String normalizeSelfServiceRole(String rawValue) {
         String role = normalizeRole(rawValue);
-        if (!"SHIP_AGENT".equals(role) && !"SUPPLIER".equals(role)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only ship agent and supplier onboarding are open");
+        if (!"SHIP_AGENT".equals(role) && !"SUPPLIER".equals(role) && !"BARGE_AGENT".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported self-service role");
         }
         return role;
+    }
+
+    List<String> normalizeSupplierServiceTypes(String companyType, List<String> values, boolean roleSelected) {
+        List<String> normalized = values == null ? List.of() : values.stream()
+            .filter(value -> value != null && !value.isBlank())
+            .map(value -> value.trim().toUpperCase(Locale.ROOT))
+            .distinct()
+            .toList();
+        if (!"SUPPLIER".equals(companyType)) {
+            if (!normalized.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SUPPLIER_SERVICE_TYPES_NOT_ALLOWED");
+            }
+            return List.of();
+        }
+        if (roleSelected && normalized.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SUPPLIER_SERVICE_TYPE_REQUIRED");
+        }
+        for (String value : normalized) {
+            if (!"MATERIAL".equals(value) && !"FOOD".equals(value)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_SUPPLIER_SERVICE_TYPE");
+            }
+        }
+        return normalized;
     }
 
     private String defaultRoute(String accountStatus, String companyStatus) {
@@ -183,7 +221,7 @@ public class AuthService {
                 null,
                 810,
                 "ONBOARDING_REVIEW_STATUS_VIEW",
-                "SHIP_AGENT,SUPPLIER",
+                "SHIP_AGENT,SUPPLIER,BARGE_AGENT",
                 List.of()
             );
         }
@@ -195,7 +233,7 @@ public class AuthService {
             null,
             800,
             "ONBOARDING_PROFILE_VIEW",
-            "SHIP_AGENT,SUPPLIER",
+            "SHIP_AGENT,SUPPLIER,BARGE_AGENT",
             List.of()
         );
     }

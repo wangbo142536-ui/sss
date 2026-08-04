@@ -52,7 +52,7 @@ public class CompanyMemberService {
             manager.id()
         );
         authRepository.replaceCompanyUserRoles(userId, manager.companyId(), normalizedRoles(firstRoles(request.roles(), request.roleCodes()), manager.companyId()));
-        authRepository.replaceUserMenuPermissions(userId, normalizedMenuCodes(request.menuPermissionKeys()));
+        authRepository.replaceUserMenuPermissions(userId, normalizedMenuCodes(request.menuPermissionKeys(), manager.companyId()));
         authRepository.log(manager.id(), "CREATE_COMPANY_MEMBER", "USER", String.valueOf(userId), "/api/company/members", username);
         return member(manager.companyId(), userId);
     }
@@ -78,6 +78,9 @@ public class CompanyMemberService {
         }
         String status = normalizeStatus(request.status(), false);
         authRepository.updateMemberStatus(userId, status);
+        if (DISABLED.equals(status)) {
+            tokenService.invalidateUser(userId);
+        }
         authRepository.log(manager.id(), "UPDATE_COMPANY_MEMBER_STATUS", "USER", String.valueOf(userId), "/api/company/members/" + userId + "/status", status);
         return member(manager.companyId(), userId);
     }
@@ -88,6 +91,7 @@ public class CompanyMemberService {
         requireCompanyMember(manager.companyId(), userId);
         String password = required(request.newPassword(), "newPassword");
         authRepository.updatePassword(userId, passwordHasher.hash(password));
+        tokenService.invalidateUser(userId);
         authRepository.log(manager.id(), "RESET_COMPANY_MEMBER_PASSWORD", "USER", String.valueOf(userId), "/api/company/members/" + userId + "/reset-password", "reset");
     }
 
@@ -113,7 +117,7 @@ public class CompanyMemberService {
         AuthenticatedUser manager = requireActiveCompanyManager(authorizationHeader);
         String roleName = required(request.roleName(), "roleName");
         String roleType = optionalText(request.roleType()) == null ? "CUSTOM" : optionalText(request.roleType()).toUpperCase(Locale.ROOT);
-        List<String> menuCodes = normalizedMenuCodes(request.menuPermissionKeys());
+        List<String> menuCodes = normalizedMenuCodes(request.menuPermissionKeys(), manager.companyId());
         String roleCode = authRepository.insertCompanyRole(manager.companyId(), request.roleCode(), roleName, roleType);
         authRepository.replaceRoleMenuPermissions(manager.companyId(), roleCode, menuCodes);
         authRepository.log(manager.id(), "CREATE_COMPANY_ROLE", "ROLE", roleCode, "/api/company/roles", roleName);
@@ -128,7 +132,11 @@ public class CompanyMemberService {
         String roleName = required(request.roleName(), "roleName");
         String roleType = optionalText(request.roleType()) == null ? "CUSTOM" : optionalText(request.roleType()).toUpperCase(Locale.ROOT);
         authRepository.updateCompanyRole(manager.companyId(), normalizedRoleCode, roleName, roleType);
-        authRepository.replaceRoleMenuPermissions(manager.companyId(), normalizedRoleCode, normalizedMenuCodes(request.menuPermissionKeys()));
+        authRepository.replaceRoleMenuPermissions(
+            manager.companyId(),
+            normalizedRoleCode,
+            normalizedMenuCodes(request.menuPermissionKeys(), manager.companyId())
+        );
         authRepository.log(manager.id(), "UPDATE_COMPANY_ROLE", "ROLE", normalizedRoleCode, "/api/company/roles/" + normalizedRoleCode, roleName);
         return role(manager.companyId(), normalizedRoleCode);
     }
@@ -149,8 +157,8 @@ public class CompanyMemberService {
     }
 
     public List<MenuResponse> menuPermissions(String authorizationHeader) {
-        requireActiveCompanyManager(authorizationHeader);
-        return authRepository.buildTree(authRepository.companyPermissionMenus());
+        AuthenticatedUser manager = requireActiveCompanyManager(authorizationHeader);
+        return authRepository.buildTree(authRepository.companyPermissionMenus(manager.companyId()));
     }
 
     public MenuPermissionKeysRequest memberMenuPermissions(String authorizationHeader, Long userId) {
@@ -166,7 +174,7 @@ public class CompanyMemberService {
         if (target.isCompanyOwner()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "COMPANY_OWNER_MENU_PERMISSIONS_CANNOT_BE_CHANGED_HERE");
         }
-        List<String> menuCodes = normalizedMenuCodes(request.menuPermissionKeys());
+        List<String> menuCodes = normalizedMenuCodes(request.menuPermissionKeys(), manager.companyId());
         authRepository.replaceUserMenuPermissions(userId, menuCodes);
         authRepository.log(manager.id(), "UPDATE_COMPANY_MEMBER_MENU_PERMISSIONS", "USER", String.valueOf(userId), "/api/company/members/" + userId + "/menu-permissions", String.join(",", menuCodes));
     }
@@ -237,7 +245,7 @@ public class CompanyMemberService {
         return normalized;
     }
 
-    private List<String> normalizedMenuCodes(List<String> menuCodes) {
+    private List<String> normalizedMenuCodes(List<String> menuCodes, long companyId) {
         List<String> normalized = menuCodes == null ? List.of() : menuCodes.stream()
             .filter(code -> code != null && !code.isBlank())
             .map(this::normalizeRoleCode)
@@ -246,7 +254,7 @@ public class CompanyMemberService {
         if (normalized.isEmpty()) {
             return normalized;
         }
-        List<String> allowed = authRepository.companyMenuCodes();
+        List<String> allowed = authRepository.companyMenuCodes(companyId);
         for (String menuCode : normalized) {
             if (!allowed.contains(menuCode)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_MENU_PERMISSION");

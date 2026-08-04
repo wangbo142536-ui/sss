@@ -1,11 +1,13 @@
 package com.zswy.shipsupply.shop;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -16,6 +18,10 @@ import java.util.zip.ZipFile;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +48,10 @@ public class ShopService {
     private static final String PENDING_EXCEPTION = "PENDING_EXCEPTION";
     private static final String CODE_MATCHED = "CODE_MATCHED";
     private static final String SPEC_MATCHED = "SPEC_MATCHED";
+    private static final String MATERIAL = "MATERIAL";
+    private static final String FOOD = "FOOD";
+    private static final String MATERIAL_SHEET = "物料";
+    private static final String FOOD_SHEET = "伙食";
 
     private final CurrentUserService currentUserService;
     private final ShopRepository shopRepository;
@@ -166,7 +176,12 @@ public class ShopService {
             if (skuId != null) {
                 existingSku = requireExistingSku(currentUser.companyId(), skuId);
             } else {
-                existingSku = shopRepository.findSkuBySupplierSkuCode(currentUser.companyId(), shopId, supplierSkuCode)
+                existingSku = shopRepository.findSkuBySupplierSkuCode(
+                    currentUser.companyId(),
+                    shopId,
+                    safeSku.productType(),
+                    supplierSkuCode
+                )
                     .orElse(null);
                 if (existingSku != null) {
                     skuId = existingSku.skuId();
@@ -295,6 +310,55 @@ public class ShopService {
         );
     }
 
+    public byte[] importTemplate(String authorizationHeader) {
+        currentUserService.requireActiveCompanyUser(authorizationHeader);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            writeTemplateSheet(
+                workbook,
+                MATERIAL_SHEET,
+                headerStyle,
+                List.of(
+                    "Product Name", "Supplier SKU Code", "Qty", "Unit", "IMPA", "Specification",
+                    "Unit Price", "Stock", "Packing", "Barcode", "Category"
+                )
+            );
+            writeTemplateSheet(
+                workbook,
+                FOOD_SHEET,
+                headerStyle,
+                List.of(
+                    "Product Name", "Supplier SKU Code", "Qty", "Unit", "Specification",
+                    "Unit Price", "Stock", "Packing", "Barcode", "Category"
+                )
+            );
+            workbook.write(output);
+            return output.toByteArray();
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "IMPORT_TEMPLATE_FAILED: 导入模板生成失败", ex);
+        }
+    }
+
+    private void writeTemplateSheet(
+        XSSFWorkbook workbook,
+        String sheetName,
+        CellStyle headerStyle,
+        List<String> headers
+    ) {
+        Sheet sheet = workbook.createSheet(sheetName);
+        var headerRow = sheet.createRow(0);
+        for (int index = 0; index < headers.size(); index++) {
+            var cell = headerRow.createCell(index);
+            cell.setCellValue(headers.get(index));
+            cell.setCellStyle(headerStyle);
+            sheet.setColumnWidth(index, Math.min(50, Math.max(14, headers.get(index).length() + 4)) * 256);
+        }
+        sheet.createFreezePane(0, 1);
+    }
+
     @Transactional
     public ShopImportConfirmResponse importConfirm(String authorizationHeader, ShopImportConfirmRequest request) {
         CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
@@ -305,9 +369,23 @@ public class ShopService {
         shopRepository.batchCompany(currentUser.companyId(), batchId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "IMPORT_BATCH_NOT_FOUND: 导入批次不存在"));
         shopRepository.applyConfirmSelections(currentUser.companyId(), batchId, list(request.items()));
-        List<ShopSkuResponse> items = shopRepository.confirmBatch(currentUser.companyId(), currentUser.userId(), batchId);
+        String productType = optional(request.productType()) == null ? null : validatedProductType(request.productType());
+        List<ShopSkuResponse> items = shopRepository.confirmBatch(
+            currentUser.companyId(),
+            currentUser.userId(),
+            batchId,
+            productType
+        );
         int exceptionCount = (int) items.stream().filter(item -> PENDING_EXCEPTION.equals(item.codeStatus())).count();
-        return new ShopImportConfirmResponse(batchId, "CONFIRMED", items.size(), items.size() - exceptionCount, exceptionCount, items);
+        return new ShopImportConfirmResponse(
+            batchId,
+            "CONFIRMED",
+            items.size(),
+            items.size() - exceptionCount,
+            exceptionCount,
+            items,
+            productType
+        );
     }
 
     @Transactional
@@ -371,7 +449,7 @@ public class ShopService {
         String productName = required(request.productName(), "PRODUCT_NAME_REQUIRED: 商品名称必填");
         List<ShopSkuImageRequest> images = normalizedImages(request);
         return new ShopSkuRequest(
-            optional(request.productType()) == null ? "MATERIAL" : optional(request.productType()),
+            validatedProductType(request.productType()),
             optional(request.categoryCode()),
             optional(request.categoryName()),
             optional(request.platformCode()),
@@ -457,7 +535,7 @@ public class ShopService {
             if (supplierSkuCode == null) {
                 continue;
             }
-            String key = supplierKey(supplierSkuCode);
+            String key = productTypeKey(row) + ":" + supplierKey(supplierSkuCode);
             ShopSkuUpsertItem first = seen.putIfAbsent(key, row);
             if (first != null) {
                 throw batchRowError(row, row.sku(), "DUPLICATE_SUPPLIER_SKU_CODE", "同一批次存在重复供货商SKU编码", null);
@@ -476,8 +554,21 @@ public class ShopService {
         return row.sku() == null ? null : optional(row.sku().supplierSkuCode());
     }
 
+    private String productTypeKey(ShopSkuUpsertItem row) {
+        String productType = row == null || row.sku() == null ? null : optional(row.sku().productType());
+        return productType == null ? MATERIAL : productType.toUpperCase(Locale.ROOT);
+    }
+
     private String supplierKey(String supplierSkuCode) {
         return supplierSkuCode == null ? null : supplierSkuCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String validatedProductType(String productType) {
+        String normalized = optional(productType) == null ? MATERIAL : productType.trim().toUpperCase(Locale.ROOT);
+        if (!List.of(MATERIAL, FOOD).contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_PRODUCT_TYPE: 商品类型只支持 MATERIAL 或 FOOD");
+        }
+        return normalized;
     }
 
     private ShopSkuRequest preservingExistingFieldsForUpdate(ShopSkuRequest request, ShopSkuResponse existingSku) {
@@ -618,11 +709,37 @@ public class ShopService {
             if (xlsxParser == null) {
                 return List.of();
             }
-            MaterialParsedDocument document = xlsxParser.parse(temp);
+            String fileName = optional(file.getOriginalFilename());
+            if (fileName == null || !fileName.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "IMPORT_XLSX_REQUIRED: 仅支持固定双 Sheet XLSX 模板");
+            }
+            List<String> sheetNames = xlsxParser.sheetNames(temp);
+            boolean legacyParserStub = sheetNames == null || sheetNames.isEmpty();
+            if (!legacyParserStub && (sheetNames.size() < 2
+                || !MATERIAL_SHEET.equals(sheetNames.get(0))
+                || !FOOD_SHEET.equals(sheetNames.get(1)))) {
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "IMPORT_SHEETS_REQUIRED: XLSX 前两个 Sheet 必须依次为“物料”和“伙食”"
+                );
+            }
+            MaterialParsedDocument materialDocument = legacyParserStub
+                ? xlsxParser.parse(temp)
+                : xlsxParser.parse(temp, MATERIAL_SHEET);
+            MaterialParsedDocument foodDocument = legacyParserStub
+                ? new MaterialParsedDocument("FOOD", "SHOP_TEMPLATE", 0, List.of())
+                : xlsxParser.parse(temp, FOOD_SHEET);
+            if (!legacyParserStub) {
+                validateSheetHeader(temp, MATERIAL_SHEET, materialDocument);
+                validateSheetHeader(temp, FOOD_SHEET, foodDocument);
+            }
             long excelDoneAt = System.nanoTime();
             List<ShopImportPreviewItem> items = new ArrayList<>();
-            for (MaterialQuoteRow row : document.rows()) {
-                items.add(previewItem(row, batchId, companyId, shopId, userId, temp));
+            for (MaterialQuoteRow row : materialDocument.rows()) {
+                items.add(previewItem(row, batchId, companyId, shopId, userId, temp, MATERIAL));
+            }
+            for (MaterialQuoteRow row : foodDocument.rows()) {
+                items.add(previewItem(row, batchId, companyId, shopId, userId, temp, FOOD));
             }
             items = withPreviewActions(items, companyId, shopId);
             long previewDoneAt = System.nanoTime();
@@ -649,11 +766,28 @@ public class ShopService {
         }
     }
 
+    private void validateSheetHeader(Path sourceFile, String sheetName, MaterialParsedDocument document) throws IOException {
+        if (document != null && document.headerRowIndex() == 0 && xlsxParser.hasNonBlankCells(sourceFile, sheetName)) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "IMPORT_SHEET_HEADER_INVALID: “" + sheetName + "”Sheet 表头不符合模板"
+            );
+        }
+    }
+
     private long elapsedMs(long from, long to) {
         return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(to - from);
     }
 
-    private ShopImportPreviewItem previewItem(MaterialQuoteRow row, long batchId, long companyId, long shopId, long userId, Path sourceFile) {
+    private ShopImportPreviewItem previewItem(
+        MaterialQuoteRow row,
+        long batchId,
+        long companyId,
+        long shopId,
+        long userId,
+        Path sourceFile,
+        String productType
+    ) {
         String rawCode = optional(row.impaCode());
         String supplierSkuCode = optional(row.supplierItemNo());
         String rawName = truncate(first(optional(row.rawNameSpec()), optional(row.description()), supplierSkuCode, "?????"), 1000);
@@ -664,22 +798,27 @@ public class ShopService {
         String packageSpec = optional(row.rawColumns().get("Packing"));
         String barcode = optional(row.rawColumns().get("Barcode"));
         ImageImportResult image = importEmbeddedImage(sourceFile, row, userId, batchId);
-        ShopRecognitionResult recognition = recognition(rawName, spec, packageSpec);
-        String productName = truncate(first(optional(recognition.cleanName()), rawName), 500);
-        ShopImportRecommendation selected = selectedRecommendation(recognition);
+        boolean material = MATERIAL.equals(productType);
+        ShopRecognitionResult recognition = material ? recognition(rawName, spec, packageSpec) : null;
+        String cleanName = recognition == null ? rawName : recognition.cleanName();
+        String productName = truncate(first(optional(cleanName), rawName), 500);
+        ShopImportRecommendation selected = recognition == null ? null : selectedRecommendation(recognition);
         String impaCode = selected == null ? null : selected.impaCode();
-        String categoryCode = selected == null ? null : selected.categoryCode();
-        String categoryName = selected == null ? null : selected.categoryName();
-        String codeStatus = codeStatus(recognition, rawCode);
-        String exceptionReason = PENDING_EXCEPTION.equals(codeStatus) ? exceptionReason(recognition) : null;
-        List<ShopSkuAttributeResponse> specifications = previewAttributes(recognition.parsedAttributes(), spec, packageSpec, barcode, row.rawColumns());
+        String categoryCode = selected == null ? optional(row.rawColumns().get("Category Code")) : selected.categoryCode();
+        String categoryName = selected == null ? optional(row.rawColumns().get("Category")) : selected.categoryName();
+        String codeStatus = material ? codeStatus(recognition, rawCode) : "CONFIRMED";
+        String exceptionReason = material && PENDING_EXCEPTION.equals(codeStatus) ? exceptionReason(recognition) : null;
+        List<ShopParsedAttribute> parsedAttributes = recognition == null ? List.of() : recognition.parsedAttributes();
+        List<ShopSkuAttributeResponse> specifications = previewAttributes(parsedAttributes, spec, packageSpec, barcode, row.rawColumns());
         String attributeSummary = attributeSummary(specifications);
+        Map<String, String> rawColumns = new LinkedHashMap<>(row.rawColumns());
+        rawColumns.put("_sourceSheet", material ? MATERIAL_SHEET : FOOD_SHEET);
         return new ShopImportPreviewItem(
             null,
             null,
             shopId,
             companyId,
-            "MATERIAL",
+            productType,
             categoryCode,
             categoryName,
             impaCode,
@@ -689,7 +828,7 @@ public class ShopService {
             specifications,
             attributeSummary,
             stockQty,
-            null,
+            optional(row.unit()),
             null,
             null,
             image == null ? null : image.url(),
@@ -700,7 +839,7 @@ public class ShopService {
             currency,
             currencySymbol(currency),
             null,
-            null,
+            optional(row.unit()),
             packageSpec,
             barcode,
             "OFF_SHELF",
@@ -711,11 +850,11 @@ public class ShopService {
             row.sourceRowNo(),
             rawName,
             spec,
-            recognition.cleanName(),
-            recognition.parsedAttributes(),
-            recognition.logicRecommendation(),
-            recognition.categoryCandidates(),
-            row.rawColumns(),
+            cleanName,
+            parsedAttributes,
+            recognition == null ? null : recognition.logicRecommendation(),
+            recognition == null ? List.of() : recognition.categoryCandidates(),
+            rawColumns,
             null,
             "INSERT",
             null
@@ -729,7 +868,7 @@ public class ShopService {
             if (supplierSkuCode == null) {
                 continue;
             }
-            counts.merge(supplierKey(supplierSkuCode), 1, Integer::sum);
+            counts.merge(item.productType() + ":" + supplierKey(supplierSkuCode), 1, Integer::sum);
         }
         List<ShopImportPreviewItem> marked = new ArrayList<>();
         for (ShopImportPreviewItem item : items) {
@@ -738,8 +877,15 @@ public class ShopService {
                 marked.add(withPreviewAction(item, null, "BLOCKED", null, PENDING_EXCEPTION, "SUPPLIER_SKU_CODE_REQUIRED"));
                 continue;
             }
-            if (counts.getOrDefault(supplierKey(supplierSkuCode), 0) > 1) {
-                ShopSkuResponse existing = shopRepository.findSkuBySupplierSkuCode(companyId, shopId, supplierSkuCode).orElse(null);
+            String productType = validatedProductType(item.productType());
+            String duplicateKey = productType + ":" + supplierKey(supplierSkuCode);
+            if (counts.getOrDefault(duplicateKey, 0) > 1) {
+                ShopSkuResponse existing = shopRepository.findSkuBySupplierSkuCode(
+                    companyId,
+                    shopId,
+                    productType,
+                    supplierSkuCode
+                ).orElse(null);
                 marked.add(withPreviewAction(
                     item,
                     existing == null ? null : existing.skuId(),
@@ -750,7 +896,12 @@ public class ShopService {
                 ));
                 continue;
             }
-            ShopSkuResponse existing = shopRepository.findSkuBySupplierSkuCode(companyId, shopId, supplierSkuCode).orElse(null);
+            ShopSkuResponse existing = shopRepository.findSkuBySupplierSkuCode(
+                companyId,
+                shopId,
+                productType,
+                supplierSkuCode
+            ).orElse(null);
             marked.add(withPreviewAction(
                 item,
                 existing == null ? null : existing.skuId(),

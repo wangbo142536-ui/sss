@@ -10,6 +10,7 @@ import RegisterView from "@/views/RegisterView.vue";
 import ServiceEntry from "@/views/ServiceEntry.vue";
 import WorkbenchPage from "@/views/WorkbenchPage.vue";
 import EnterpriseEntryPage from "@/modules/enterpriseEntry/pages/EnterpriseEntryPage.vue";
+import CustomsDeclarationPage from "@/modules/customsManagement/pages/CustomsDeclarationPage.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -128,7 +129,8 @@ export const router = createRouter({
     { path: "/regulatory/evaluations", name: "regulatory-evaluations", component: WorkbenchPage, meta: { title: "监管服务", pageKey: "regulatoryReviews" } },
     { path: "/regulatory/quality", name: "regulatory-quality", component: WorkbenchPage, meta: { title: "评价监管", pageKey: "qualitySupervision" } },
     { path: "/crew-services", name: "crew-services", component: WorkbenchPage, meta: { title: "船员服务", pageKey: "crewServices" } },
-    { path: "/customs-services", name: "customs-services", component: WorkbenchPage, meta: { title: "海关服务", pageKey: "customsServices" } },
+    { path: "/customs-services", redirect: "/customs-services/declarations" },
+    { path: "/customs-services/declarations", name: "customs-declarations", component: CustomsDeclarationPage, meta: { title: "报关管理" } },
     { path: "/port-shipping-services", name: "port-shipping-services", component: WorkbenchPage, meta: { title: "港航服务", pageKey: "portShippingServices" } },
     { path: "/border-inspection-services", name: "border-inspection-services", component: WorkbenchPage, meta: { title: "边检服务", pageKey: "borderInspectionServices" } },
     { path: "/maritime-services", name: "maritime-services", component: WorkbenchPage, meta: { title: "海事服务", pageKey: "maritimeServices" } },

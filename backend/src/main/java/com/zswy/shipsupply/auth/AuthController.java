@@ -7,21 +7,34 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private final AuthService authService;
+    private final RegistrationSubmissionService registrationSubmissionService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, RegistrationSubmissionService registrationSubmissionService) {
         this.authService = authService;
+        this.registrationSubmissionService = registrationSubmissionService;
     }
 
     @PostMapping("/register")
     public AuthResponse register(@RequestBody RegisterRequest request) {
         return authService.register(request);
+    }
+
+    @PostMapping(value = "/register-and-submit", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public AuthResponse registerAndSubmit(
+        @RequestPart("request") RegistrationSubmissionRequest request,
+        @RequestPart("files") List<MultipartFile> files
+    ) {
+        return registrationSubmissionService.registerAndSubmit(request, files);
     }
 
     @PostMapping("/login")

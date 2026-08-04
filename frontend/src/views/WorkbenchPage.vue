@@ -15,6 +15,10 @@ import SkuThumbnail from "@/components/SkuThumbnail.vue";
 import StableDateTimeInput from "@/components/StableDateTimeInput.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import WorkbenchLayout from "@/components/WorkbenchLayout.vue";
+import CustomsDeclarationPanel from "@/modules/customsManagement/components/CustomsDeclarationPanel.vue";
+import { declareCustoms, downloadCustomsAttachment, getCustomsContext } from "@/modules/customsManagement/services/customsDeclarationService";
+import type { CustomsDeclarationContext } from "@/modules/customsManagement/types";
+import "@/modules/shopManagement/styles/shop-import.css";
 import dashboardShipSprite from "@/assets/dashboard-ship-sprite.png";
 import govMapScene from "@/assets/gov-dashboard/code-assets/map-scene.png";
 import govRefundScene from "@/assets/gov-dashboard/code-assets/icon/oe7C.png";
@@ -36,13 +40,21 @@ import {
 import { t, useI18n } from "@/i18n";
 import { ApiError, clearAuthSession, getAuthSession, uploadQualificationFile } from "@/services/authService";
 import {
+  createCompanyRole,
   createCompanyMember,
+  disableCompanyRole,
+  getCompanyMenuOptions,
   getCompanyMembers,
   getCompanyRoles,
   resetCompanyMemberPassword,
+  updateCompanyMember,
+  updateCompanyRole,
   updateCompanyMemberRoles,
   updateCompanyMemberStatus
 } from "@/services/companyMemberService";
+import { getPlatformCompanyAccounts, updatePlatformAccountStatus } from "@/modules/accountManagement/services/platformAccountService";
+import type { PlatformAccount, PlatformCompanyAccounts } from "@/modules/accountManagement/types";
+import type { CompanyMenuOption } from "@/services/companyMemberService";
 import {
   createCompanyContact,
   createCompanyQualification,
@@ -149,6 +161,7 @@ import {
 import {
   batchUpsertShopSkus,
   deleteShopSku,
+  downloadShopSkuImportTemplate,
   listShopSuppliers,
   listShopSkus,
   previewShopSkuImport,
@@ -705,7 +718,8 @@ const purchaseOrderDetailSaving = ref(false);
 const purchaseOrderDetailNotice = ref("");
 const purchaseOrderDetailReminding = ref(false);
 const purchaseOrderSourceTrafficService = ref<MaterialDemandTrafficService | null>(null);
-const purchaseOrderDetailTab = ref<"details" | "settlement">("settlement");
+const purchaseOrderDetailTab = ref<"details" | "settlement" | "customs">("settlement");
+const materialCustomsContext = ref<CustomsDeclarationContext | null>(null);
 const purchaseOrderDetailPanelRef = ref<HTMLElement | null>(null);
 const showPurchaseOrderDetailBackTop = ref(false);
 const purchaseSettlementSelectedRowIds = ref<string[]>([]);
@@ -729,6 +743,8 @@ const managedShuttleReadonly = ref(false);
 const supplierFulfillmentUploading = ref(false);
 const managedShuttleNodeContext = ref<{ row: TrafficShuttleService; index: number } | null>(null);
 const managedShuttleActiveBookingId = ref(0);
+const managedShuttleCustomsContext = ref<CustomsDeclarationContext | null>(null);
+const managedShuttleCustomsSaving = ref(false);
 const managedShuttleExecutionSaving = ref(false);
 const managedShuttleExecutionDrafts = ref<Record<number, {
   cargoWeight: string;
@@ -780,7 +796,7 @@ const scrollPurchaseOrderDetailToTop = () => {
   scrollPanel?.scrollTo({ top: 0, behavior: "smooth" });
   showPurchaseOrderDetailBackTop.value = false;
 };
-const setPurchaseOrderDetailTab = async (tab: "details" | "settlement") => {
+const setPurchaseOrderDetailTab = async (tab: "details" | "settlement" | "customs") => {
   purchaseOrderDetailTab.value = tab;
   showPurchaseOrderDetailBackTop.value = false;
   await nextTick();
@@ -837,6 +853,7 @@ const shopImporting = ref(false);
 const shopImportPreview = ref<ShopImportPreviewSummary | null>(null);
 const shopPersistedSkuRows = ref<ShopSkuRow[]>([]);
 const shopPreviewSkuRows = ref<ShopSkuRow[]>([]);
+const shopPreviewTypeTab = ref<"MATERIAL" | "FOOD">("MATERIAL");
 const shopSkuRows = ref<ShopSkuRow[]>([]);
 const supplierInfoRows = ref<SupplierInfoRow[]>([]);
 const shopDirtySkuIds = ref<Set<string>>(new Set());
@@ -919,6 +936,16 @@ const permissionMenus = ref<PermissionMenuNode[]>([]);
 const menuOrderMenus = ref<PermissionMenuNode[]>([]);
 const permissionPoints = ref<PermissionPoint[]>([]);
 const adminUsers = ref<AdminUser[]>([]);
+const platformCompanies = ref<PlatformCompanyAccounts[]>([]);
+const platformAccountLoading = ref(false);
+const platformAccountErrorKey = ref("");
+const platformAccountNoticeKey = ref("");
+const platformCompanyTypeFilter = ref("");
+const platformServiceTypeFilter = ref("");
+const expandedPlatformCompanyId = ref("");
+const platformActionAccount = ref<PlatformAccount | null>(null);
+const platformActionReason = ref("");
+const platformAccountSaving = ref(false);
 const selectedPermissionRoleCode = ref("admin");
 const selectedPermissionCodes = ref<string[]>([]);
 const selectedAdminUserId = ref("");
@@ -1021,6 +1048,7 @@ const rejectReasonError = ref(false);
 const selectedRegistrationId = ref("");
 const companyMembers = ref<CompanyMember[]>([]);
 const companyRoles = ref<CompanyRole[]>([]);
+const companyMemberWorkspaceTab = ref<"members" | "roles">("members");
 const companyMemberLoading = ref(false);
 const companyMemberSaving = ref(false);
 const companyMemberErrorKey = ref("");
@@ -1029,7 +1057,7 @@ const companyMemberKeyword = ref("");
 const companyMemberStatusFilter = ref("");
 const companyMemberRoleFilter = ref("");
 const memberDrawerOpen = ref(false);
-const memberDrawerMode = ref<"create" | "roles" | "detail">("create");
+const memberDrawerMode = ref<"create" | "edit" | "roles" | "detail" | "role">("create");
 const selectedCompanyMemberId = ref("");
 const memberForm = ref({
   username: "",
@@ -1040,8 +1068,11 @@ const memberForm = ref({
   roleCodes: [] as string[]
 });
 const memberFormErrors = ref<Record<string, string>>({});
+const companyMenuOptions = ref<CompanyMenuOption[]>([]);
+const roleForm = ref({ roleCode: "", roleName: "", menuPermissionKeys: [] as string[] });
+const selectedCompanyRoleCode = ref("");
 const memberConfirmOpen = ref(false);
-const memberConfirmAction = ref<"enable" | "disable" | "reset">("disable");
+const memberConfirmAction = ref<"enable" | "disable" | "reset" | "disableRole">("disable");
 const today = new Date();
 const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 const calendarMonth = ref(new Date(currentMonthStart));
@@ -1605,6 +1636,28 @@ const dictionaryTypeColumns = computed<TableColumn[]>(() => [
   { key: "sortOrder", label: t("dataDictionary.sortOrder"), width: "16%", align: "right" },
   { key: "enabled", label: t("field.status"), width: "16%", align: "center" }
 ]);
+const platformCompanyColumns = computed<TableColumn[]>(() => [
+  { key: "companyName", label: t("permission.companyName") },
+  { key: "companyType", label: t("permission.companyType"), width: "132px" },
+  { key: "supplierServiceTypes", label: t("permission.supplierServices"), width: "170px" },
+  { key: "accountCount", label: t("permission.accountCount"), width: "92px", align: "center" },
+  { key: "activeAccountCount", label: t("permission.activeAccountCount"), width: "96px", align: "center" },
+  { key: "companyStatus", label: t("field.status"), width: "96px", align: "center" },
+  { key: "operation", label: t("common.operation"), width: "72px", align: "center" }
+]);
+const platformAccountColumns = computed<TableColumn[]>(() => [
+  { key: "username", label: t("permission.accountUsername"), width: "130px" },
+  { key: "name", label: t("permission.accountName"), width: "100px" },
+  { key: "contact", label: t("companyMembers.field.contact") },
+  { key: "accountSource", label: t("companyMembers.field.source"), width: "116px" },
+  { key: "roleCodes", label: t("permission.accountRoles"), width: "170px" },
+  { key: "status", label: t("field.status"), width: "86px", align: "center" },
+  { key: "createdAt", label: t("permission.createdAt"), width: "152px" },
+  { key: "lastLoginAt", label: t("permission.lastLogin"), width: "152px" },
+  { key: "operation", label: t("common.operation"), width: "76px", align: "center" }
+]);
+const asStringList = (value: unknown): string[] => (Array.isArray(value) ? value.map((item) => String(item)) : []);
+const joinStringList = (value: unknown): string => asStringList(value).join(", ") || "-";
 const dictionaryItemColumns = computed<TableColumn[]>(() => [
   { key: "itemCode", label: t("dataDictionary.itemCode"), width: "22%" },
   { key: "itemName", label: t("dataDictionary.itemName"), width: "18%" },
@@ -2446,7 +2499,9 @@ const filteredShopProductRows = computed(() => {
         .join(" ")
         .toLowerCase()
         .includes(keyword);
-    const typeMatched = !shopProductTypeFilter.value || row.productType === shopProductTypeFilter.value;
+    const typeMatched = hasPendingShopImport.value
+      ? row.productType === shopPreviewTypeTab.value
+      : !shopProductTypeFilter.value || row.productType === shopProductTypeFilter.value;
     const codeStatusMatched =
       !shopProductCodeStatusFilter.value ||
       getShopCodeStatusFilterValues(shopProductCodeStatusFilter.value).includes(row.codingStatus);
@@ -2758,6 +2813,11 @@ const buildShopSkuQuery = (page = shopSkuPage.value) => ({
   page,
   size: shopSkuPageSize
 });
+
+const shopPreviewTypeCounts = computed(() => ({
+  MATERIAL: shopPreviewSkuRows.value.filter((row) => row.productType === "MATERIAL").length,
+  FOOD: shopPreviewSkuRows.value.filter((row) => row.productType === "FOOD").length
+}));
 
 const buildSupplierInfoQuery = () => ({
   keyword: supplierInfoKeyword.value.trim(),
@@ -3407,6 +3467,37 @@ const openShopImportPicker = () => {
   shopImportInput.value?.click();
 };
 
+const downloadShopImportTemplate = async () => {
+  shopErrorMessage.value = "";
+  try {
+    await downloadShopSkuImportTemplate();
+  } catch (error) {
+    shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.importFailed");
+  }
+};
+
+const exportShopImportExceptions = () => {
+  if (!shopExceptionRows.value.length) return;
+  const escapeCsv = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const lines = [
+    ["Sheet", "商品类型", "行号", "企业SKU", "商品名称", "异常原因"],
+    ...shopExceptionRows.value.map((row) => [
+      row.productType === "FOOD" ? "伙食" : "物料",
+      row.productType,
+      row.importRowNo,
+      row.supplierSkuCode,
+      row.productName,
+      row.exceptionReason || row.codingStatus
+    ])
+  ].map((columns) => columns.map(escapeCsv).join(","));
+  const url = URL.createObjectURL(new Blob([`\ufeff${lines.join("\r\n")}`], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "商品导入异常.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 const openShopSkuImagePicker = (row: ShopSkuRow) => {
   selectedShopSkuImageRowId.value = row.id;
   shopSkuImageInput.value?.click();
@@ -3446,6 +3537,11 @@ const handleShopImportFile = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".xlsx")) {
+    shopErrorMessage.value = "商品导入仅支持固定双 Sheet 的 XLSX 模板，请先下载模板后填写。";
+    input.value = "";
+    return;
+  }
   clearShopImportTimer();
   shopImportFileName.value = file.name;
   shopImportOverlayVisible.value = true;
@@ -3494,6 +3590,7 @@ const handleShopImportFile = async (event: Event) => {
     const previewRows = backendItems.map((item) => normalizeShopSku(item, { preview: true, batchId })).filter((item): item is ShopSkuRow => Boolean(item));
     shopPreviewSkuRows.value = await hydrateShopSkuImages(previewRows);
     shopSkuRows.value = shopPreviewSkuRows.value;
+    shopPreviewTypeTab.value = shopPreviewSkuRows.value.some((row) => row.productType === "MATERIAL") ? "MATERIAL" : "FOOD";
     shopImportProgress.value = 100;
     shopImportStageIndex.value = 3;
     shopImportPending.value = false;
@@ -3825,6 +3922,7 @@ const impaItemColumns = computed<TableColumn[]>(() => [
 
 const registrationColumns = computed<TableColumn[]>(() => [
   { key: "companyType", label: t("registration.companyType"), width: "118px" },
+  { key: "supplierServiceTypes", label: t("registration.supplierServices"), width: "150px" },
   { key: "companyName", label: t("registration.companyName"), width: "240px" },
   { key: "contactName", label: t("registration.contactName"), width: "98px" },
   { key: "phone", label: t("registration.phone"), width: "126px" },
@@ -4085,6 +4183,12 @@ const compareFixedFeeDisplayItems = computed(() => [
   { key: "customs", label: "报关费", value: compareFixedFeeInputs.value.customs },
   { key: "crane", label: "吊机费", value: compareFixedFeeInputs.value.crane },
   { key: "other", label: "其他费用", value: compareFixedFeeInputs.value.other }
+]);
+const companyRoleColumns = computed<TableColumn[]>(() => [
+  { key: "name", label: t("companyMembers.field.roleName") },
+  { key: "code", label: t("companyMembers.field.roleCode"), width: "220px" },
+  { key: "menuPermissionKeys", label: t("permission.menuPermissions") },
+  { key: "operation", label: t("common.operation"), width: "150px", align: "center" }
 ]);
 const compareFixedFeeDisplayLabel = (value?: string | number | null) => {
   const cny = displayCurrencyAmountToCny(value) ?? 0;
@@ -6333,6 +6437,12 @@ const showSupplierCustomsUpload = computed(() => {
   return Boolean(order && ["PREPARING", "IN_TRANSIT", "READY_TO_DELIVER", "SUPPLIED"].includes(status));
 });
 
+const showSupplierDeclarationTab = computed(() =>
+  purchaseOrderWorkspaceMode.value === "supplier"
+  && materialCustomsContext.value?.responsibleType === "SUPPLIER"
+  && materialCustomsContext.value.canDeclare
+);
+
 watch(
   () => purchaseOrderDetail.value?.attachments,
   (attachments) => {
@@ -6873,6 +6983,7 @@ const loadPurchaseOrderDetail = async () => {
   purchaseOrderDetailLoading.value = true;
   purchaseOrderDetailError.value = "";
   purchaseOrderDetailNotice.value = "";
+  materialCustomsContext.value = null;
   try {
     purchaseOrderDetail.value = purchaseOrderWorkspaceMode.value === "supplier" && !isBuyerSupplierOrderPreview.value
       ? await getSupplierPurchaseOrderDetail(purchaseOrderIdFromRoute.value)
@@ -6917,11 +7028,17 @@ const loadPurchaseOrderDetail = async () => {
         persistedSettlementRows.value = [];
         fulfillmentAttachments.value = [];
       }
+      try {
+        materialCustomsContext.value = await getCustomsContext("MATERIAL", Number(purchaseOrderIdFromRoute.value));
+      } catch {
+        materialCustomsContext.value = null;
+      }
     }
   } catch (error) {
     purchaseOrderDetail.value = null;
     purchaseOrderSourceTrafficService.value = null;
     purchaseTrafficServiceRows.value = [];
+    materialCustomsContext.value = null;
     purchaseOrderDetailError.value = getPurchaseErrorText(error, "purchaseOrder.error.detailLoadFailed");
   } finally {
     purchaseOrderDetailLoading.value = false;
@@ -8261,6 +8378,52 @@ const managedShuttleActiveBooking = computed(() =>
     || managedShuttleNodeBookings.value[0]
     || null
 );
+
+const loadManagedShuttleCustoms = async () => {
+  managedShuttleCustomsContext.value = null;
+  const purchaseOrderId = Number(managedShuttleActiveBooking.value?.purchaseOrderId || 0);
+  if (!purchaseOrderId) return;
+  for (const businessType of ["MATERIAL", "FOOD"] as const) {
+    try {
+      const context = await getCustomsContext(businessType, purchaseOrderId);
+      if (context.responsibleType === "BARGE" && context.canDeclare) {
+        managedShuttleCustomsContext.value = context;
+        return;
+      }
+    } catch {
+      // The two order tables have independent ids; try the other business type.
+    }
+  }
+};
+
+const declareManagedShuttleCustoms = async () => {
+  const context = managedShuttleCustomsContext.value;
+  if (!context) return;
+  managedShuttleCustomsSaving.value = true;
+  try {
+    await declareCustoms(context.businessType, context.purchaseOrderId);
+    managedShuttleCustomsContext.value = await getCustomsContext(context.businessType, context.purchaseOrderId);
+  } catch (error) {
+    trafficServiceErrorKey.value = error instanceof Error ? error.message : "一键报关失败";
+  } finally {
+    managedShuttleCustomsSaving.value = false;
+  }
+};
+
+const downloadManagedShuttleCustoms = async () => {
+  const declarationId = managedShuttleCustomsContext.value?.declarationId;
+  if (!declarationId) return;
+  managedShuttleCustomsSaving.value = true;
+  try {
+    await downloadCustomsAttachment(declarationId);
+  } catch (error) {
+    trafficServiceErrorKey.value = error instanceof Error ? error.message : "附件下载失败";
+  } finally {
+    managedShuttleCustomsSaving.value = false;
+  }
+};
+
+watch(managedShuttleActiveBooking, () => { void loadManagedShuttleCustoms(); });
 
 const managedShuttleExecutionDraft = (booking: TrafficShuttleBooking) => {
   const id = Number(booking.bookingId);
@@ -9645,6 +9808,64 @@ const saveStaticUserPermissions = () => {
   }, 450);
 };
 
+const loadPlatformAccounts = async () => {
+  platformAccountLoading.value = true;
+  platformAccountErrorKey.value = "";
+  try {
+    const response = await getPlatformCompanyAccounts({
+      keyword: permissionUserKeyword.value,
+      status: permissionUserStatusFilter.value,
+      roleCode: permissionUserRoleFilter.value,
+      companyType: platformCompanyTypeFilter.value,
+      supplierServiceType: platformServiceTypeFilter.value,
+      page: 1,
+      pageSize: 100
+    });
+    platformCompanies.value = response.items;
+  } catch (error) {
+    platformCompanies.value = [];
+    platformAccountErrorKey.value = error instanceof ApiError && error.status === 403
+      ? "permission.platformForbidden"
+      : "permission.platformLoadFailed";
+  } finally {
+    platformAccountLoading.value = false;
+  }
+};
+
+const togglePlatformCompany = (row: Record<string, unknown>) => {
+  const companyId = String(row.companyId || "");
+  expandedPlatformCompanyId.value = expandedPlatformCompanyId.value === companyId ? "" : companyId;
+  platformActionAccount.value = null;
+  platformActionReason.value = "";
+};
+
+const openPlatformAccountAction = (account: PlatformAccount) => {
+  platformActionAccount.value = account;
+  platformActionReason.value = "";
+  platformAccountNoticeKey.value = "";
+};
+
+const submitPlatformAccountAction = async () => {
+  if (!platformActionAccount.value || !platformActionReason.value.trim()) {
+    platformAccountErrorKey.value = "permission.statusReasonRequired";
+    return;
+  }
+  platformAccountSaving.value = true;
+  platformAccountErrorKey.value = "";
+  try {
+    const status = platformActionAccount.value.status === "DISABLED" ? "ACTIVE" : "DISABLED";
+    await updatePlatformAccountStatus(platformActionAccount.value.userId, status, platformActionReason.value.trim());
+    platformAccountNoticeKey.value = status === "ACTIVE" ? "permission.accountEnabled" : "permission.accountDisabled";
+    platformActionAccount.value = null;
+    platformActionReason.value = "";
+    await loadPlatformAccounts();
+  } catch {
+    platformAccountErrorKey.value = "permission.platformStatusFailed";
+  } finally {
+    platformAccountSaving.value = false;
+  }
+};
+
 const loadSelectedRolePermissions = async (roleCode = selectedPermissionRoleCode.value) => {
   selectedPermissionRoleCode.value = roleCode;
   const codes = await getRoleMenuPermissions(roleCode);
@@ -9670,6 +9891,7 @@ const loadPermissionWorkspace = async () => {
     selectedAdminUserRoleCode.value = users[0]?.roleCodes[0] || roles[0]?.code || selectedAdminUserRoleCode.value;
     adminUsers.value = users;
     await loadSelectedRolePermissions(selectedPermissionRoleCode.value);
+    await loadPlatformAccounts();
   } finally {
     permissionLoading.value = false;
   }
@@ -10076,6 +10298,58 @@ const openCreateCompanyMember = () => {
   memberDrawerOpen.value = true;
 };
 
+const openCreateCompanyRole = async () => {
+  memberDrawerMode.value = "role";
+  selectedCompanyMemberId.value = "";
+  roleForm.value = { roleCode: "", roleName: "", menuPermissionKeys: [] };
+  selectedCompanyRoleCode.value = "";
+  memberFormErrors.value = {};
+  if (!companyMenuOptions.value.length) {
+    try {
+      companyMenuOptions.value = await getCompanyMenuOptions();
+    } catch (error) {
+      handleCompanyMemberError(error);
+    }
+  }
+  memberDrawerOpen.value = true;
+};
+
+const openEditCompanyRole = async (role: CompanyRole) => {
+  memberDrawerMode.value = "role";
+  selectedCompanyRoleCode.value = role.code;
+  roleForm.value = { roleCode: role.code, roleName: role.name, menuPermissionKeys: [...role.menuPermissionKeys] };
+  memberFormErrors.value = {};
+  if (!companyMenuOptions.value.length) {
+    try {
+      companyMenuOptions.value = await getCompanyMenuOptions();
+    } catch (error) {
+      handleCompanyMemberError(error);
+    }
+  }
+  memberDrawerOpen.value = true;
+};
+
+const openDisableCompanyRoleConfirm = (role: CompanyRole) => {
+  selectedCompanyRoleCode.value = role.code;
+  memberConfirmAction.value = "disableRole";
+  memberConfirmOpen.value = true;
+};
+
+const openEditCompanyMember = (member: CompanyMember) => {
+  memberDrawerMode.value = "edit";
+  selectedCompanyMemberId.value = member.id;
+  memberForm.value = {
+    username: member.username,
+    name: member.name,
+    phone: member.phone,
+    email: member.email,
+    password: "",
+    roleCodes: [...member.roleCodes]
+  };
+  memberFormErrors.value = {};
+  memberDrawerOpen.value = true;
+};
+
 const openCompanyMemberRoles = (member: CompanyMember) => {
   memberDrawerMode.value = "roles";
   selectedCompanyMemberId.value = member.id;
@@ -10108,6 +10382,11 @@ const openCompanyMemberDetail = (member: CompanyMember) => {
 
 const validateCompanyMemberForm = () => {
   const errors: Record<string, string> = {};
+  if (memberDrawerMode.value === "role") {
+    if (!roleForm.value.roleName.trim()) errors.roleName = "companyMembers.error.roleNameRequired";
+    memberFormErrors.value = errors;
+    return Object.keys(errors).length === 0;
+  }
   if (memberDrawerMode.value === "create") {
     if (!memberForm.value.username.trim()) errors.username = "companyMembers.error.accountRequired";
     if (!memberForm.value.phone.trim()) errors.phone = "companyMembers.error.phoneRequired";
@@ -10128,7 +10407,22 @@ const submitCompanyMemberDrawer = async () => {
   companyMemberSaving.value = true;
   companyMemberErrorKey.value = "";
   try {
-    if (memberDrawerMode.value === "create") {
+    if (memberDrawerMode.value === "role") {
+      if (selectedCompanyRoleCode.value) {
+        await updateCompanyRole(selectedCompanyRoleCode.value, {
+          roleName: roleForm.value.roleName.trim(),
+          menuPermissionKeys: roleForm.value.menuPermissionKeys
+        });
+        companyMemberNoticeKey.value = "companyMembers.notice.roleUpdated";
+      } else {
+        await createCompanyRole({
+          roleCode: roleForm.value.roleCode.trim() || undefined,
+          roleName: roleForm.value.roleName.trim(),
+          menuPermissionKeys: roleForm.value.menuPermissionKeys
+        });
+        companyMemberNoticeKey.value = "companyMembers.notice.roleCreated";
+      }
+    } else if (memberDrawerMode.value === "create") {
       await createCompanyMember({
         username: memberForm.value.username.trim(),
         name: memberForm.value.name.trim() || undefined,
@@ -10138,6 +10432,14 @@ const submitCompanyMemberDrawer = async () => {
         roleCodes: memberForm.value.roleCodes
       });
       companyMemberNoticeKey.value = "companyMembers.notice.created";
+    } else if (memberDrawerMode.value === "edit" && selectedCompanyMember.value) {
+      await updateCompanyMember(selectedCompanyMember.value.id, {
+        name: memberForm.value.name.trim(),
+        phone: memberForm.value.phone.trim(),
+        email: memberForm.value.email.trim(),
+        roleCodes: memberForm.value.roleCodes
+      });
+      companyMemberNoticeKey.value = "companyMembers.notice.updated";
     } else if (selectedCompanyMember.value) {
       await updateCompanyMemberRoles(selectedCompanyMember.value.id, memberForm.value.roleCodes);
       companyMemberNoticeKey.value = "companyMembers.notice.rolesSaved";
@@ -10158,11 +10460,30 @@ const openCompanyMemberConfirm = (member: CompanyMember, action: "enable" | "dis
 };
 
 const companyMemberConfirmMessage = computed(() => {
+  if (memberConfirmAction.value === "disableRole") {
+    return t("companyMembers.confirm.disableRole", { role: getCompanyRoleLabel(selectedCompanyRoleCode.value) });
+  }
   if (!selectedCompanyMember.value) return "";
   return t(`companyMembers.confirm.${memberConfirmAction.value}`, { account: selectedCompanyMember.value.username });
 });
 
 const submitCompanyMemberConfirm = async () => {
+  if (memberConfirmAction.value === "disableRole") {
+    if (!selectedCompanyRoleCode.value) return;
+    companyMemberSaving.value = true;
+    companyMemberErrorKey.value = "";
+    try {
+      await disableCompanyRole(selectedCompanyRoleCode.value);
+      companyMemberNoticeKey.value = "companyMembers.notice.roleDisabled";
+      memberConfirmOpen.value = false;
+      await loadCompanyMemberWorkspace();
+    } catch (error) {
+      handleCompanyMemberError(error);
+    } finally {
+      companyMemberSaving.value = false;
+    }
+    return;
+  }
   if (!selectedCompanyMember.value) return;
   companyMemberSaving.value = true;
   companyMemberErrorKey.value = "";
@@ -11023,6 +11344,14 @@ const workbenchGlobalLoading = computed(() => {
             <template #cell-companyType="{ value }">
               {{ getRegistrationCompanyTypeLabel(String(value)) }}
             </template>
+            <template #cell-supplierServiceTypes="{ value }">
+              <div class="member-role-chips">
+                <span v-for="item in asStringList(value)" :key="item">
+                  {{ item === "MATERIAL" ? t("page.register.supplierServiceMaterial") : t("page.register.supplierServiceFood") }}
+                </span>
+                <em v-if="!asStringList(value).length">-</em>
+              </div>
+            </template>
             <template #cell-companyName="{ value }">
               <span class="registration-company-name" :title="String(value || '')">{{ value || "-" }}</span>
             </template>
@@ -11058,6 +11387,10 @@ const workbenchGlobalLoading = computed(() => {
                   <div>
                     <span>{{ t("registration.companyType") }}</span>
                     <strong>{{ getRegistrationCompanyTypeLabel(row.companyType) }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ t("registration.supplierServices") }}</span>
+                    <strong>{{ row.supplierServiceTypes.map((item) => item === "MATERIAL" ? t("page.register.supplierServiceMaterial") : t("page.register.supplierServiceFood")).join("、") || "-" }}</strong>
                   </div>
                   <div>
                     <span>{{ t("registration.companyName") }}</span>
@@ -11111,7 +11444,15 @@ const workbenchGlobalLoading = computed(() => {
       <ExpandablePanel v-else-if="pageKey === 'companyMembers'" :show-header="false" :show-expand="false" class="company-members-panel">
         <LoadingOverlay :active="companyMemberLoading" :label="t('common.loading')">
           <section class="company-members-workspace">
-            <div class="company-members-toolbar list-search-toolbar">
+            <nav class="purchase-order-detail-tabs purchase-order-detail-tabs--inline" aria-label="company member workspace tabs">
+              <button type="button" :class="{ active: companyMemberWorkspaceTab === 'members' }" @click="companyMemberWorkspaceTab = 'members'">
+                {{ t("companyMembers.tab.members") }}
+              </button>
+              <button type="button" :class="{ active: companyMemberWorkspaceTab === 'roles' }" @click="companyMemberWorkspaceTab = 'roles'">
+                {{ t("companyMembers.tab.roles") }}
+              </button>
+            </nav>
+            <div v-if="companyMemberWorkspaceTab === 'members'" class="company-members-toolbar list-search-toolbar">
               <div class="company-members-filters">
                 <label class="member-filter-field member-filter-keyword list-search-field">
                   <span>{{ t("filter.keyword") }}</span>
@@ -11148,7 +11489,17 @@ const workbenchGlobalLoading = computed(() => {
                 <IconButton icon="Search" :label="t('action.search')" :loading="companyMemberLoading" @click="searchCompanyMembers" />
                 <IconButton icon="X" :label="t('common.reset')" @click="resetCompanyMemberFilters" />
                 <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="companyMemberLoading" @click="loadCompanyMemberWorkspace" />
+                <IconButton icon="Plus" :label="t('companyMembers.action.createRole')" @click="openCreateCompanyRole" />
                 <IconButton icon="Plus" :label="t('companyMembers.action.create')" variant="primary" @click="openCreateCompanyMember" />
+              </div>
+            </div>
+            <div v-else class="company-members-toolbar list-search-toolbar">
+              <div class="company-members-filters">
+                <div class="permission-subpanel-title"><strong>{{ t("companyMembers.tab.roles") }}</strong></div>
+              </div>
+              <div class="toolbar-icon-actions">
+                <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="companyMemberLoading" @click="loadCompanyMemberWorkspace" />
+                <IconButton icon="Plus" :label="t('companyMembers.action.createRole')" variant="primary" @click="openCreateCompanyRole" />
               </div>
             </div>
 
@@ -11162,7 +11513,7 @@ const workbenchGlobalLoading = computed(() => {
               <span>{{ t(companyMemberNoticeKey) }}</span>
             </div>
 
-            <DataTable :columns="companyMemberColumns" :rows="companyMembers" :loading="companyMemberLoading" row-key="id">
+            <DataTable v-if="companyMemberWorkspaceTab === 'members'" :columns="companyMemberColumns" :rows="companyMembers" :loading="companyMemberLoading" row-key="id">
               <template #cell-contact="{ row }">
                 <div class="member-contact-cell">
                   <span>{{ row.phone || "-" }}</span>
@@ -11187,6 +11538,7 @@ const workbenchGlobalLoading = computed(() => {
               <template #cell-operation="{ row }">
                 <div class="icon-action-row">
                   <IconButton icon="Eye" :label="t('action.viewDetail')" @click.stop="openCompanyMemberDetail(row)" />
+                  <IconButton icon="Pencil" :label="t('companyMembers.action.edit')" @click.stop="openEditCompanyMember(row)" />
                   <IconButton icon="Pencil" :label="t('companyMembers.action.assignRoles')" @click.stop="openCompanyMemberRoles(row)" />
                   <IconButton
                     :icon="row.status === 'DISABLED' ? 'Check' : 'Ban'"
@@ -11196,6 +11548,22 @@ const workbenchGlobalLoading = computed(() => {
                     @click.stop="openCompanyMemberConfirm(row, row.status === 'DISABLED' ? 'enable' : 'disable')"
                   />
                   <IconButton icon="RefreshCw" :label="t('companyMembers.action.resetPassword')" :disabled="row.isOwner" @click.stop="openCompanyMemberConfirm(row, 'reset')" />
+                </div>
+              </template>
+            </DataTable>
+            <DataTable v-else :columns="companyRoleColumns" :rows="companyRoles" :loading="companyMemberLoading" row-key="code">
+              <template #cell-menuPermissionKeys="{ value }">
+                <div class="member-role-chips">
+                  <span v-for="key in asStringList(value).slice(0, 4)" :key="key">{{ key }}</span>
+                  <em v-if="!asStringList(value).length">-</em>
+                  <em v-else-if="asStringList(value).length > 4">+{{ asStringList(value).length - 4 }}</em>
+                </div>
+              </template>
+              <template #cell-operation="{ row }">
+                <div class="icon-action-row">
+                  <IconButton icon="Pencil" :label="t('companyMembers.action.editRole')" @click.stop="openEditCompanyRole(row)" />
+                  <IconButton icon="Check" :label="t('companyMembers.action.configureRole')" @click.stop="openEditCompanyRole(row)" />
+                  <IconButton icon="Ban" :label="t('companyMembers.action.disableRole')" variant="danger" @click.stop="openDisableCompanyRoleConfirm(row)" />
                 </div>
               </template>
             </DataTable>
@@ -11330,7 +11698,9 @@ const workbenchGlobalLoading = computed(() => {
                 <IconButton icon="Plus" :label="t('page.supplierProducts.contact.add')" @click="openCompanyContactCreateFromAnyTab" />
                 <IconButton class="shop-bulk-shelf-button is-on" icon="Check" :label="t('page.supplierProducts.actionAllOnShelf')" :disabled="!hasSavedShopSkuRows || shopSaving" @click="updateAllShopShelfStatus('ON_SHELF')" />
                 <IconButton class="shop-bulk-shelf-button is-off" icon="Ban" :label="t('page.supplierProducts.actionAllOffShelf')" :disabled="!hasSavedShopSkuRows || shopSaving" @click="updateAllShopShelfStatus('OFF_SHELF')" />
+                <IconButton icon="Download" label="下载双 Sheet 导入模板" @click="downloadShopImportTemplate" />
                 <IconButton icon="Upload" :label="t('page.supplierProducts.importButton')" @click="openShopImportPicker" />
+                <IconButton icon="Download" label="导出导入异常" :disabled="!shopExceptionRows.length" @click="exportShopImportExceptions" />
                 <IconButton icon="Save" :label="t('common.save')" :disabled="!canConfirmShopImport" :loading="shopSaving" @click="confirmShopImportPreview" />
                 <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="shopSkuListLoading" @click="refreshShopSkuList" />
                 <IconButton :icon="shopListFullscreen ? 'Minimize2' : 'Maximize2'" :label="shopListFullscreen ? t('page.supplierProducts.exitSectionFullscreen') : t('page.supplierProducts.enterSectionFullscreen')" @click="toggleShopListFullscreen" />
@@ -11352,7 +11722,7 @@ const workbenchGlobalLoading = computed(() => {
                 <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="companyValueAddedServiceLoading" @click="loadCompanyValueAddedServices" />
               </div>
             </div>
-            <input ref="shopImportInput" type="file" accept=".xlsx,.xls,.csv" hidden @change="handleShopImportFile" />
+            <input ref="shopImportInput" type="file" accept=".xlsx" hidden @change="handleShopImportFile" />
             <input ref="shopSkuImageInput" type="file" accept="image/*" hidden @change="handleShopSkuImageChange" />
             <input ref="companyQualificationFileInput" type="file" accept="image/*" hidden @change="handleCompanyQualificationFileChange" />
             <div v-show="shopManagementTab === 'products'" class="shop-management-pane">
@@ -11390,6 +11760,14 @@ const workbenchGlobalLoading = computed(() => {
                 <IconButton icon="Search" :label="t('common.search')" :loading="shopSkuListLoading" @click="searchShopSkus" />
                 <IconButton icon="X" :label="t('common.reset')" @click="resetShopFilters" />
               </div>
+            </div>
+            <div v-if="hasPendingShopImport" class="shop-import-type-tabs" role="tablist" aria-label="双 Sheet 导入预览">
+              <button type="button" :class="{ active: shopPreviewTypeTab === 'MATERIAL' }" role="tab" :aria-selected="shopPreviewTypeTab === 'MATERIAL'" @click="shopPreviewTypeTab = 'MATERIAL'">
+                物料 Sheet（{{ shopPreviewTypeCounts.MATERIAL }}）
+              </button>
+              <button type="button" :class="{ active: shopPreviewTypeTab === 'FOOD' }" role="tab" :aria-selected="shopPreviewTypeTab === 'FOOD'" @click="shopPreviewTypeTab = 'FOOD'">
+                伙食 Sheet（{{ shopPreviewTypeCounts.FOOD }}）
+              </button>
             </div>
             <DataTable
               :columns="shopSkuColumns"
@@ -11504,12 +11882,7 @@ const workbenchGlobalLoading = computed(() => {
                     </div>
                     <div>
                       <dt>{{ t("page.supplierProducts.field.productType") }}</dt>
-                      <dd>
-                        <select v-model="row.productType" class="shop-edit-control" @click.stop @change="markShopSkuDirty(row)">
-                          <option value="MATERIAL">{{ t("page.supplierProducts.typeMaterial") }}</option>
-                          <option value="FOOD">{{ t("page.supplierProducts.typeFood") }}</option>
-                        </select>
-                      </dd>
+                      <dd>{{ row.productType === "FOOD" ? t("page.supplierProducts.typeFood") : t("page.supplierProducts.typeMaterial") }}</dd>
                     </div>
                     <div v-if="getShopPreviewBlockReason(row)" class="shop-sku-expanded__notice">
                       <dt>{{ t("page.supplierProducts.previewBlockReason") }}</dt>
@@ -12500,7 +12873,16 @@ const workbenchGlobalLoading = computed(() => {
             <nav class="purchase-order-detail-tabs purchase-order-detail-tabs--inline" aria-label="purchase order follow-up tabs">
               <button type="button" :class="{ active: purchaseOrderDetailTab === 'settlement' }" @click="setPurchaseOrderDetailTab('settlement')">订单结算</button>
               <button type="button" :class="{ active: purchaseOrderDetailTab === 'details' }" @click="setPurchaseOrderDetailTab('details')">订单明细</button>
+              <button v-if="showSupplierDeclarationTab" type="button" :class="{ active: purchaseOrderDetailTab === 'customs' }" @click="setPurchaseOrderDetailTab('customs')">报关明细</button>
             </nav>
+
+            <CustomsDeclarationPanel
+              v-if="purchaseOrderDetailTab === 'customs' && showSupplierDeclarationTab"
+              business-type="MATERIAL"
+              :purchase-order-id="Number(purchaseOrderIdFromRoute)"
+              :initial-context="materialCustomsContext"
+              @updated="materialCustomsContext = $event"
+            />
 
             <article v-if="purchaseOrderDetailTab === 'details'" class="purchase-order-section">
               <div class="purchase-order-section-header">
@@ -14007,7 +14389,7 @@ const workbenchGlobalLoading = computed(() => {
                 <AnimatedTabs
                   v-model="activeAdminTab"
                   :tabs="[
-                    { key: 'users', label: t('permission.userAssignment') },
+                    { key: 'users', label: t('permission.platformAccounts') },
                     { key: 'menuPermissions', label: t('permission.roleMenuPermissions') },
                     { key: 'menuOrder', label: t('permission.menuOrder') }
                   ]"
@@ -14031,7 +14413,85 @@ const workbenchGlobalLoading = computed(() => {
                   />
                 </div>
               </div>
-              <section v-if="activeAdminTab === 'users'" class="permission-user-preview">
+              <section v-if="activeAdminTab === 'users'" class="permission-user-preview platform-account-workspace">
+                <div class="permission-user-toolbar">
+                  <label class="permission-filter-field permission-filter-field--wide">
+                    <span>{{ t("permission.accountKeyword") }}</span>
+                    <input v-model="permissionUserKeyword" type="search" :placeholder="t('permission.accountKeywordPlaceholder')" @keyup.enter="loadPlatformAccounts" />
+                  </label>
+                  <label class="permission-filter-field">
+                    <span>{{ t("permission.companyType") }}</span>
+                    <select v-model="platformCompanyTypeFilter">
+                      <option value="">{{ t("common.all") }}</option>
+                      <option value="SHIP_AGENT">{{ t("page.register.companyTypeShipAgent") }}</option>
+                      <option value="SUPPLIER">{{ t("page.register.companyTypeSupplier") }}</option>
+                      <option value="BARGE_AGENT">{{ t("page.register.companyTypeBargeAgent") }}</option>
+                    </select>
+                  </label>
+                  <label class="permission-filter-field">
+                    <span>{{ t("permission.supplierServices") }}</span>
+                    <select v-model="platformServiceTypeFilter">
+                      <option value="">{{ t("common.all") }}</option>
+                      <option value="MATERIAL">{{ t("page.register.supplierServiceMaterial") }}</option>
+                      <option value="FOOD">{{ t("page.register.supplierServiceFood") }}</option>
+                    </select>
+                  </label>
+                  <label class="permission-filter-field">
+                    <span>{{ t("field.status") }}</span>
+                    <select v-model="permissionUserStatusFilter">
+                      <option value="">{{ t("common.all") }}</option>
+                      <option value="ACTIVE">{{ t("status.active") }}</option>
+                      <option value="DISABLED">{{ t("status.disabled") }}</option>
+                    </select>
+                  </label>
+                  <div class="toolbar-icon-actions">
+                    <IconButton icon="Search" :label="t('action.search')" :loading="platformAccountLoading" @click="loadPlatformAccounts" />
+                    <IconButton icon="X" :label="t('common.reset')" @click="permissionUserKeyword = ''; permissionUserStatusFilter = ''; platformCompanyTypeFilter = ''; platformServiceTypeFilter = ''; loadPlatformAccounts()" />
+                    <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="platformAccountLoading" @click="loadPlatformAccounts" />
+                  </div>
+                </div>
+                <p v-if="platformAccountErrorKey" class="permission-static-notice is-error">{{ t(platformAccountErrorKey) }}</p>
+                <p v-else-if="platformAccountNoticeKey" class="permission-static-notice">{{ t(platformAccountNoticeKey) }}</p>
+                <section class="permission-user-table-panel">
+                  <div class="permission-subpanel-title"><strong>{{ t("permission.enterpriseAccounts") }}</strong></div>
+                  <DataTable
+                    :columns="platformCompanyColumns"
+                    :rows="platformCompanies"
+                    row-key="companyId"
+                    row-interactive
+                    :loading="platformAccountLoading"
+                    :expanded-row-key="expandedPlatformCompanyId"
+                    @row-click="togglePlatformCompany"
+                  >
+                    <template #cell-companyType="{ value }">{{ t(`page.register.companyType${String(value) === 'SHIP_AGENT' ? 'ShipAgent' : String(value) === 'BARGE_AGENT' ? 'BargeAgent' : 'Supplier'}`) }}</template>
+                    <template #cell-supplierServiceTypes="{ value }">
+                      <div class="member-role-chips"><span v-for="item in asStringList(value)" :key="item">{{ item === 'MATERIAL' ? t('page.register.supplierServiceMaterial') : t('page.register.supplierServiceFood') }}</span><em v-if="!asStringList(value).length">-</em></div>
+                    </template>
+                    <template #cell-companyStatus="{ value }"><StatusBadge :label="String(value)" :variant="String(value) === 'ACTIVE' ? 'success' : 'neutral'" /></template>
+                    <template #cell-operation><IconButton icon="Eye" :label="t('action.viewDetail')" /></template>
+                    <template #expanded-row="{ row, expanded }">
+                      <section v-if="expanded" class="platform-account-expanded">
+                        <div v-if="platformActionAccount && (row.accounts || []).some((item) => item.userId === platformActionAccount?.userId)" class="platform-account-action-bar">
+                          <strong>{{ platformActionAccount.status === 'DISABLED' ? t('permission.confirmEnable') : t('permission.confirmDisable') }} {{ platformActionAccount.username }}</strong>
+                          <input v-model="platformActionReason" :placeholder="t('permission.statusReasonPlaceholder')" />
+                          <IconButton icon="X" :label="t('common.cancel')" @click.stop="platformActionAccount = null" />
+                          <IconButton icon="Check" :label="t('common.confirm')" variant="primary" :loading="platformAccountSaving" @click.stop="submitPlatformAccountAction" />
+                        </div>
+                        <DataTable :columns="platformAccountColumns" :rows="row.accounts || []" row-key="userId">
+                          <template #cell-contact="{ row: accountRow }"><div class="member-contact-cell"><span>{{ accountRow.phone || '-' }}</span><small>{{ accountRow.email || '-' }}</small></div></template>
+                          <template #cell-accountSource="{ value }">{{ value === 'REGISTERED_ADMIN' ? t('permission.registeredAdmin') : t('permission.internalAccount') }}</template>
+                          <template #cell-roleCodes="{ value }"><span>{{ joinStringList(value) }}</span></template>
+                          <template #cell-status="{ value }"><StatusBadge :label="String(value) === 'ACTIVE' ? t('status.active') : t('status.disabled')" :variant="String(value) === 'ACTIVE' ? 'success' : 'neutral'" /></template>
+                          <template #cell-operation="{ row: accountRow }">
+                            <IconButton :icon="accountRow.status === 'DISABLED' ? 'Check' : 'Ban'" :label="accountRow.status === 'DISABLED' ? t('companyMembers.action.enable') : t('companyMembers.action.disable')" :variant="accountRow.status === 'DISABLED' ? 'secondary' : 'danger'" @click.stop="openPlatformAccountAction(accountRow)" />
+                          </template>
+                        </DataTable>
+                      </section>
+                    </template>
+                  </DataTable>
+                </section>
+              </section>
+              <section v-if="false" class="permission-user-preview">
                 <div class="permission-user-toolbar">
                   <label class="permission-filter-field permission-filter-field--wide">
                     <span>{{ t("permission.accountKeyword") }}</span>
@@ -14074,7 +14534,7 @@ const workbenchGlobalLoading = computed(() => {
                     @row-click="selectStaticPermissionUser"
                   >
                     <template #cell-roles="{ value }">
-                      <span>{{ Array.isArray(value) ? value.join(', ') : value }}</span>
+                      <span>{{ joinStringList(value) }}</span>
                     </template>
                     <template #cell-status="{ value }">
                       <StatusBadge :label="String(value) === 'ACTIVE' ? t('status.active') : t('status.disabled')" :variant="String(value) === 'ACTIVE' ? 'success' : 'neutral'" />
@@ -14105,7 +14565,7 @@ const workbenchGlobalLoading = computed(() => {
                             </div>
                             <div>
                               <dt>{{ t("permission.accountRoles") }}</dt>
-                              <dd>{{ Array.isArray(row.roles) ? row.roles.join(", ") : row.roles || "-" }}</dd>
+                              <dd>{{ joinStringList(row.roles) }}</dd>
                             </div>
                             <div>
                               <dt>{{ t("permission.lastLogin") }}</dt>
@@ -14250,7 +14710,7 @@ const workbenchGlobalLoading = computed(() => {
 
     <DetailDrawer
       :open="memberDrawerOpen"
-      :title="t(`companyMembers.drawer.${memberDrawerMode}`)"
+      :title="memberDrawerMode === 'role' && selectedCompanyRoleCode ? t('companyMembers.drawer.roleEdit') : t(`companyMembers.drawer.${memberDrawerMode}`)"
       :subtitle="selectedCompanyMember?.username || t('companyMembers.drawer.subtitle')"
       width="wide"
       @close="memberDrawerOpen = false"
@@ -14297,22 +14757,46 @@ const workbenchGlobalLoading = computed(() => {
           <strong>{{ selectedCompanyMember.lastLoginAt || "-" }}</strong>
         </div>
       </div>
+      <form v-else-if="memberDrawerMode === 'role'" class="member-drawer-form" @submit.prevent="submitCompanyMemberDrawer">
+        <label :class="{ 'has-error': memberFormErrors.roleName }">
+          <span>{{ t("companyMembers.field.roleName") }}</span>
+          <input v-model="roleForm.roleName" type="text" :placeholder="t('companyMembers.placeholder.roleName')" />
+          <small v-if="memberFormErrors.roleName">{{ t(memberFormErrors.roleName) }}</small>
+        </label>
+        <label>
+          <span>{{ t("companyMembers.field.roleCode") }}</span>
+          <input v-model="roleForm.roleCode" type="text" :readonly="Boolean(selectedCompanyRoleCode)" :placeholder="t('companyMembers.placeholder.roleCode')" />
+        </label>
+        <section class="member-role-select">
+          <strong>{{ t("permission.menuPermissions") }}</strong>
+          <label v-for="menu in companyMenuOptions" :key="menu.code" class="member-check-row">
+            <input v-model="roleForm.menuPermissionKeys" type="checkbox" :value="menu.code" />
+            <span>{{ menu.name }}</span>
+            <em>{{ menu.code }}</em>
+          </label>
+          <p v-if="!companyMenuOptions.length" class="permission-empty">{{ t("common.empty") }}</p>
+        </section>
+        <footer class="member-drawer-actions">
+          <IconButton icon="X" :label="t('common.cancel')" @click="memberDrawerOpen = false" />
+          <IconButton icon="Save" :label="t('common.save')" variant="primary" :loading="companyMemberSaving" type="submit" />
+        </footer>
+      </form>
       <form v-else class="member-drawer-form" @submit.prevent="submitCompanyMemberDrawer">
         <label v-if="memberDrawerMode === 'create'" :class="{ 'has-error': memberFormErrors.username }">
           <span>{{ t("companyMembers.field.account") }}</span>
           <input v-model="memberForm.username" type="text" :placeholder="t('companyMembers.placeholder.account')" />
           <small v-if="memberFormErrors.username">{{ t(memberFormErrors.username) }}</small>
         </label>
-        <label v-if="memberDrawerMode === 'create'">
+        <label v-if="memberDrawerMode === 'create' || memberDrawerMode === 'edit'">
           <span>{{ t("companyMembers.field.name") }}</span>
           <input v-model="memberForm.name" type="text" :placeholder="t('companyMembers.placeholder.name')" />
         </label>
-        <label v-if="memberDrawerMode === 'create'" :class="{ 'has-error': memberFormErrors.phone }">
+        <label v-if="memberDrawerMode === 'create' || memberDrawerMode === 'edit'" :class="{ 'has-error': memberFormErrors.phone }">
           <span>{{ t("companyMembers.field.phone") }}</span>
           <input v-model="memberForm.phone" type="tel" :placeholder="t('companyMembers.placeholder.phone')" />
           <small v-if="memberFormErrors.phone">{{ t(memberFormErrors.phone) }}</small>
         </label>
-        <label v-if="memberDrawerMode === 'create'">
+        <label v-if="memberDrawerMode === 'create' || memberDrawerMode === 'edit'">
           <span>{{ t("companyMembers.field.email") }}</span>
           <input v-model="memberForm.email" type="email" :placeholder="t('companyMembers.placeholder.email')" />
         </label>
@@ -15557,6 +16041,26 @@ const workbenchGlobalLoading = computed(() => {
               </button>
             </div>
             <article v-if="managedShuttleActiveBooking" class="traffic-shuttle-vessel-card traffic-shuttle-vessel-card--tabbed">
+              <header v-if="managedShuttleCustomsContext" class="traffic-shuttle-vessel-card__customs-header">
+                <strong>预约船舶</strong>
+                <div class="icon-action-row">
+                  <IconButton
+                    v-if="managedShuttleCustomsContext.status !== 'DECLARED'"
+                    icon="Send"
+                    label="一键报关"
+                    variant="primary"
+                    :loading="managedShuttleCustomsSaving"
+                    @click="declareManagedShuttleCustoms"
+                  />
+                  <IconButton
+                    v-else
+                    icon="Download"
+                    label="下载附件一"
+                    :loading="managedShuttleCustomsSaving"
+                    @click="downloadManagedShuttleCustoms"
+                  />
+                </div>
+              </header>
               <dl>
                 <div><dt>预约船舶</dt><dd>{{ managedShuttleActiveBooking.vesselName || '-' }} / {{ managedShuttleActiveBooking.vesselImo || '-' }}</dd></div>
                 <div><dt>货物重量（KG）</dt><dd>{{ managedShuttleActiveBooking.cargoWeightKg ?? '-' }}</dd></div>
@@ -15566,6 +16070,7 @@ const workbenchGlobalLoading = computed(() => {
                 <div><dt>抛锚经纬度</dt><dd>{{ managedShuttleActiveBooking.anchoragePosition || '-' }}</dd></div>
                 <div><dt>运费</dt><dd>{{ trafficShuttleMoneyLabel(Number(managedShuttleActiveBooking.freightFee || managedShuttleActiveBooking.amount || 0)) }}</dd></div>
                 <div><dt>报关费</dt><dd>{{ trafficShuttleMoneyLabel(Number(managedShuttleActiveBooking.customsFee || 0)) }}</dd></div>
+                <div v-if="managedShuttleCustomsContext"><dt>报关状态</dt><dd><StatusBadge v-if="managedShuttleCustomsContext.status === 'DECLARED'" label="已报关" variant="success" /><span v-else>--</span></dd></div>
                 <div><dt>吊机费</dt><dd>{{ trafficShuttleMoneyLabel(Number(managedShuttleActiveBooking.craneFee || 0)) }}</dd></div>
               </dl>
             </article>
@@ -15739,7 +16244,7 @@ const workbenchGlobalLoading = computed(() => {
       :title="t(`companyMembers.action.${memberConfirmAction}`)"
       :message="companyMemberConfirmMessage"
       :confirm-label="t('common.confirm')"
-      :danger="memberConfirmAction === 'disable'"
+      :danger="memberConfirmAction === 'disable' || memberConfirmAction === 'disableRole'"
       @close="memberConfirmOpen = false"
       @confirm="submitCompanyMemberConfirm"
     />

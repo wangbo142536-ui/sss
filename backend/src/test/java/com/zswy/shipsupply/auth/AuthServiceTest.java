@@ -68,6 +68,17 @@ class AuthServiceTest {
         assertThat(response.defaultRoute()).isEqualTo("/onboarding/company-profile");
         assertThat(response.redirectTo()).isEqualTo("/onboarding/company-profile");
         verify(authRepository).markCompanyOwner(20L);
+        verify(authRepository).replaceCompanySupplierServiceTypes(10L, List.of());
+    }
+
+    @Test
+    void registerOptionsExposeThreeRolesAndSupplierCapabilities() {
+        RegisterOptionsResponse options = new AuthService(authRepository, passwordHasher, tokenService).registerOptions();
+
+        assertThat(options.companyTypes()).extracting(OptionResponse::code)
+            .containsExactly("SHIP_AGENT", "SUPPLIER", "BARGE_AGENT");
+        assertThat(options.supplierServiceTypes()).extracting(OptionResponse::code)
+            .containsExactly("MATERIAL", "FOOD");
     }
 
     @Test

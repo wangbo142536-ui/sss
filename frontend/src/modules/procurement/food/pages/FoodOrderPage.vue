@@ -6,6 +6,9 @@ import ExpandablePanel from "@/components/ExpandablePanel.vue";
 import IconButton from "@/components/IconButton.vue";
 import StableDateTimeInput from "@/components/StableDateTimeInput.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
+import CustomsDeclarationPanel from "@/modules/customsManagement/components/CustomsDeclarationPanel.vue";
+import { getCustomsContext } from "@/modules/customsManagement/services/customsDeclarationService";
+import type { CustomsDeclarationContext } from "@/modules/customsManagement/types";
 import type { TableColumn } from "@/types/workbench";
 import FoodSettlementDrawer from "../components/FoodSettlementDrawer.vue";
 import { buildFoodOrderExecution } from "../domain/orderExecution";
@@ -47,7 +50,8 @@ const notice = ref("");
 const orders = ref<Array<FoodOrderSummary | FoodSupplierOrderSummary>>([]);
 const detail = ref<FoodOrderDetail>();
 const settlements = ref<FoodSettlement[]>([]);
-const detailTab = ref<"settlement" | "details">("settlement");
+const detailTab = ref<"settlement" | "details" | "customs">("settlement");
+const customsContext = ref<CustomsDeclarationContext | null>(null);
 const selectedExecutionSupplierId = ref<number>();
 const activeSettlement = ref<FoodSettlement>();
 const settlementDrawerOpen = ref(false);
@@ -230,7 +234,7 @@ function openSupplierItems(supplierOrderId: number, supplierName: string) {
   notice.value = `正在查看${supplierName}的订单明细`;
 }
 
-function selectDetailTab(value: "settlement" | "details") {
+function selectDetailTab(value: "settlement" | "details" | "customs") {
   detailTab.value = value;
   if (value === "settlement" && !isSupplier.value) selectedExecutionSupplierId.value = undefined;
 }
@@ -275,6 +279,15 @@ async function loadDetail(id: number) {
         || orderResult.suppliers.find((supplier) => statusActions[supplier.status]?.length)?.supplierOrderId
         || orderResult.suppliers[0]?.supplierOrderId
       : undefined;
+    customsContext.value = null;
+    if (isSupplier.value) {
+      try {
+        const context = await getCustomsContext("FOOD", id);
+        customsContext.value = context.responsibleType === "SUPPLIER" && context.canDeclare ? context : null;
+      } catch {
+        customsContext.value = null;
+      }
+    }
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "订单详情读取失败";
   } finally {
@@ -416,7 +429,9 @@ watch([() => route.params.orderId, () => route.query.supplierOrderId, isSupplier
             </div>
           </section>
 
-          <nav class="purchase-order-detail-tabs purchase-order-detail-tabs--inline" aria-label="采购订单后续页签"><button type="button" :class="{ active: detailTab === 'settlement' }" @click="selectDetailTab('settlement')">订单结算</button><button type="button" :class="{ active: detailTab === 'details' }" @click="selectDetailTab('details')">订单明细</button></nav>
+          <nav class="purchase-order-detail-tabs purchase-order-detail-tabs--inline" aria-label="采购订单后续页签"><button type="button" :class="{ active: detailTab === 'settlement' }" @click="selectDetailTab('settlement')">订单结算</button><button type="button" :class="{ active: detailTab === 'details' }" @click="selectDetailTab('details')">订单明细</button><button v-if="customsContext" type="button" :class="{ active: detailTab === 'customs' }" @click="selectDetailTab('customs')">报关明细</button></nav>
+
+          <CustomsDeclarationPanel v-if="detailTab === 'customs' && customsContext" business-type="FOOD" :purchase-order-id="detail.order.orderId" :initial-context="customsContext" @updated="customsContext = $event" />
 
           <article v-if="detailTab === 'details'" class="purchase-order-section"><div class="purchase-order-section-header"><h3>订单明细</h3><strong class="purchase-order-section-total">总计 {{ detailItemsTotal.toFixed(2) }} {{ detail.order.currency }}</strong></div><DataTable :columns="itemColumns" :rows="detailItems" row-key="itemId"><template #cell-productName="{ value }"><span class="purchase-item-name" :title="String(value || '-')">{{ value || '-' }}</span></template><template #cell-unitPrice="{ row }"><span class="money-stack money-stack--single"><strong>{{ Number(row.unitPrice).toFixed(2) }}</strong></span></template><template #cell-amount="{ row }"><span class="money-stack money-stack--single"><strong>{{ Number(row.amount).toFixed(2) }}</strong></span></template></DataTable></article>
 

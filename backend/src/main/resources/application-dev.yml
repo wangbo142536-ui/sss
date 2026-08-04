@@ -2,3 +2,5 @@ ship-supply:
   procurement:
     food:
       development-open-supplier-scope: true
+  customs:
+    default-attachment-path: "C:/Users/KING富贵儿/Desktop/凯珀/凯珀物资上船通知单.pdf"

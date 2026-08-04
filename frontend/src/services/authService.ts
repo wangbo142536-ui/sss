@@ -8,21 +8,29 @@ import type {
   CompanyProfileStatus,
   LoginRequest,
   QualificationFile,
+  RegisterConfiguration,
   RegisterOption,
-  RegisterRequest
+  RegisterRequest,
+  RegistrationSubmissionRequest
 } from "@/types/auth";
 
 const AUTH_STORAGE_KEY = "ship-supply-auth-session";
 const REGISTER_OPTIONS_ENDPOINT = "/api/auth/register/options";
 const LOGIN_ENDPOINT = "/api/auth/login";
 const REGISTER_ENDPOINT = "/api/auth/register";
+const REGISTER_AND_SUBMIT_ENDPOINT = "/api/auth/register-and-submit";
 const ME_ENDPOINT = "/api/auth/me";
 const COMPANY_PROFILE_ENDPOINT = "/api/onboarding/company-profile";
 const FILE_UPLOAD_ENDPOINT = "/api/files/upload";
 
 const fallbackRegisterOptions: RegisterOption[] = [
   { value: "SHIP_AGENT", labelKey: "page.register.companyTypeShipAgent" },
-  { value: "SUPPLIER", labelKey: "page.register.companyTypeSupplier" }
+  { value: "SUPPLIER", labelKey: "page.register.companyTypeSupplier" },
+  { value: "BARGE_AGENT", labelKey: "page.register.companyTypeBargeAgent" }
+];
+const fallbackSupplierServiceTypes: RegisterOption[] = [
+  { value: "MATERIAL", labelKey: "page.register.supplierServiceMaterial" },
+  { value: "FOOD", labelKey: "page.register.supplierServiceFood" }
 ];
 
 export class ApiError extends Error {
@@ -169,41 +177,33 @@ function normalizeSession(payload: unknown): AuthSession {
   };
 }
 
-function normalizeRegisterOptions(payload: unknown): RegisterOption[] {
-  const unwrapped = unwrapPayload(payload);
-  if (!isRecord(unwrapped)) {
-    return fallbackRegisterOptions;
-  }
-
-  const rawTypes = unwrapped.companyTypes ?? unwrapped.enterpriseTypes ?? unwrapped.roles;
-  if (!Array.isArray(rawTypes)) {
-    return fallbackRegisterOptions;
-  }
-
-  const options = rawTypes
+function normalizeOptionList(value: unknown, fallback: RegisterOption[]): RegisterOption[] {
+  if (!Array.isArray(value)) return fallback;
+  const options = value
     .map((item) => {
-      if (typeof item === "string") {
-        return { value: item };
-      }
-
-      if (!isRecord(item)) {
-        return null;
-      }
-
-      const value = readString(item, ["value", "code", "type", "roleCode"]);
-      if (!value) {
-        return null;
-      }
-
+      if (typeof item === "string") return { value: item };
+      if (!isRecord(item)) return null;
+      const optionValue = readString(item, ["value", "code", "type", "roleCode"]);
+      if (!optionValue) return null;
       return {
-        value,
+        value: optionValue,
         label: readString(item, ["label", "name", "nameCn", "text"]) || undefined,
         labelKey: readString(item, ["labelKey", "i18nKey"]) || undefined
       };
     })
     .filter(Boolean) as RegisterOption[];
+  return options.length ? options : fallback;
+}
 
-  return options.length ? options : fallbackRegisterOptions;
+function normalizeRegisterOptions(payload: unknown): RegisterConfiguration {
+  const unwrapped = unwrapPayload(payload);
+  if (!isRecord(unwrapped)) {
+    return { companyTypes: fallbackRegisterOptions, supplierServiceTypes: fallbackSupplierServiceTypes };
+  }
+  return {
+    companyTypes: normalizeOptionList(unwrapped.companyTypes ?? unwrapped.enterpriseTypes ?? unwrapped.roles, fallbackRegisterOptions),
+    supplierServiceTypes: normalizeOptionList(unwrapped.supplierServiceTypes, fallbackSupplierServiceTypes)
+  };
 }
 
 function normalizeProfile(payload: unknown): CompanyProfile | null {
@@ -234,7 +234,8 @@ function normalizeProfile(payload: unknown): CompanyProfile | null {
     contactEmail: readString(unwrapped, ["contactEmail", "email"]) || readString(company, ["contactEmail", "email"]),
     qualificationFiles: files,
     status: normalizeProfileStatus(readString(unwrapped, ["status", "profileStatus", "reviewStatus", "companyStatus"]) || readString(company, ["status", "profileStatus", "reviewStatus"])),
-    reviewReason: readString(unwrapped, ["reviewReason", "rejectReason", "rejectedReason"]) || undefined
+    reviewReason: readString(unwrapped, ["reviewReason", "rejectReason", "rejectedReason"]) || undefined,
+    supplierServiceTypes: readArray(company, ["supplierServiceTypes", "serviceTypes"])
   };
 }
 
@@ -290,12 +291,26 @@ export async function register(request: RegisterRequest): Promise<AuthSession> {
   }
 }
 
+export async function registerAndSubmit(request: RegistrationSubmissionRequest, files: File[]): Promise<AuthSession> {
+  const formData = new FormData();
+  formData.append("request", new Blob([JSON.stringify(request)], { type: "application/json" }));
+  files.forEach((file) => formData.append("files", file));
+  const response = await fetch(REGISTER_AND_SUBMIT_ENDPOINT, { method: "POST", body: formData });
+  const payload = await readJson(response);
+  if (!response.ok) throw createApiError(response, payload);
+  return normalizeSession(payload);
+}
+
 export async function getRegisterOptions(): Promise<RegisterOption[]> {
+  return (await getRegisterConfiguration()).companyTypes;
+}
+
+export async function getRegisterConfiguration(): Promise<RegisterConfiguration> {
   try {
     const payload = await requestJson(REGISTER_OPTIONS_ENDPOINT, { method: "GET" });
     return normalizeRegisterOptions(payload);
   } catch {
-    return fallbackRegisterOptions;
+    return { companyTypes: fallbackRegisterOptions, supplierServiceTypes: fallbackSupplierServiceTypes };
   }
 }
 

@@ -8,6 +8,7 @@ export const shopEndpoints = {
   skuDetail: (skuId: string | number) => `/api/shop/skus/${encodeURIComponent(String(skuId))}`,
   shelfStatus: (skuId: string | number) => `/api/shop/skus/${encodeURIComponent(String(skuId))}/shelf-status`,
   importPreview: "/api/shop/skus/import-preview",
+  importTemplate: "/api/shop/skus/import-template",
   importConfirm: "/api/shop/skus/import-confirm",
   resolveException: (skuId: string | number) => `/api/shop/skus/${encodeURIComponent(String(skuId))}/exceptions/resolve`
 } as const;
@@ -123,6 +124,21 @@ export function previewShopSkuImport(formData: FormData) {
     method: "POST",
     body: formData
   });
+}
+
+export async function downloadShopSkuImportTemplate() {
+  const session = getAuthSession();
+  const response = await fetch(shopEndpoints.importTemplate, {
+    headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {}
+  });
+  if (!response.ok) throw new ApiError(`HTTP_${response.status}`, response.status, await response.text());
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "商品导入模板-物料与伙食.xlsx";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function confirmShopSkuImport(payload: ShopPayload) {

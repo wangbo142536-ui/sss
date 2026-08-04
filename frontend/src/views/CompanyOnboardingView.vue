@@ -8,10 +8,12 @@ import { t } from "@/i18n";
 import {
   clearAuthSession,
   getCompanyProfile,
-  getRegisterOptions,
+  getRegisterConfiguration,
   getSafeRequestErrorKey,
   isAuthExpiredError,
+  registerAndSubmit,
   resolveAuthRoute,
+  saveAuthSession,
   submitCompanyProfile,
   uploadQualificationFile
 } from "@/services/authService";
@@ -23,14 +25,22 @@ interface UploadItem extends QualificationFile {
   localId: string;
   status: UploadStatus;
   errorKey?: string;
+  sourceFile?: File;
 }
+
+const props = defineProps<{ registrationMode?: boolean }>();
 
 const router = useRouter();
 const loading = ref(false);
 const profileLoading = ref(false);
 const isNightMode = ref(false);
 const companyTypeOptions = ref<RegisterOption[]>([]);
-const companyType = ref("SUPPLIER");
+const supplierServiceTypeOptions = ref<RegisterOption[]>([]);
+const supplierServiceTypes = ref<string[]>([]);
+const account = ref("");
+const password = ref("");
+const confirmPassword = ref("");
+const companyType = ref("SHIP_AGENT");
 const companyName = ref("");
 const unifiedSocialCreditCode = ref("");
 const contactName = ref("");
@@ -59,17 +69,19 @@ const getCompanyTypeLabel = (option: RegisterOption) => {
 };
 
 const setProfileOptions = async () => {
-  const options = await getRegisterOptions();
-  companyTypeOptions.value = options.filter((option) => option.value === "SHIP_AGENT" || option.value === "SUPPLIER");
+  const options = await getRegisterConfiguration();
+  companyTypeOptions.value = options.companyTypes.filter((option) => ["SHIP_AGENT", "SUPPLIER", "BARGE_AGENT"].includes(option.value));
+  supplierServiceTypeOptions.value = options.supplierServiceTypes;
   if (!companyTypeOptions.value.length) {
     companyTypeOptions.value = [
+      { value: "SHIP_AGENT", labelKey: "page.register.companyTypeShipAgent" },
       { value: "SUPPLIER", labelKey: "page.register.companyTypeSupplier" },
-      { value: "SHIP_AGENT", labelKey: "page.register.companyTypeShipAgent" }
+      { value: "BARGE_AGENT", labelKey: "page.register.companyTypeBargeAgent" }
     ];
   }
 
   if (!companyTypeOptions.value.some((option) => option.value === companyType.value)) {
-    companyType.value = companyTypeOptions.value.find((option) => option.value === "SUPPLIER")?.value ?? companyTypeOptions.value[0]?.value ?? "SUPPLIER";
+    companyType.value = companyTypeOptions.value.find((option) => option.value === "SHIP_AGENT")?.value ?? companyTypeOptions.value[0]?.value ?? "SHIP_AGENT";
   }
 };
 
@@ -95,12 +107,12 @@ const updateFile = (localId: string, patch: Partial<UploadItem>) => {
 
 const isSupportedCompanyType = (value: string) => companyTypeOptions.value.some((option) => option.value === value);
 
-const resolveCompanyTypeValue = (value: string, status: CompanyProfileStatus) => {
-  if (status !== "PROFILE_REQUIRED" && value && isSupportedCompanyType(value)) {
+const resolveCompanyTypeValue = (value: string, _status: CompanyProfileStatus) => {
+  if (value && isSupportedCompanyType(value)) {
     return value;
   }
 
-  return isSupportedCompanyType("SUPPLIER") ? "SUPPLIER" : (companyTypeOptions.value[0]?.value ?? "SUPPLIER");
+  return isSupportedCompanyType("SHIP_AGENT") ? "SHIP_AGENT" : (companyTypeOptions.value[0]?.value ?? "SHIP_AGENT");
 };
 
 const isTemporaryCompanyName = (value: string) => /^待完善企业(?:[-_].*)?$/.test(value.trim());
@@ -108,6 +120,11 @@ const isTemporaryCompanyName = (value: string) => /^待完善企业(?:[-_].*)?$/
 onMounted(async () => {
   profileLoading.value = true;
   await setProfileOptions();
+
+  if (props.registrationMode) {
+    profileLoading.value = false;
+    return;
+  }
 
   try {
     const profile = await getCompanyProfile();
@@ -122,6 +139,7 @@ onMounted(async () => {
       contactName.value = profile.contactName || "";
       contactPhone.value = profile.contactPhone || "";
       contactEmail.value = profile.contactEmail || "";
+      supplierServiceTypes.value = profile.supplierServiceTypes || [];
       files.value = profile.qualificationFiles.map((file, index) => ({
         ...file,
         localId: `${Date.now()}-${index}`,
@@ -142,6 +160,18 @@ const addFiles = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   const selectedFiles = Array.from(input.files ?? []);
   input.value = "";
+
+  if (props.registrationMode) {
+    const pendingFiles = selectedFiles.map((selectedFile) => ({
+      localId: `qualification-${++uploadSequence}`,
+      name: selectedFile.name,
+      status: "ready" as const,
+      sourceFile: selectedFile
+    }));
+    files.value = [...files.value, ...pendingFiles];
+    if (fieldErrors.value.files) fieldErrors.value = { ...fieldErrors.value, files: "" };
+    return;
+  }
 
   for (const selectedFile of selectedFiles) {
     uploadSequence += 1;
@@ -179,7 +209,15 @@ const removeFile = (localId: string) => {
 const validate = () => {
   const errors: Record<string, string> = {};
 
+  if (props.registrationMode) {
+    if (!account.value.trim()) errors.account = "page.register.accountRequired";
+    if (!password.value) errors.password = "page.register.passwordRequired";
+    if (!confirmPassword.value) errors.confirmPassword = "page.register.confirmPasswordRequired";
+    else if (password.value !== confirmPassword.value) errors.confirmPassword = "page.register.passwordMismatch";
+  }
+
   if (!companyType.value) errors.companyType = "page.onboarding.companyTypeRequired";
+  if (companyType.value === "SUPPLIER" && !supplierServiceTypes.value.length) errors.supplierServiceTypes = "page.register.supplierServiceRequired";
   if (!companyName.value.trim()) errors.companyName = "page.onboarding.companyNameRequired";
   if (!unifiedSocialCreditCode.value.trim()) errors.creditCode = "page.onboarding.creditCodeRequired";
   if (!contactName.value.trim()) errors.contactName = "page.onboarding.contactNameRequired";
@@ -187,7 +225,7 @@ const validate = () => {
   if (!contactEmail.value.trim()) errors.contactEmail = "page.onboarding.contactEmailRequired";
   if (!files.value.length) errors.files = "page.onboarding.fileRequired";
   else if (files.value.some((file) => file.status === "uploading")) errors.files = "page.onboarding.fileUploading";
-  else if (!files.value.some((file) => file.status === "uploaded")) errors.files = "page.onboarding.fileUploadRequired";
+  else if (!files.value.some((file) => props.registrationMode ? file.status === "ready" : file.status === "uploaded")) errors.files = "page.onboarding.fileUploadRequired";
 
   fieldErrors.value = errors;
   return !Object.keys(errors).length;
@@ -203,6 +241,24 @@ const submit = async () => {
 
   loading.value = true;
   try {
+    if (props.registrationMode) {
+      const session = await registerAndSubmit({
+        account: account.value.trim(),
+        password: password.value,
+        confirmPassword: confirmPassword.value,
+        companyType: companyType.value,
+        supplierServiceTypes: companyType.value === "SUPPLIER" ? supplierServiceTypes.value : [],
+        companyName: companyName.value.trim(),
+        unifiedSocialCreditCode: unifiedSocialCreditCode.value.trim(),
+        contactName: contactName.value.trim(),
+        contactPhone: contactPhone.value.trim(),
+        contactEmail: contactEmail.value.trim()
+      }, files.value.flatMap((file) => file.sourceFile ? [file.sourceFile] : []));
+      saveAuthSession(session);
+      statusMessageKey.value = "page.onboarding.submitSuccess";
+      await router.push("/onboarding/review-status");
+      return;
+    }
     const submittedProfile = await submitCompanyProfile({
       companyType: companyType.value,
       companyName: companyName.value.trim(),
@@ -211,7 +267,8 @@ const submit = async () => {
       contactPhone: contactPhone.value.trim(),
       contactEmail: contactEmail.value.trim(),
       qualificationFileIds: files.value.filter((file) => file.status === "uploaded").map((file) => file.fileId ?? file.id ?? file.name),
-      qualificationFiles: files.value.filter((file) => file.status === "uploaded")
+      qualificationFiles: files.value.filter((file) => file.status === "uploaded"),
+      supplierServiceTypes: companyType.value === "SUPPLIER" ? supplierServiceTypes.value : []
     });
     profileStatus.value = submittedProfile?.status || "PENDING_REVIEW";
     reviewReason.value = submittedProfile?.reviewReason || "";
@@ -288,21 +345,55 @@ const enterWorkbench = async () => {
               <span>{{ t("page.onboarding.activeDescription") }}</span>
             </div>
 
-            <label class="form-field" :class="{ 'has-error': fieldErrors.companyType }">
-              <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.companyType") }}</span>
-              <select
-                v-model="companyType"
-                :disabled="activeStatuses.has(profileStatus) || reauthRequired"
-                required
-                :aria-invalid="Boolean(fieldErrors.companyType)"
-                :aria-describedby="fieldErrors.companyType ? 'onboarding-company-type-error' : undefined"
-              >
-                <option v-for="option in companyTypeOptions" :key="option.value" :value="option.value">
-                  {{ getCompanyTypeLabel(option) }}
-                </option>
-              </select>
+            <fieldset class="onboarding-role-field" :class="{ 'has-error': fieldErrors.companyType }">
+              <legend class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.companyType") }}</legend>
+              <div class="onboarding-role-options">
+                <label v-for="option in companyTypeOptions" :key="option.value" :class="{ selected: companyType === option.value }">
+                  <input
+                    v-model="companyType"
+                    type="radio"
+                    name="companyType"
+                    :value="option.value"
+                    :disabled="activeStatuses.has(profileStatus) || reauthRequired"
+                    @change="fieldErrors = { ...fieldErrors, companyType: '' }"
+                  />
+                  <span>{{ getCompanyTypeLabel(option) }}</span>
+                </label>
+              </div>
               <small v-if="fieldErrors.companyType" id="onboarding-company-type-error">{{ t(fieldErrors.companyType) }}</small>
-            </label>
+            </fieldset>
+
+            <fieldset v-if="companyType === 'SUPPLIER'" class="onboarding-service-field" :class="{ 'has-error': fieldErrors.supplierServiceTypes }">
+              <legend class="required-label"><i aria-hidden="true">*</i>{{ t("page.register.supplierServiceType") }}</legend>
+              <div>
+                <label v-for="option in supplierServiceTypeOptions" :key="option.value">
+                  <input v-model="supplierServiceTypes" type="checkbox" :value="option.value" :disabled="activeStatuses.has(profileStatus) || reauthRequired" />
+                  <span>{{ getCompanyTypeLabel(option) }}</span>
+                </label>
+              </div>
+              <small v-if="fieldErrors.supplierServiceTypes">{{ t(fieldErrors.supplierServiceTypes) }}</small>
+            </fieldset>
+
+            <template v-if="props.registrationMode">
+              <label class="form-field" :class="{ 'has-error': fieldErrors.account }">
+                <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.register.account") }}</span>
+                <input v-model="account" type="text" autocomplete="username" required :placeholder="t('page.register.accountPlaceholder')" />
+                <small v-if="fieldErrors.account">{{ t(fieldErrors.account) }}</small>
+              </label>
+
+              <div class="form-grid">
+                <label class="form-field" :class="{ 'has-error': fieldErrors.password }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.register.password") }}</span>
+                  <input v-model="password" type="password" autocomplete="new-password" required :placeholder="t('page.register.passwordPlaceholder')" />
+                  <small v-if="fieldErrors.password">{{ t(fieldErrors.password) }}</small>
+                </label>
+                <label class="form-field" :class="{ 'has-error': fieldErrors.confirmPassword }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.register.confirmPassword") }}</span>
+                  <input v-model="confirmPassword" type="password" autocomplete="new-password" required :placeholder="t('page.register.confirmPasswordPlaceholder')" />
+                  <small v-if="fieldErrors.confirmPassword">{{ t(fieldErrors.confirmPassword) }}</small>
+                </label>
+              </div>
+            </template>
 
             <label class="form-field" :class="{ 'has-error': fieldErrors.companyName }">
               <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.companyName") }}</span>
@@ -624,6 +715,119 @@ const enterWorkbench = async () => {
 
 .form-field {
   gap: 7px;
+}
+
+.onboarding-role-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.onboarding-role-field legend {
+  margin-bottom: 7px;
+  color: var(--color-text-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.onboarding-role-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.onboarding-role-options label {
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-main);
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.onboarding-role-options label:hover,
+.onboarding-role-options label:focus-within {
+  border-color: var(--color-primary-500);
+}
+
+.onboarding-role-options label.selected {
+  border-color: var(--color-primary-700);
+  color: var(--color-primary-800);
+  background: var(--color-primary-050);
+}
+
+.onboarding-role-options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.onboarding-role-options label:has(input:disabled) {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.onboarding-role-field > small {
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.onboarding-service-field {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.onboarding-service-field legend {
+  margin-bottom: 7px;
+  color: var(--color-text-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.onboarding-service-field > div {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 22px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.onboarding-service-field label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-main);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.onboarding-service-field input {
+  accent-color: var(--color-primary-700);
+}
+
+.onboarding-service-field small {
+  color: var(--color-danger);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .form-field span,

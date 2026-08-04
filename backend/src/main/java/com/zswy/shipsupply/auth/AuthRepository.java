@@ -163,6 +163,25 @@ public class AuthRepository {
         );
     }
 
+    public void replaceCompanySupplierServiceTypes(long companyId, List<String> serviceTypes) {
+        jdbcTemplate.update("DELETE FROM company_supplier_service_type WHERE company_id = ?", companyId);
+        for (String serviceType : serviceTypes) {
+            jdbcTemplate.update(
+                "INSERT INTO company_supplier_service_type (company_id, service_type) VALUES (?, ?)",
+                companyId,
+                serviceType
+            );
+        }
+    }
+
+    public List<String> supplierServiceTypesForCompany(long companyId) {
+        return jdbcTemplate.query(
+            "SELECT service_type FROM company_supplier_service_type WHERE company_id = ? ORDER BY service_type",
+            (rs, rowNum) -> rs.getString("service_type"),
+            companyId
+        );
+    }
+
     public boolean isCompanyOwner(long userId) {
         Integer owner = jdbcTemplate.queryForObject(
             "SELECT is_company_owner FROM sys_user WHERE id = ?",
@@ -315,6 +334,13 @@ public class AuthRepository {
         );
     }
 
+    public void revokeUserTokens(long userId) {
+        jdbcTemplate.update(
+            "UPDATE sys_auth_token SET status = 'REVOKED' WHERE user_id = ? AND status = 'ACTIVE'",
+            userId
+        );
+    }
+
     public void updatePassword(long userId, String passwordHash) {
         jdbcTemplate.update(
             "UPDATE sys_user SET password_hash = ?, last_password_reset_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -445,7 +471,7 @@ public class AuthRepository {
             roleCode,
             "Company Admin"
         );
-        replaceRoleMenuPermissions(companyId, roleCode, companyMenuCodes());
+        replaceRoleMenuPermissions(companyId, roleCode, companyMenuCodes(companyId));
         return roleCode;
     }
 
@@ -497,7 +523,7 @@ public class AuthRepository {
     }
 
     public CompanyResponse getCompany(long companyId) {
-        return jdbcTemplate.queryForObject(
+        CompanyResponse company = jdbcTemplate.queryForObject(
             """
             SELECT id, company_name, company_type, unified_social_credit_code, contact_name, contact_phone, contact_email, status
             FROM company
@@ -514,6 +540,17 @@ public class AuthRepository {
                 rs.getString("status")
             ),
             companyId
+        );
+        return new CompanyResponse(
+            company.id(),
+            company.companyName(),
+            company.companyType(),
+            company.unifiedSocialCreditCode(),
+            company.contactName(),
+            company.contactPhone(),
+            company.contactEmail(),
+            company.status(),
+            supplierServiceTypesForCompany(companyId)
         );
     }
 
@@ -567,7 +604,7 @@ public class AuthRepository {
     }
 
     public List<MenuResponse> menusForUser(long userId) {
-        return jdbcTemplate.query(
+        List<MenuResponse> menus = jdbcTemplate.query(
             """
             SELECT DISTINCT menu.menu_code, menu.menu_name, menu.route_path, menu.icon,
                    menu.parent_code, menu.sort_order, menu.required_permission, menu.visible_roles
@@ -600,6 +637,8 @@ public class AuthRepository {
             userId,
             userId
         );
+        AuthenticatedUser user = getUserById(userId);
+        return filterMenusForCompany(menus, getCompany(user.companyId()));
     }
 
     public List<MenuResponse> companyPermissionMenus() {
@@ -627,6 +666,10 @@ public class AuthRepository {
         );
     }
 
+    public List<MenuResponse> companyPermissionMenus(long companyId) {
+        return filterMenusForCompany(companyPermissionMenus(), getCompany(companyId));
+    }
+
     public List<String> companyMenuCodes() {
         return jdbcTemplate.query(
             """
@@ -639,6 +682,10 @@ public class AuthRepository {
             """,
             (rs, rowNum) -> rs.getString("menu_code")
         );
+    }
+
+    public List<String> companyMenuCodes(long companyId) {
+        return companyPermissionMenus(companyId).stream().map(MenuResponse::menuCode).toList();
     }
 
     public List<String> roleMenuPermissionKeys(long companyId, String roleCode) {
@@ -927,6 +974,101 @@ public class AuthRepository {
             ));
         }
         return withRoles;
+    }
+
+    public List<PlatformCompanyAccountsResponse> platformCompanyAccounts() {
+        List<CompanyResponse> companies = jdbcTemplate.query(
+            """
+            SELECT id, company_name, company_type, unified_social_credit_code,
+                   contact_name, contact_phone, contact_email, status
+            FROM company
+            WHERE company_type <> 'PLATFORM_ADMIN'
+            ORDER BY id DESC
+            """,
+            (rs, rowNum) -> new CompanyResponse(
+                rs.getLong("id"),
+                rs.getString("company_name"),
+                rs.getString("company_type"),
+                rs.getString("unified_social_credit_code"),
+                rs.getString("contact_name"),
+                rs.getString("contact_phone"),
+                rs.getString("contact_email"),
+                rs.getString("status")
+            )
+        );
+        List<PlatformCompanyAccountsResponse> result = new ArrayList<>();
+        for (CompanyResponse company : companies) {
+            List<PlatformAccountResponse> accounts = platformAccountsForCompany(company.id());
+            int activeAccountCount = (int) accounts.stream().filter(account -> "ACTIVE".equals(account.status())).count();
+            result.add(new PlatformCompanyAccountsResponse(
+                company.id(),
+                company.companyName(),
+                company.companyType(),
+                supplierServiceTypesForCompany(company.id()),
+                company.status(),
+                accounts.size(),
+                activeAccountCount,
+                accounts
+            ));
+        }
+        return result;
+    }
+
+    public Optional<PlatformAccountResponse> findPlatformAccount(long userId) {
+        return platformAccountQuery("WHERE user.id = ? AND company.company_type <> 'PLATFORM_ADMIN'", userId)
+            .stream()
+            .findFirst();
+    }
+
+    private List<PlatformAccountResponse> platformAccountsForCompany(long companyId) {
+        return platformAccountQuery("WHERE user.company_id = ?", companyId);
+    }
+
+    private List<PlatformAccountResponse> platformAccountQuery(String whereClause, long value) {
+        List<PlatformAccountResponse> accounts = jdbcTemplate.query(
+            """
+            SELECT user.id, user.username, user.full_name, user.phone, user.email,
+                   user.user_type, user.status, user.is_company_owner, user.created_at,
+                   (
+                     SELECT MAX(log.created_at)
+                     FROM operation_log log
+                     WHERE log.operator_user_id = user.id AND log.operation_type = 'LOGIN'
+                   ) AS last_login_at
+            FROM sys_user user
+            JOIN company company ON company.id = user.company_id
+            """ + whereClause + " ORDER BY user.is_company_owner DESC, user.id ASC",
+            (rs, rowNum) -> new PlatformAccountResponse(
+                rs.getLong("id"),
+                rs.getString("username"),
+                rs.getString("full_name"),
+                rs.getString("phone"),
+                rs.getString("email"),
+                rs.getString("user_type"),
+                rs.getInt("is_company_owner") == 1 ? "REGISTERED_ADMIN" : "INTERNAL_CREATED",
+                rs.getInt("is_company_owner") == 1,
+                List.of(),
+                rs.getString("status"),
+                timestampToString(rs.getTimestamp("created_at")),
+                timestampToString(rs.getTimestamp("last_login_at"))
+            ),
+            value
+        );
+        return accounts.stream()
+            .map(account -> new PlatformAccountResponse(
+                account.userId(),
+                account.username(),
+                account.name(),
+                account.phone(),
+                account.email(),
+                account.userType(),
+                account.accountSource(),
+                account.isCompanyOwner(),
+                roleCodesForUser(account.userId()),
+                account.status(),
+                account.createdAt(),
+                account.lastLoginAt()
+            ))
+            .toList();
     }
 
     public List<PermissionResponse> permissionsForRole(String roleCode) {
@@ -1268,6 +1410,7 @@ public class AuthRepository {
                 registration.reviewedAt(),
                 registration.reviewerUserId(),
                 registration.reviewReason(),
+                supplierServiceTypesForCompany(registration.companyId()),
                 qualificationsForCompany(registration.companyId())
             ));
         }
@@ -1305,6 +1448,23 @@ public class AuthRepository {
             }
         );
         return rolesByUserId;
+    }
+
+    private List<MenuResponse> filterMenusForCompany(List<MenuResponse> menus, CompanyResponse company) {
+        if (!"SUPPLIER".equals(company.companyType()) || company.supplierServiceTypes().isEmpty()) {
+            return menus;
+        }
+        boolean material = company.supplierServiceTypes().contains("MATERIAL");
+        boolean food = company.supplierServiceTypes().contains("FOOD");
+        return menus.stream()
+            .filter(menu -> {
+                boolean materialMenu = "MATERIAL_PROCUREMENT_GROUP".equals(menu.menuCode())
+                    || "MATERIAL_PROCUREMENT_GROUP".equals(menu.parentCode());
+                boolean foodMenu = "FOOD_PROCUREMENT_GROUP".equals(menu.menuCode())
+                    || "FOOD_PROCUREMENT_GROUP".equals(menu.parentCode());
+                return (!materialMenu || material) && (!foodMenu || food);
+            })
+            .toList();
     }
 
     private String textOrNull(String value) {

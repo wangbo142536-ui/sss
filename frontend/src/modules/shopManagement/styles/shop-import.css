@@ -1,0 +1,25 @@
+.shop-import-type-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.shop-import-type-tabs button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid rgba(83, 151, 204, 0.32);
+  border-radius: 8px;
+  color: #43627f;
+  background: #f7fbff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.shop-import-type-tabs button.active {
+  border-color: #1484d6;
+  color: #fff;
+  background: #1484d6;
+}

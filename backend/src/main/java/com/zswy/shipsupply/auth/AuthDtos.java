@@ -16,7 +16,39 @@ record RegisterRequest(
     String userType,
     String username,
     String password,
-    String confirmPassword
+    String confirmPassword,
+    List<String> supplierServiceTypes
+) {
+    RegisterRequest(
+        String account,
+        String companyName,
+        String company,
+        String contactName,
+        String contact,
+        String phone,
+        String contactPhone,
+        String companyType,
+        String userType,
+        String username,
+        String password,
+        String confirmPassword
+    ) {
+        this(account, companyName, company, contactName, contact, phone, contactPhone, companyType, userType, username,
+            password, confirmPassword, List.of());
+    }
+}
+
+record RegistrationSubmissionRequest(
+    String account,
+    String password,
+    String confirmPassword,
+    String companyType,
+    List<String> supplierServiceTypes,
+    String companyName,
+    String unifiedSocialCreditCode,
+    String contactName,
+    String contactPhone,
+    String contactEmail
 ) {
 }
 
@@ -67,8 +99,21 @@ record CompanyResponse(
     String contactName,
     String contactPhone,
     String contactEmail,
-    String status
+    String status,
+    List<String> supplierServiceTypes
 ) {
+    CompanyResponse(
+        Long id,
+        String companyName,
+        String companyType,
+        String unifiedSocialCreditCode,
+        String contactName,
+        String contactPhone,
+        String contactEmail,
+        String status
+    ) {
+        this(id, companyName, companyType, unifiedSocialCreditCode, contactName, contactPhone, contactEmail, status, List.of());
+    }
 }
 
 record RoleResponse(
@@ -176,8 +221,16 @@ record OptionResponse(
 record RegisterOptionsResponse(
     List<OptionResponse> companyTypes,
     List<OptionResponse> userTypes,
-    List<OptionResponse> qualificationTypes
+    List<OptionResponse> qualificationTypes,
+    List<OptionResponse> supplierServiceTypes
 ) {
+    RegisterOptionsResponse(
+        List<OptionResponse> companyTypes,
+        List<OptionResponse> userTypes,
+        List<OptionResponse> qualificationTypes
+    ) {
+        this(companyTypes, userTypes, qualificationTypes, List.of());
+    }
 }
 
 record RolePermissionUpdateRequest(
@@ -284,7 +337,63 @@ record CompanyProfileRequest(
     String contactName,
     String contactPhone,
     String contactEmail,
-    List<String> qualificationFileIds
+    List<String> qualificationFileIds,
+    List<String> supplierServiceTypes
+) {
+    CompanyProfileRequest(
+        String companyType,
+        String companyName,
+        String unifiedSocialCreditCode,
+        String contactName,
+        String contactPhone,
+        String contactEmail,
+        List<String> qualificationFileIds
+    ) {
+        this(companyType, companyName, unifiedSocialCreditCode, contactName, contactPhone, contactEmail,
+            qualificationFileIds, List.of());
+    }
+}
+
+record PlatformAccountStatusRequest(
+    String status,
+    String reason
+) {
+}
+
+record PlatformAccountResponse(
+    Long userId,
+    String username,
+    String name,
+    String phone,
+    String email,
+    String userType,
+    String accountSource,
+    boolean isCompanyOwner,
+    List<String> roleCodes,
+    String status,
+    String createdAt,
+    String lastLoginAt
+) {
+}
+
+record PlatformCompanyAccountsResponse(
+    Long companyId,
+    String companyName,
+    String companyType,
+    List<String> supplierServiceTypes,
+    String companyStatus,
+    int accountCount,
+    int activeAccountCount,
+    List<PlatformAccountResponse> accounts
+) {
+}
+
+record PlatformCompanyAccountPageResponse(
+    List<PlatformCompanyAccountsResponse> items,
+    int page,
+    int pageSize,
+    long totalCompanies,
+    long totalAccounts
 ) {
 }
 
@@ -354,8 +463,34 @@ record RegistrationReviewResponse(
     String reviewedAt,
     Long reviewerUserId,
     String reviewReason,
+    List<String> supplierServiceTypes,
     List<QualificationFileResponse> qualifications
 ) {
+    RegistrationReviewResponse(
+        Long id,
+        Long userId,
+        Long companyId,
+        String username,
+        String phone,
+        String companyName,
+        String companyType,
+        String contactName,
+        String contactPhone,
+        String contactEmail,
+        String status,
+        String accountStatus,
+        String companyStatus,
+        String profileStatus,
+        String submittedAt,
+        String reviewedAt,
+        Long reviewerUserId,
+        String reviewReason,
+        List<QualificationFileResponse> qualifications
+    ) {
+        this(id, userId, companyId, username, phone, companyName, companyType, contactName, contactPhone, contactEmail,
+            status, accountStatus, companyStatus, profileStatus, submittedAt, reviewedAt, reviewerUserId, reviewReason,
+            List.of(), qualifications);
+    }
 }
 
 record RejectRegistrationRequest(

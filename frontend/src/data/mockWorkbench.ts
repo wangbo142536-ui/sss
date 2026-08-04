@@ -80,7 +80,16 @@ export const menuItems: WorkbenchMenuItem[] = [
       { key: "bargeSettlements", labelKey: "nav.settlements", route: "/traffic-boat/settlements", icon: "ST", sortOrder: 10, roles: ["admin", "operator", "supplier"] }
     ]
   },
-  { key: "customsServices", labelKey: "nav.customsServices", route: "/customs-services", icon: "CS", sortOrder: 30, roles },
+  {
+    key: "customsServices",
+    labelKey: "nav.customsServices",
+    icon: "CS",
+    sortOrder: 30,
+    roles,
+    children: [
+      { key: "customsDeclarations", labelKey: "nav.customsDeclarations", route: "/customs-services/declarations", icon: "CD", sortOrder: 0, roles }
+    ]
+  },
   { key: "portShippingServices", labelKey: "nav.portShippingServices", route: "/port-shipping-services", icon: "PH", sortOrder: 35, roles },
   {
     key: "regulatoryServices",
