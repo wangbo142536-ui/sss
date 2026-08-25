@@ -183,6 +183,9 @@ public class CompanyMemberService {
         Long userId = tokenService.requireUserId(authorizationHeader);
         AuthenticatedUser user = authRepository.getUserById(userId);
         CompanyResponse company = authRepository.getCompany(user.companyId());
+        if ("PLATFORM_ADMIN".equals(user.userType()) || "PLATFORM_ADMIN".equals(company.companyType())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "PLATFORM_ADMIN_MUST_USE_PLATFORM_ACCOUNT_MANAGEMENT");
+        }
         boolean owner = authRepository.isCompanyOwner(userId);
         if (!ACTIVE.equals(user.status()) || !ACTIVE.equals(company.status())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "COMPANY_NOT_ACTIVE");

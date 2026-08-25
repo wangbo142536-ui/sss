@@ -54,6 +54,7 @@ const rowIdentifier = (row: T) => {
           <th
             v-for="column in props.columns"
             :key="column.key"
+            :data-column-key="column.key"
             :style="{ width: column.width, textAlign: column.align || 'left' }"
           >
             <slot :name="`head-${column.key}`" :column="column">
@@ -93,6 +94,7 @@ const rowIdentifier = (row: T) => {
             <td
               v-for="column in props.columns"
               :key="column.key"
+              :data-column-key="column.key"
               :style="{ textAlign: column.align || 'left' }"
             >
               <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]">

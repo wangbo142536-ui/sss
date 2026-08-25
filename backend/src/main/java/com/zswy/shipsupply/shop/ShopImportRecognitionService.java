@@ -27,6 +27,13 @@ public class ShopImportRecognitionService {
     private static final Set<String> STOP_WORDS = Set.of(
         "of", "and", "for", "with", "the", "a", "an", "type", "model", "commodity", "specification"
     );
+    private static final Set<String> STRONG_CATEGORY_KEYWORDS = Set.of(
+        "plier", "spanner", "wrench", "riveter", "hammer", "screwdriver", "chisel", "punch", "drill", "grinder"
+    );
+    private static final List<String> OFFICIAL_IMPA_CATEGORY_CODES = List.of(
+        "11", "15", "17", "19", "21", "23", "25", "27", "31", "33", "35", "37", "39", "45", "47", "49",
+        "51", "53", "55", "59", "61", "63", "65", "67", "69", "71", "73", "75", "77", "79", "81", "85", "87"
+    );
 
     private final ImpaItemRepository impaItemRepository;
     private final MaterialNameNormalizer normalizer;
@@ -54,6 +61,101 @@ public class ShopImportRecognitionService {
         return new ShopRecognitionResult(parsed.cleanName(), parsed.attributes(), logic, categoryCandidates, decision.reviewRequired(), decision.matchDecision());
     }
 
+    public ShopIntelligentImportAnalysis analyzeForIntelligentImport(String rawName, String rawSpec, String packing) {
+        return analyzeForIntelligentImport(rawName, rawSpec, packing, null);
+    }
+
+    public ShopIntelligentImportAnalysis analyzeForIntelligentImport(
+        String rawName,
+        String rawSpec,
+        String packing,
+        String rawStandardCode
+    ) {
+        ShopRecognitionResult result = recognize(rawName, rawSpec, packing);
+        ShopImportRecommendation recommendation = result.logicRecommendation();
+        ShopCategoryCandidate stableCategory = result.categoryCandidates().isEmpty()
+            ? null
+            : result.categoryCandidates().get(0);
+        String sourceCategoryCode = sourceCategoryCode(rawStandardCode);
+        String sourceCategoryName = sourceCategoryCode == null ? null : categoryName(sourceCategoryCode);
+        String specification = result.parsedAttributes().stream()
+            .map(attribute -> attribute.name() + ": " + attribute.value())
+            .distinct()
+            .collect(Collectors.joining("; "));
+        String recommendedImpa = recommendation != null
+            && "HIGH".equals(recommendation.confidenceLevel())
+            ? recommendation.impaCode()
+            : null;
+        boolean supportedCandidate = recommendation != null
+            && recommendation.impaCode() != null
+            && ("HIGH".equals(recommendation.confidenceLevel())
+                || ("MEDIUM".equals(recommendation.confidenceLevel())
+                    && stableCategory != null
+                    && Objects.equals(stableCategory.categoryCode(), recommendation.categoryCode())));
+        List<String> candidateCodes = candidateScores(parse(rawName, rawSpec, packing)).stream()
+            .filter(score -> score.nameScore() >= 0.55)
+            .limit(12)
+            .map(score -> score.item().impaCode())
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+        if (supportedCandidate && !candidateCodes.contains(recommendation.impaCode())) {
+            List<String> expanded = new ArrayList<>();
+            expanded.add(recommendation.impaCode());
+            expanded.addAll(candidateCodes);
+            candidateCodes = expanded.stream().distinct().limit(12).toList();
+        }
+        List<String> candidateCategoryCodes = new ArrayList<>();
+        if (sourceCategoryCode != null) candidateCategoryCodes.add(sourceCategoryCode);
+        if (stableCategory != null && stableCategory.categoryCode() != null) candidateCategoryCodes.add(stableCategory.categoryCode());
+        candidateCodes.stream()
+            .map(this::categoryCodeForImpa)
+            .filter(Objects::nonNull)
+            .forEach(candidateCategoryCodes::add);
+        // A trustworthy source prefix narrows the model to that official category.
+        // Without it, the model may choose from the complete official taxonomy;
+        // validation still rejects every non-official value.
+        if (sourceCategoryCode == null) candidateCategoryCodes.addAll(OFFICIAL_IMPA_CATEGORY_CODES);
+        candidateCategoryCodes = candidateCategoryCodes.stream().distinct().limit(40).toList();
+        String selectedCategoryCode = first(
+            sourceCategoryCode,
+            recommendedImpa != null && recommendation != null ? recommendation.categoryCode() : null,
+            stableCategory == null ? null : stableCategory.categoryCode()
+        );
+        String selectedCategoryName = first(
+            sourceCategoryName,
+            recommendedImpa != null && recommendation != null ? recommendation.categoryName() : null,
+            stableCategory == null ? null : stableCategory.categoryName()
+        );
+        return new ShopIntelligentImportAnalysis(
+            result.cleanName(),
+            specification,
+            recommendedImpa,
+            selectedCategoryCode,
+            selectedCategoryName,
+            recommendation == null ? "NONE" : recommendation.confidenceLevel(),
+            result.reviewRequired(),
+            candidateCodes,
+            candidateCategoryCodes
+        );
+    }
+
+    public ShopImportRecommendation resolveStandardCode(String rawCode) {
+        String normalized = rawCode == null ? "" : rawCode.replaceAll("[^0-9]", "");
+        if (normalized.isBlank()) {
+            return null;
+        }
+        return impaItemRepository.findItems(null, null, normalized, 20).stream()
+            .filter(item -> normalized.equals(item.impaCode()) || normalized.equals(item.cnCode()))
+            .findFirst()
+            .map(item -> new ShopImportRecommendation(
+                true, "EXACT_CODE", item.impaCode(), item.nameCn(), item.nameEn(), item.specification(),
+                item.categoryCode(), item.categoryName(), item.unit(),
+                normalized.equals(item.impaCode()) ? "IMPA_CODE_EXACT" : "CN_CODE_EXACT", "HIGH"
+            ))
+            .orElse(null);
+    }
+
     ParsedName parse(String rawName, String rawSpec, String packing) {
         NormalizedMaterialName normalized = normalizer.normalize(rawName, rawSpec, packing);
         List<ShopParsedAttribute> attributes = normalized.attributes().stream()
@@ -74,14 +176,51 @@ public class ShopImportRecognitionService {
         if (queryTokens.isEmpty()) {
             return noMatch("EMPTY_CLEAN_NAME");
         }
+        return candidateScores(parsed).stream()
+            .findFirst()
+            .map(this::recommendation)
+            .orElseGet(() -> noMatch("CLEAN_NAME_NO_FAMILY_MATCH"));
+    }
+
+    private List<CandidateScore> candidateScores(ParsedName parsed) {
+        if (parsed == null || parsed.cleanName() == null) return List.of();
+        List<String> queryTokens = tokens(parsed.cleanName());
+        if (queryTokens.isEmpty()) return List.of();
         return allItemProfiles().stream()
             .map(profile -> score(profile, queryTokens, parsed.attributes()))
             .filter(score -> score.nameScore() >= 0.55)
-            .max(Comparator
+            .sorted(Comparator
                 .comparingDouble(CandidateScore::totalScore)
-                .thenComparing(score -> score.item().impaCode(), Comparator.reverseOrder()))
-            .map(this::recommendation)
-            .orElseGet(() -> noMatch("CLEAN_NAME_NO_FAMILY_MATCH"));
+                .thenComparing(score -> score.item().impaCode(), Comparator.reverseOrder())
+                .reversed())
+            .toList();
+    }
+
+    private String sourceCategoryCode(String rawStandardCode) {
+        if (rawStandardCode == null) return null;
+        String normalized = rawStandardCode.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.matches("^\\d{2}.*")) return null;
+        String prefix = normalized.substring(0, 2);
+        return allItems().stream().anyMatch(item -> prefix.equals(item.categoryCode())) ? prefix : null;
+    }
+
+    private String categoryCodeForImpa(String impaCode) {
+        if (impaCode == null) return null;
+        return allItems().stream()
+            .filter(item -> impaCode.equals(item.impaCode()))
+            .map(ImpaItemResponse::categoryCode)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private String categoryName(String categoryCode) {
+        return allItems().stream()
+            .filter(item -> Objects.equals(categoryCode, item.categoryCode()))
+            .map(ImpaItemResponse::categoryName)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(null);
     }
 
     private List<ImpaItemResponse> allItems() {
@@ -271,10 +410,8 @@ public class ShopImportRecognitionService {
     }
 
     private String categoryKeyword(String token) {
-        if ("plier".equals(token) || "pliers".equals(token)) {
-            return "plier";
-        }
-        return null;
+        String singular = "pliers".equals(token) ? "plier" : token;
+        return STRONG_CATEGORY_KEYWORDS.contains(singular) ? singular : null;
     }
 
     private List<String> tokens(String value) {

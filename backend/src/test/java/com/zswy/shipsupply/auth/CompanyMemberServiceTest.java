@@ -68,6 +68,22 @@ class CompanyMemberServiceTest {
     }
 
     @Test
+    void rejectsPlatformAdministratorFromCompanyMemberManagement() {
+        when(tokenService.requireUserId("Bearer platform-token")).thenReturn(1L);
+        when(authRepository.getUserById(1L)).thenReturn(
+            new AuthenticatedUser(1L, "admin", null, "hash", "PLATFORM_ADMIN", "ACTIVE", 99L)
+        );
+        when(authRepository.getCompany(99L)).thenReturn(company(99L, "ACTIVE"));
+
+        assertThatThrownBy(() -> service.members("Bearer platform-token", null, null))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("403 FORBIDDEN")
+            .hasMessageContaining("PLATFORM_ADMIN_MUST_USE_PLATFORM_ACCOUNT_MANAGEMENT");
+
+        verify(authRepository, never()).companyMembers(anyLong(), anyString(), anyString());
+    }
+
+    @Test
     void activeOwnerCreatesMemberAndAssignsRoles() {
         when(tokenService.requireUserId("Bearer owner-token")).thenReturn(10L);
         when(authRepository.getUserById(10L)).thenReturn(user(10L, 1L, "ACTIVE"));

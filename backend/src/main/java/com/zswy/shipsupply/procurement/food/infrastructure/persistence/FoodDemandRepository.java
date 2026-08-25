@@ -223,7 +223,9 @@ public class FoodDemandRepository {
             """
             SELECT quote_markup_percent, fixed_freight_fee, fixed_customs_fee, fixed_crane_fee,
                    fixed_other_fee, supply_mode, fixed_provider_type, fixed_provider_id,
-                   fixed_provider_name, traffic_service_json, comparison_selected_demand_item_ids_json
+                   fixed_provider_name, traffic_service_json, comparison_selected_demand_item_ids_json,
+                   comparison_mixed_supplier_count, comparison_price_enabled, comparison_price_level,
+                   comparison_quality_enabled, comparison_quality_level, comparison_core_demand_item_ids_json
             FROM food_demand
             WHERE id = ? AND buyer_company_id = ?
             """,
@@ -233,7 +235,11 @@ public class FoodDemandRepository {
                 rs.getBigDecimal("fixed_other_fee"), rs.getString("supply_mode"),
                 rs.getString("fixed_provider_type"), rs.getString("fixed_provider_id"),
                 rs.getString("fixed_provider_name"), rs.getString("traffic_service_json"),
-                selectedDemandItemIds(rs.getString("comparison_selected_demand_item_ids_json"))
+                selectedDemandItemIds(rs.getString("comparison_selected_demand_item_ids_json")),
+                rs.getInt("comparison_mixed_supplier_count"), rs.getBoolean("comparison_price_enabled"),
+                rs.getInt("comparison_price_level"), rs.getBoolean("comparison_quality_enabled"),
+                rs.getInt("comparison_quality_level"),
+                selectedDemandItemIds(rs.getString("comparison_core_demand_item_ids_json"))
             ), demandId, companyId
         ).stream().findFirst().orElse(null);
     }
@@ -246,6 +252,8 @@ public class FoodDemandRepository {
                 fixed_crane_fee = ?, fixed_other_fee = ?, supply_mode = ?, fixed_provider_type = ?,
                 fixed_provider_id = ?, fixed_provider_name = ?, traffic_service_json = ?,
                 comparison_selected_demand_item_ids_json = ?,
+                comparison_mixed_supplier_count = ?, comparison_price_enabled = ?, comparison_price_level = ?,
+                comparison_quality_enabled = ?, comparison_quality_level = ?, comparison_core_demand_item_ids_json = ?,
                 updated_by = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND buyer_company_id = ?
             """,
@@ -253,6 +261,8 @@ public class FoodDemandRepository {
             settings.fixedCraneFee(), settings.fixedOtherFee(), settings.supplyMode(),
             settings.fixedProviderType(), settings.fixedProviderId(), settings.fixedProviderName(),
             settings.trafficServiceJson(), selectedDemandItemIdsJson(settings.selectedDemandItemIds()),
+            settings.mixedSupplierCount(), settings.priceEnabled(), settings.priceLevel(),
+            settings.qualityEnabled(), settings.qualityLevel(), selectedDemandItemIdsJson(settings.coreDemandItemIds()),
             userId, demandId, companyId
         );
     }

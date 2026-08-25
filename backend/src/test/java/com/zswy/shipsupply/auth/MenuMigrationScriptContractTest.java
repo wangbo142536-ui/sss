@@ -10,6 +10,18 @@ import org.junit.jupiter.api.Test;
 class MenuMigrationScriptContractTest {
 
     @Test
+    void companyMemberBoundaryMigrationGroupsMenuAndRevokesPlatformAdministratorAccess() throws Exception {
+        String script = Files.readString(Path.of("..", "db", "mysql", "069_company_member_menu_and_platform_boundary.sql"));
+
+        assertThat(script).contains("menu_code = 'COMPANY_MEMBERS'");
+        assertThat(script).contains("parent_code = 'BASIC_MANAGEMENT'");
+        assertThat(script).contains("permission.permission_code = 'COMPANY_MEMBERS_VIEW'");
+        assertThat(script).contains("role.role_code = 'PLATFORM_ADMIN'");
+        assertThat(script).contains("DELETE role_permission");
+        assertThat(script).doesNotContain("TRUNCATE");
+    }
+
+    @Test
     void inquiriesMenuMigrationCreatesMenuAndBackfillsAdminPermissions() throws Exception {
         String script = Files.readString(Path.of("..", "db", "mysql", "014_create_inquiries_menu.sql"));
 

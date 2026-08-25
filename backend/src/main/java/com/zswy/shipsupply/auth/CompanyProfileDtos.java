@@ -8,6 +8,7 @@ record EnterpriseProfileResponse(
     String unifiedSocialCreditCode,
     String logoFileId,
     String logoUrl,
+    String companyIntroduction,
     String contactName,
     String contactPhone,
     String contactEmail,
@@ -21,6 +22,7 @@ record EnterpriseProfileSaveRequest(
     String unifiedSocialCreditCode,
     String logoFileId,
     String logoUrl,
+    String companyIntroduction,
     String contactName,
     String contactPhone,
     String contactEmail

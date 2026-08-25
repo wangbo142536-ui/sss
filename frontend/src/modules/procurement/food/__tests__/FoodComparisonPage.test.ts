@@ -10,7 +10,7 @@ import {
   saveFoodComparisonItems,
   saveFoodComparisonSettings
 } from "../services/foodProcurementApi";
-import type { FoodComparisonSettings } from "../types";
+import type { FoodComparison, FoodComparisonSettings } from "../types";
 
 vi.mock("../services/foodProcurementApi", () => ({
   createFoodOrder: vi.fn().mockResolvedValue({ orderId: 77, orderNo: "FPO-77", status: "PENDING_CONFIRMATION", totalAmount: 49.5 }),
@@ -36,10 +36,16 @@ const settings = {
   fixedProviderType: "BARGE" as const,
   fixedProviderId: "",
   fixedProviderName: "",
-  trafficServiceJson: ""
+  trafficServiceJson: "",
+  mixedSupplierCount: 3,
+  priceEnabled: true,
+  priceLevel: 5,
+  qualityEnabled: true,
+  qualityLevel: 3,
+  coreDemandItemIds: []
 };
 
-function comparison(comparisonSettings: FoodComparisonSettings = settings) {
+function comparison(comparisonSettings: FoodComparisonSettings = settings): FoodComparison {
   return {
     demand: {
       demandId: 55,
@@ -63,7 +69,7 @@ function comparison(comparisonSettings: FoodComparisonSettings = settings) {
       { strategyType: "SINGLE_SUPPLIER", label: "集中采购", enabled: true, coveredItemCount: 2, totalItemCount: 2, totalAmount: 370, supplierCompanyId: 7, supplierName: "供货商A" }
     ],
     items: [
-      { demandItemId: 1, sequenceNo: 1, nameZh: "土豆", nameEn: "POTATO", specification: "L", unit: "KG", requestedQuantity: 100, quotes: [{ demandItemId: 1, quoteItemId: 91, quoteId: 31, supplierCompanyId: 7, supplierName: "供货商A", requestedQuantity: 100, quotedQuantity: 100, unitPrice: 3.25, amount: 325, availability: "AVAILABLE", priceSource: "MANUAL", quantitySatisfied: true, lowestPrice: true }] },
+      { demandItemId: 1, sequenceNo: 1, nameZh: "土豆", nameEn: "POTATO", specification: "L", unit: "KG", requestedQuantity: 100, quotes: [{ demandItemId: 1, quoteItemId: 91, quoteId: 31, supplierCompanyId: 7, supplierName: "供货商A", requestedQuantity: 100, quotedQuantity: 100, unitPrice: 3.25, amount: 325, availability: "AVAILABLE", priceSource: "MANUAL", quantitySatisfied: true, lowestPrice: true, productTags: ["质量高"] }] },
       { demandItemId: 2, sequenceNo: 2, nameZh: "生姜", nameEn: "GINGER", specification: "-", unit: "KG", requestedQuantity: 10, quotes: [{ demandItemId: 2, quoteItemId: 92, quoteId: 31, supplierCompanyId: 7, supplierName: "供货商A", requestedQuantity: 10, quotedQuantity: 10, unitPrice: 4.5, amount: 45, availability: "AVAILABLE", priceSource: "MANUAL", quantitySatisfied: true, lowestPrice: true }] }
     ],
     settings: comparisonSettings
@@ -120,6 +126,67 @@ describe("food comparison selection", () => {
     expect(wrapper.text()).toContain("比价中");
     expect(wrapper.text()).not.toContain("数量满足");
     expect(wrapper.findAll(".compare-two-line-cell--right small").map((item) => item.text())).toEqual(["KG", "KG", "KG", "KG"]);
+    expect(wrapper.findAll('.data-table-row [aria-label="质量高"]')).toHaveLength(1);
+  });
+
+  it("keeps the material comparison action order", async () => {
+    const wrapper = await mountPage();
+    expect(wrapper.findAll(".toolbar-icon-actions button").map((button) => button.attributes("aria-label"))).toEqual([
+      "刷新",
+      "保存比价设置",
+      "比价策略引擎",
+      "导出比价报价表",
+      "导入比价报价表",
+      "确认下单"
+    ]);
+  });
+
+  it("syncs the material product strategy engine without IMPA-only controls", async () => {
+    const wrapper = await mountPage();
+
+    expect(wrapper.get('button[aria-label="比价策略引擎"]')).toBeTruthy();
+    expect(wrapper.findAll(".compare-preference-filters")).toHaveLength(0);
+    await wrapper.get('button[aria-label="比价策略引擎"]').trigger("click");
+    await flushPromises();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="比价策略引擎"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog!.textContent).toContain("最低混供供货商数量");
+    expect(dialog!.textContent).toContain("3 家");
+    expect(dialog!.textContent).toContain("价格低");
+    expect(dialog!.textContent).toContain("质量高");
+    expect(dialog!.textContent).toContain("核心商品");
+    expect(dialog!.textContent).not.toContain("IMPA");
+  });
+
+  it("keeps unmatched rows visible and provides core and unmatched quick filters", async () => {
+    const payload = comparison({ ...settings, coreDemandItemIds: [1] });
+    payload.items[1].quotes = [];
+    vi.mocked(getFoodComparison).mockResolvedValue(payload);
+
+    const wrapper = await mountPage();
+    expect(wrapper.findAll(".data-table-row")).toHaveLength(2);
+    expect(wrapper.findAll(".data-table-row")[0].classes()).toContain("is-compare-core-product");
+    expect(wrapper.findAll(".data-table-row")[1].classes()).toContain("is-compare-unmatched");
+    expect(wrapper.get('button[aria-label="筛选核心商品"]')).toBeTruthy();
+    expect(wrapper.get('button[aria-label="筛选未匹配商品"]')).toBeTruthy();
+    expect(wrapper.get('button[aria-label="筛选未匹配商品"] .material-strategy-icon__unmatched-face')).toBeTruthy();
+
+    await wrapper.get('button[aria-label="筛选未匹配商品"]').trigger("click");
+    expect(wrapper.findAll(".data-table-row")).toHaveLength(1);
+    expect(wrapper.find(".data-table-row").text()).toContain("生姜");
+  });
+
+  it("keeps fixed supply fees separate from profit", async () => {
+    vi.mocked(getFoodComparison).mockResolvedValue(comparison({
+      ...settings,
+      fixedFreightFee: 50
+    }));
+
+    const wrapper = await mountPage();
+    const mixedStrategy = wrapper.findAll(".strategy-choice")[0];
+    expect(mixedStrategy.text()).toContain("补给费用 50.00");
+    expect(mixedStrategy.text()).toContain("预计利润 37.00");
   });
 
   it("allows row selection, marks unchecked rows red and exports only selected rows", async () => {

@@ -8,8 +8,8 @@ spring:
     name: ship-supply-backend
   servlet:
     multipart:
-      max-file-size: 30MB
-      max-request-size: 30MB
+      max-file-size: 220MB
+      max-request-size: 220MB
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/ship_supply_platform?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_0900_ai_ci&serverTimezone=Asia/Shanghai
     username: root
@@ -17,6 +17,13 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
 ship-supply:
+  shop:
+    intelligent-import:
+      model:
+        enabled: ${SHOP_IMPORT_MODEL_ENABLED:true}
+        base-url: ${SHOP_IMPORT_MODEL_BASE_URL:https://api.openai.com/v1}
+        api-key: ${SHOP_IMPORT_MODEL_API_KEY:}
+        name: ${SHOP_IMPORT_MODEL_NAME:gpt-5-mini}
   procurement:
     food:
       development-open-supplier-scope: false

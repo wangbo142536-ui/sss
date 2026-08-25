@@ -60,14 +60,46 @@ record SupplierSummaryResponse(
     Long companyId,
     String id,
     String name,
+    String creditCode,
+    String introduction,
+    String logoFileId,
+    String logoUrl,
     String port,
     String category,
     String score,
     String status,
     String qualificationStatus,
     Long skuCount,
+    Long categoryCount,
     String contactName,
     String contactPhone,
+    String contactEmail,
+    BigDecimal averageRating,
+    Long evaluationCount,
+    BigDecimal positiveRate,
+    String reputationLevel,
+    String updatedAt
+) {
+}
+
+record SupplierStatusUpdateRequest(String status) {
+}
+
+record SupplierStatusUpdateResponse(Long companyId, String status) {
+}
+
+record SupplierQualificationListResponse(List<SupplierQualificationResponse> items) {
+}
+
+record SupplierQualificationResponse(
+    Long qualificationId,
+    Long companyId,
+    String fileName,
+    String fileUrl,
+    String qualificationType,
+    String title,
+    String description,
+    String contentType,
     String updatedAt
 ) {
 }
@@ -80,6 +112,8 @@ record ShopSkuRequest(
     String impaCode,
     String supplierSkuCode,
     String productName,
+    String productDescription,
+    List<String> productTags,
     List<ShopSkuAttributeRequest> specifications,
     BigDecimal stockQty,
     String stockUnit,
@@ -136,6 +170,8 @@ record ShopSkuResponse(
     String impaCode,
     String supplierSkuCode,
     String productName,
+    String productDescription,
+    List<String> productTags,
     List<ShopSkuAttributeResponse> specifications,
     String attributeSummary,
     BigDecimal stockQty,

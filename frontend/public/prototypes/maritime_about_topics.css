@@ -73,8 +73,8 @@
 
 .topic-section {
   position: relative;
-  min-height: 84svh;
-  padding: clamp(92px, 8vw, 120px) 0 clamp(36px, 4vw, 56px);
+  min-height: auto;
+  padding: clamp(88px, 6vw, 92px) 0 clamp(48px, 4vw, 60px);
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -529,8 +529,8 @@
 }
 
 .topic-feedback {
-  min-height: 72svh;
-  padding: clamp(70px, 6vw, 88px) 0 clamp(28px, 3vw, 40px);
+  min-height: auto;
+  padding: clamp(88px, 6vw, 92px) 0 clamp(48px, 4vw, 60px);
   background: #eef6f9;
 }
 
@@ -745,7 +745,7 @@
 
   .topic-feedback {
     min-height: auto;
-    padding: 76px 0 48px;
+    padding: 88px 0 48px;
   }
 
   .feedback-grid {
@@ -783,7 +783,7 @@
   }
 
   .topic-section {
-    padding: 104px 0 76px;
+    padding: 84px 0 56px;
     scroll-margin-top: 62px;
   }
 
@@ -794,7 +794,7 @@
   .topic-grid,
   .agent-grid,
   .feedback-grid {
-    gap: 44px;
+    gap: 36px;
   }
 
   .topic-copy h2 {
@@ -865,7 +865,7 @@
   }
 
   .topic-feedback {
-    padding: 78px 0 52px;
+    padding: 84px 0 56px;
   }
 
   .feedback-grid {

@@ -18,6 +18,10 @@ public class ImpaItemRepository {
     }
 
     public List<ImpaItemResponse> findItems(String categoryCode, String segmentCode, String keyword, int limit) {
+        return findItems(categoryCode, segmentCode, keyword, limit, 0);
+    }
+
+    public List<ImpaItemResponse> findItems(String categoryCode, String segmentCode, String keyword, int limit, int offset) {
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder(
             """
@@ -41,6 +45,41 @@ public class ImpaItemRepository {
             """
         );
 
+        appendFilters(sql, args, categoryCode, segmentCode, keyword);
+
+        sql.append(" ORDER BY zh.impa_code ASC LIMIT ? OFFSET ?");
+        args.add(limit);
+        args.add(Math.max(offset, 0));
+
+        return jdbcTemplate.query(sql.toString(), this::mapRow, args.toArray());
+    }
+
+    public long countItems(String categoryCode, String segmentCode, String keyword) {
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder(
+            """
+            SELECT COUNT(*)
+            FROM impa_item_i18n zh
+            JOIN impa_item item ON item.impa_code = zh.impa_code
+            LEFT JOIN impa_item_i18n en
+              ON en.impa_code = zh.impa_code
+             AND en.language = 'en-US'
+            WHERE zh.language = 'zh-CN'
+              AND item.enabled = 1
+            """
+        );
+        appendFilters(sql, args, categoryCode, segmentCode, keyword);
+        Long total = jdbcTemplate.queryForObject(sql.toString(), Long.class, args.toArray());
+        return total == null ? 0 : total;
+    }
+
+    private void appendFilters(
+        StringBuilder sql,
+        List<Object> args,
+        String categoryCode,
+        String segmentCode,
+        String keyword
+    ) {
         if (categoryCode != null && !categoryCode.isBlank()) {
             sql.append(" AND zh.category_code = ?");
             args.add(categoryCode.trim());
@@ -49,33 +88,29 @@ public class ImpaItemRepository {
             sql.append(" AND LEFT(zh.impa_code, 4) = ?");
             args.add(segmentCode.trim());
         }
-        if (keyword != null && !keyword.isBlank()) {
-            String exactKeyword = keyword.trim();
-            String escapedKeyword = escapeLike(exactKeyword);
-            String prefixKeyword = escapedKeyword + "%";
-            String fuzzyKeyword = "%" + escapedKeyword + "%";
-            sql.append(
-                """
-                 AND (
-                   zh.impa_code = ?
-                   OR zh.impa_code LIKE ? ESCAPE '\\\\'
-                   OR zh.impa_code LIKE ? ESCAPE '\\\\'
-                   OR zh.description LIKE ? ESCAPE '\\\\'
-                   OR en.description LIKE ? ESCAPE '\\\\'
-                 )
-                """
-            );
-            args.add(exactKeyword);
-            args.add(prefixKeyword);
-            args.add(fuzzyKeyword);
-            args.add(fuzzyKeyword);
-            args.add(fuzzyKeyword);
+        if (keyword == null || keyword.isBlank()) {
+            return;
         }
-
-        sql.append(" ORDER BY zh.impa_code ASC LIMIT ?");
-        args.add(limit);
-
-        return jdbcTemplate.query(sql.toString(), this::mapRow, args.toArray());
+        String exactKeyword = keyword.trim();
+        String escapedKeyword = escapeLike(exactKeyword);
+        String prefixKeyword = escapedKeyword + "%";
+        String fuzzyKeyword = "%" + escapedKeyword + "%";
+        sql.append(
+            """
+             AND (
+               zh.impa_code = ?
+               OR zh.impa_code LIKE ? ESCAPE '\\\\'
+               OR zh.impa_code LIKE ? ESCAPE '\\\\'
+               OR zh.description LIKE ? ESCAPE '\\\\'
+               OR en.description LIKE ? ESCAPE '\\\\'
+             )
+            """
+        );
+        args.add(exactKeyword);
+        args.add(prefixKeyword);
+        args.add(fuzzyKeyword);
+        args.add(fuzzyKeyword);
+        args.add(fuzzyKeyword);
     }
 
     private String escapeLike(String value) {

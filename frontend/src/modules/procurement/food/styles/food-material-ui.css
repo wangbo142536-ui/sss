@@ -618,6 +618,14 @@
   color: #66839a;
 }
 
+.food-comparison-page .compare-row-select {
+  gap: 5px;
+}
+
+.food-comparison-page .strategy-supplier-list button {
+  min-height: 62px;
+}
+
 .food-order-page .purchase-order-query-card__head {
   grid-template-columns: minmax(190px, 1.2fr) minmax(180px, 1fr) minmax(110px, 0.55fr);
 }

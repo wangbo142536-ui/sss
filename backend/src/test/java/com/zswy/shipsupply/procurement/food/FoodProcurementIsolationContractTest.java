@@ -135,6 +135,19 @@ class FoodProcurementIsolationContractTest {
     }
 
     @Test
+    void foodProductStrategyMigrationStaysInsideFoodDemandAndDefaultsToThreeSuppliers() throws Exception {
+        String migration = Files.readString(Path.of("..", "db", "mysql", "085_food_comparison_product_strategy.sql"))
+            .toLowerCase();
+
+        assertThat(migration).contains("alter table food_demand");
+        assertThat(migration).contains("comparison_mixed_supplier_count");
+        assertThat(migration).contains("default 3");
+        assertThat(migration).contains("comparison_core_demand_item_ids_json");
+        assertThat(migration).doesNotContain("material_demand");
+        assertThat(migration).doesNotContain("impa");
+    }
+
+    @Test
     void orderLineMigrationKeepsCostAndQuotedAmountsTogether() throws Exception {
         String migration = Files.readString(Path.of("..", "db", "mysql", "061_food_order_line_pricing.sql"))
             .toLowerCase();

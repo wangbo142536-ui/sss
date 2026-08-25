@@ -4,8 +4,10 @@ import { useRoute, useRouter } from "vue-router";
 import CollapsibleSidebar from "@/components/CollapsibleSidebar.vue";
 import IconButton from "@/components/IconButton.vue";
 import LanguageSwitch from "@/components/LanguageSwitch.vue";
-import { currentUser, menuItems } from "@/data/mockWorkbench";
+import { resolveWorkbenchAuthRole } from "@/components/workbenchAuthRole";
+import { menuItems } from "@/data/mockWorkbench";
 import { t } from "@/i18n";
+import { getAuthSession } from "@/services/authService";
 import { getAuthMenus } from "@/services/permissionService";
 import type { WorkbenchMenuItem } from "@/types/workbench";
 
@@ -19,6 +21,7 @@ const route = useRoute();
 const router = useRouter();
 const sidebarExpanded = ref(typeof window === "undefined" || window.localStorage.getItem(storageKey) !== "false");
 const navigationItems = ref<WorkbenchMenuItem[]>(menuItems);
+const authenticatedRole = resolveWorkbenchAuthRole(getAuthSession());
 
 watch(sidebarExpanded, (expanded) => {
   if (typeof window !== "undefined") {
@@ -79,7 +82,7 @@ onMounted(async () => {
 
       <CollapsibleSidebar
         :items="navigationItems"
-        :role="currentUser.role"
+        :role="authenticatedRole"
         :expanded="sidebarExpanded"
       />
 

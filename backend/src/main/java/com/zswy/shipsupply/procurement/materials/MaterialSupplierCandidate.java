@@ -31,8 +31,50 @@ public record MaterialSupplierCandidate(
     BigDecimal unitPriceUsd,
     BigDecimal lineAmount,
     BigDecimal lineAmountUsd,
-    List<MaterialSupplierUnitPriceOption> unitPriceOptions
+    List<MaterialSupplierUnitPriceOption> unitPriceOptions,
+    List<String> productTags,
+    int qualityScore,
+    int priceScore
 ) {
+    public MaterialSupplierCandidate(
+        Long skuId,
+        Long companyId,
+        String supplierName,
+        String supplierSkuCode,
+        String productName,
+        String impaCode,
+        String platformCode,
+        String categoryCode,
+        String categoryName,
+        List<MaterialSupplierSkuAttribute> specifications,
+        String attributeSummary,
+        BigDecimal unitPrice,
+        String currency,
+        String currencySymbol,
+        BigDecimal stockQty,
+        String stockUnit,
+        String packageSpec,
+        String imageUrl,
+        String thumbnailUrl,
+        String shelfStatus,
+        String codeStatus,
+        String matchType,
+        String reason,
+        String selectedUnit,
+        BigDecimal unitPriceUsd,
+        BigDecimal lineAmount,
+        BigDecimal lineAmountUsd,
+        List<MaterialSupplierUnitPriceOption> unitPriceOptions
+    ) {
+        this(
+            skuId, companyId, supplierName, supplierSkuCode, productName, impaCode, platformCode,
+            categoryCode, categoryName, specifications, attributeSummary, unitPrice, currency,
+            currencySymbol, stockQty, stockUnit, packageSpec, imageUrl, thumbnailUrl, shelfStatus,
+            codeStatus, matchType, reason, selectedUnit, unitPriceUsd, lineAmount, lineAmountUsd,
+            unitPriceOptions, List.of(), 0, 0
+        );
+    }
+
     public MaterialSupplierCandidate(
         Long skuId,
         Long companyId,
@@ -86,7 +128,22 @@ public record MaterialSupplierCandidate(
             null,
             null,
             null,
-            List.of()
+            List.of(),
+            List.of(),
+            0,
+            0
+        );
+    }
+
+    MaterialSupplierCandidate withProductTags(List<String> tags) {
+        List<String> safeTags = tags == null ? List.of() : List.copyOf(tags);
+        return new MaterialSupplierCandidate(
+            skuId, companyId, supplierName, supplierSkuCode, productName, impaCode, platformCode,
+            categoryCode, categoryName, specifications, attributeSummary, unitPrice, currency,
+            currencySymbol, stockQty, stockUnit, packageSpec, imageUrl, thumbnailUrl, shelfStatus,
+            codeStatus, matchType, reason, selectedUnit, unitPriceUsd, lineAmount, lineAmountUsd,
+            unitPriceOptions, safeTags, safeTags.contains("质量高") ? 5 : 0,
+            safeTags.contains("价格低") ? 5 : 0
         );
     }
 
@@ -119,7 +176,10 @@ public record MaterialSupplierCandidate(
             unitPriceUsd,
             lineAmount,
             lineAmountUsd,
-            unitPriceOptions
+            unitPriceOptions,
+            productTags,
+            qualityScore,
+            priceScore
         );
     }
 
@@ -157,7 +217,10 @@ public record MaterialSupplierCandidate(
             selected == null ? unitPriceUsd : selected.unitPriceUsd(),
             lineAmount,
             lineAmountUsd,
-            safeOptions
+            safeOptions,
+            productTags,
+            qualityScore,
+            priceScore
         );
     }
 
@@ -193,7 +256,10 @@ public record MaterialSupplierCandidate(
             unitPriceUsd,
             cnyAmount,
             usdAmount,
-            unitPriceOptions
+            unitPriceOptions,
+            productTags,
+            qualityScore,
+            priceScore
         );
     }
 }

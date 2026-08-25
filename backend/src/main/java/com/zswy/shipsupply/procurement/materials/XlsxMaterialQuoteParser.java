@@ -29,6 +29,18 @@ import org.xml.sax.SAXException;
 @Component
 public class XlsxMaterialQuoteParser {
 
+    public static final String OFFICIAL_SHOP_TEMPLATE_VERSION = "SHOP-SKU-2.0";
+    public static final String OFFICIAL_SHOP_TEMPLATE_FINGERPRINT = "HAISHI-SHOP-SKU-DUAL-SHEET-20260820";
+    public static final String OFFICIAL_TEMPLATE_EXAMPLE_PREFIX = "__TEMPLATE_EXAMPLE_";
+    private static final List<String> OFFICIAL_MATERIAL_HEADERS = List.of(
+        "Product Name", "Supplier SKU Code", "Qty", "Unit", "IMPA", "Specification",
+        "Unit Price", "Stock", "Packing", "Barcode", "Category", "图片（可粘贴）"
+    );
+    private static final List<String> OFFICIAL_FOOD_HEADERS = List.of(
+        "Product Name", "Supplier SKU Code", "Qty", "Unit", "Specification",
+        "Unit Price", "Stock", "Packing", "Barcode", "Category", "图片（可粘贴）"
+    );
+
     static final String SOURCE_FORMAT_STANDARD_FQ = "STANDARD_FQ";
     static final String SOURCE_FORMAT_SKU_RFQ = "SKU_RFQ";
     static final String SOURCE_FORMAT_SUPPLIER_QUOTATION = "SUPPLIER_QUOTATION";
@@ -74,6 +86,23 @@ public class XlsxMaterialQuoteParser {
     private static final List<String> STOCK_ALIASES = List.of("STOCK", "Stock", "库存");
     private static final List<String> REMARK_ALIASES = List.of("Remarks", "Remark", "备注");
 
+    private static final List<String> GENERIC_NAME_ALIASES = List.of(
+        "Product Name", "Name of Commodity & Specification", "产品名称", "商品名称", "品名", "名称", "DESCRIPTION"
+    );
+    private static final List<String> GENERIC_CODE_ALIASES = List.of(
+        "IMPA", "IMPA编码", "物料编码", "Material Code", "Platform Code", "平台编码"
+    );
+    private static final List<String> GENERIC_SUPPLIER_CODE_ALIASES = List.of(
+        "Supplier SKU Code", "Supplier SKU Ref", "Item No.", "Item No", "供应商编码", "商品编码", "货号"
+    );
+    private static final List<String> GENERIC_SPEC_ALIASES = List.of(
+        "Specification", "规格", "规格型号", "Size/Model", "型号", "箱规"
+    );
+    private static final List<String> GENERIC_PRICE_ALIASES = List.of(
+        "Unit Price", "Price", "FOB WAREHOUSE(RMB)", "集采价格", "单价", "价格"
+    );
+    private static final List<String> GENERIC_BARCODE_ALIASES = List.of("Barcode", "条形码", "条码");
+
     public MaterialParsedDocument parse(Path xlsxFile) throws IOException {
         try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
             List<String> sharedStrings = readSharedStrings(zipFile);
@@ -103,6 +132,221 @@ public class XlsxMaterialQuoteParser {
         try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
             return List.copyOf(workbookSheetEntries(zipFile).keySet());
         }
+    }
+
+    /**
+     * Reads an arbitrary worksheet without requiring the procurement template headers.
+     * Cell extraction remains deterministic; semantic classification is performed by the
+     * intelligent shop-import layer so every source row keeps a stable identity.
+     */
+    public GenericSheetDocument parseGeneric(Path xlsxFile, String sheetName) throws IOException {
+        try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
+            String sheetEntry = workbookSheetEntries(zipFile).get(sheetName);
+            if (sheetEntry == null) {
+                throw new IOException("Missing XLSX sheet: " + sheetName);
+            }
+            List<String> sharedStrings = readSharedStrings(zipFile);
+            Map<Integer, ImageAnchor> imageAnchorsByRow = readImageAnchors(zipFile, sheetEntry, sheetName);
+            Document sheet = readXml(zipFile, sheetEntry);
+            return readGenericRows(sheetName, sheet, sharedStrings, imageAnchorsByRow);
+        }
+    }
+
+    public boolean isOfficialShopTemplate(Path xlsxFile) {
+        try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
+            ZipEntry entry = zipFile.getEntry("docProps/custom.xml");
+            if (entry == null) return false;
+            String metadata = new String(zipFile.getInputStream(entry).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            Map<String, String> sheets = workbookSheetEntries(zipFile);
+            return metadata.contains(OFFICIAL_SHOP_TEMPLATE_VERSION)
+                && metadata.contains(OFFICIAL_SHOP_TEMPLATE_FINGERPRINT)
+                && new ArrayList<>(sheets.keySet()).equals(List.of("物料", "伙食"))
+                && officialHeaders(zipFile, sheets.get("物料")).equals(OFFICIAL_MATERIAL_HEADERS)
+                && officialHeaders(zipFile, sheets.get("伙食")).equals(OFFICIAL_FOOD_HEADERS);
+        } catch (IOException error) {
+            return false;
+        }
+    }
+
+    private List<String> officialHeaders(ZipFile zipFile, String sheetEntry) throws IOException {
+        if (sheetEntry == null) return List.of();
+        List<String> sharedStrings = readSharedStrings(zipFile);
+        NodeList rows = readXml(zipFile, sheetEntry).getElementsByTagNameNS("*", "row");
+        if (rows.getLength() == 0) return List.of();
+        Map<String, String> cells = readCells((Element) rows.item(0), sharedStrings);
+        return List.copyOf(cells.values());
+    }
+
+    /** Official rows use the fixed two-sheet contract and never include the shipped example row. */
+    public GenericSheetDocument parseOfficialShopTemplate(Path xlsxFile, String sheetName) throws IOException {
+        if (!isOfficialShopTemplate(xlsxFile)) {
+            throw new IOException("OFFICIAL_SHOP_TEMPLATE_FINGERPRINT_MISMATCH");
+        }
+        GenericSheetDocument parsed = parseGeneric(xlsxFile, sheetName);
+        List<GenericProductRow> rows = parsed.rows().stream()
+            .filter(row -> row.supplierSkuCode() == null
+                || !row.supplierSkuCode().startsWith(OFFICIAL_TEMPLATE_EXAMPLE_PREFIX))
+            .toList();
+        return new GenericSheetDocument(parsed.sheetName(), parsed.headerRowNumber(), rows, parsed.imageCount());
+    }
+
+    /** Supplies bounded sheet samples to the structure model; no business row is created here. */
+    public List<GenericSheetSampleRow> sampleGenericSheet(Path xlsxFile, String sheetName, int maxRows) throws IOException {
+        try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
+            String sheetEntry = workbookSheetEntries(zipFile).get(sheetName);
+            if (sheetEntry == null) throw new IOException("Missing XLSX sheet: " + sheetName);
+            List<String> sharedStrings = readSharedStrings(zipFile);
+            NodeList rowNodes = readXml(zipFile, sheetEntry).getElementsByTagNameNS("*", "row");
+            List<GenericSheetSampleRow> result = new ArrayList<>();
+            for (int index = 0; index < rowNodes.getLength() && result.size() < Math.max(1, maxRows); index++) {
+                Element row = (Element) rowNodes.item(index);
+                Map<String, String> cells = readCells(row, sharedStrings);
+                if (cells.values().stream().allMatch(value -> value == null || value.isBlank())) continue;
+                result.add(new GenericSheetSampleRow(
+                    parseInt(row.getAttribute("r"), index + 1),
+                    Map.copyOf(cells)
+                ));
+            }
+            return List.copyOf(result);
+        }
+    }
+
+    /** Applies a validated model column map to every row deterministically. */
+    public GenericSheetDocument parseMappedGeneric(
+        Path xlsxFile,
+        String sheetName,
+        int headerRowNumber,
+        int dataStartRowNumber,
+        Map<String, String> columns
+    ) throws IOException {
+        try (ZipFile zipFile = new ZipFile(xlsxFile.toFile())) {
+            String sheetEntry = workbookSheetEntries(zipFile).get(sheetName);
+            if (sheetEntry == null) throw new IOException("Missing XLSX sheet: " + sheetName);
+            List<String> sharedStrings = readSharedStrings(zipFile);
+            Map<Integer, ImageAnchor> images = readImageAnchors(zipFile, sheetEntry, sheetName);
+            NodeList rowNodes = readXml(zipFile, sheetEntry).getElementsByTagNameNS("*", "row");
+            Map<String, String> headers = new LinkedHashMap<>();
+            List<GenericProductRow> rows = new ArrayList<>();
+            for (int index = 0; index < rowNodes.getLength(); index++) {
+                Element row = (Element) rowNodes.item(index);
+                int rowNo = parseInt(row.getAttribute("r"), index + 1);
+                Map<String, String> cells = readCells(row, sharedStrings);
+                if (rowNo == headerRowNumber) {
+                    headers.putAll(cells);
+                    continue;
+                }
+                if (rowNo < dataStartRowNumber || cells.values().stream().allMatch(value -> value == null || value.isBlank())) continue;
+                String name = mapped(cells, columns, "productName");
+                if (name.isBlank()) name = inferGenericName(rawColumns(headers, cells));
+                if (name.isBlank() || looksLikeSummary(name)) continue;
+                ImageAnchor image = images.get(rowNo);
+                Map<String, String> source = new LinkedHashMap<>(rawColumns(headers, cells));
+                source.put("_structureMapping", "MODEL_VALIDATED");
+                rows.add(new GenericProductRow(
+                    sheetName + "!R" + rowNo, sheetName, rowNo, name,
+                    mapped(cells, columns, "standardCode"), mapped(cells, columns, "supplierSkuCode"),
+                    mapped(cells, columns, "specification"), mapped(cells, columns, "unit"),
+                    mapped(cells, columns, "price"), mapped(cells, columns, "stock"),
+                    mapped(cells, columns, "packing"), mapped(cells, columns, "barcode"),
+                    image == null ? null : image.mediaPath(), image == null ? null : image.contentType(), Map.copyOf(source)
+                ));
+            }
+            return new GenericSheetDocument(sheetName, headerRowNumber, List.copyOf(rows), images.size());
+        }
+    }
+
+    private String mapped(Map<String, String> cells, Map<String, String> columns, String semanticName) {
+        if (columns == null) return "";
+        String column = columns.get(semanticName);
+        return column == null ? "" : cells.getOrDefault(column.toUpperCase(Locale.ROOT), "").trim();
+    }
+
+    private GenericSheetDocument readGenericRows(
+        String sheetName,
+        Document sheet,
+        List<String> sharedStrings,
+        Map<Integer, ImageAnchor> imageAnchorsByRow
+    ) {
+        NodeList rowNodes = sheet.getElementsByTagNameNS("*", "row");
+        Map<String, String> headersByColumn = new LinkedHashMap<>();
+        int headerRowNumber = 0;
+        List<GenericProductRow> rows = new ArrayList<>();
+
+        for (int index = 0; index < rowNodes.getLength(); index++) {
+            Element rowElement = (Element) rowNodes.item(index);
+            int rowNumber = parseInt(rowElement.getAttribute("r"), index + 1);
+            Map<String, String> valuesByColumn = readCells(rowElement, sharedStrings);
+            long nonBlankCount = valuesByColumn.values().stream().filter(value -> value != null && !value.isBlank()).count();
+            if (nonBlankCount == 0) {
+                continue;
+            }
+            if (headersByColumn.isEmpty()) {
+                if (nonBlankCount < 2) {
+                    continue;
+                }
+                headersByColumn.putAll(valuesByColumn);
+                headerRowNumber = rowNumber;
+                continue;
+            }
+            Map<String, String> rawColumns = rawColumns(headersByColumn, valuesByColumn);
+            if (rawColumns.values().stream().allMatch(value -> value == null || value.isBlank())) {
+                continue;
+            }
+            String name = firstGenericValue(rawColumns, GENERIC_NAME_ALIASES);
+            if (name.isBlank()) {
+                name = inferGenericName(rawColumns);
+            }
+            if (name.isBlank() || looksLikeSummary(name)) {
+                continue;
+            }
+            ImageAnchor image = imageAnchorsByRow.get(rowNumber);
+            Map<String, String> source = new LinkedHashMap<>(rawColumns);
+            if (image != null) {
+                source.put("_imageAnchor", image.anchor());
+                source.put("_imageMediaPath", image.mediaPath() == null ? "" : image.mediaPath());
+                source.put("_imageContentType", image.contentType() == null ? "application/octet-stream" : image.contentType());
+            }
+            rows.add(new GenericProductRow(
+                sheetName + "!R" + rowNumber,
+                sheetName,
+                rowNumber,
+                name,
+                firstGenericValue(rawColumns, GENERIC_CODE_ALIASES),
+                firstGenericValue(rawColumns, GENERIC_SUPPLIER_CODE_ALIASES),
+                firstGenericValue(rawColumns, GENERIC_SPEC_ALIASES),
+                firstGenericValue(rawColumns, UNIT_ALIASES),
+                firstGenericValue(rawColumns, GENERIC_PRICE_ALIASES),
+                firstGenericValue(rawColumns, STOCK_ALIASES),
+                firstGenericValue(rawColumns, PACKING_ALIASES),
+                firstGenericValue(rawColumns, GENERIC_BARCODE_ALIASES),
+                image == null ? null : image.mediaPath(),
+                image == null ? null : image.contentType(),
+                Map.copyOf(source)
+            ));
+        }
+        return new GenericSheetDocument(sheetName, headerRowNumber, rows, imageAnchorsByRow.size());
+    }
+
+    private String firstGenericValue(Map<String, String> values, List<String> aliases) {
+        String value = valueAny(values, aliases);
+        return value == null ? "" : value.trim();
+    }
+
+    private String inferGenericName(Map<String, String> values) {
+        return values.entrySet().stream()
+            .filter(entry -> !entry.getKey().startsWith("_"))
+            .map(Map.Entry::getValue)
+            .filter(value -> value != null && !value.isBlank())
+            .filter(value -> !value.matches("[-+]?\\d+(?:\\.\\d+)?"))
+            .filter(value -> !value.matches("\\d{8,14}"))
+            .max(java.util.Comparator.comparingInt(String::length))
+            .orElse("")
+            .trim();
+    }
+
+    private boolean looksLikeSummary(String value) {
+        String text = value.toLowerCase(Locale.ROOT);
+        return text.contains("合计") || text.contains("总计") || text.contains("total amount") || text.contains("subtotal");
     }
 
     public boolean hasNonBlankCells(Path xlsxFile, String sheetName) throws IOException {
@@ -754,6 +998,36 @@ public class XlsxMaterialQuoteParser {
     }
 
     private record ImageAnchor(int index, String anchor, String mediaPath, String contentType) {
+    }
+
+    public record GenericSheetDocument(
+        String sheetName,
+        int headerRowNumber,
+        List<GenericProductRow> rows,
+        int imageCount
+    ) {
+    }
+
+    public record GenericSheetSampleRow(int rowNumber, Map<String, String> cells) {
+    }
+
+    public record GenericProductRow(
+        String sourceItemId,
+        String sourceSheet,
+        int sourceRowNo,
+        String productName,
+        String rawStandardCode,
+        String supplierSkuCode,
+        String specification,
+        String unit,
+        String price,
+        String stock,
+        String packing,
+        String barcode,
+        String imageMediaPath,
+        String imageContentType,
+        Map<String, String> rawColumns
+    ) {
     }
 
     private record DetectedDocument(String documentType, String sourceFormat) {

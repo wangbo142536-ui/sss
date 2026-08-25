@@ -9,7 +9,11 @@ export type CompanyRole = {
   menuPermissionKeys: string[];
 };
 
-export type CompanyMenuOption = { code: string; name: string };
+export type CompanyMenuOption = {
+  code: string;
+  name: string;
+  children: CompanyMenuOption[];
+};
 
 export type CompanyMember = {
   id: string;
@@ -165,6 +169,20 @@ function normalizeRole(value: unknown): CompanyRole | null {
   };
 }
 
+function normalizeMenuOption(value: unknown): CompanyMenuOption | null {
+  if (!isRecord(value)) return null;
+  const code = readString(value, ["menuCode", "code", "key"]);
+  if (!code) return null;
+
+  return {
+    code,
+    name: readString(value, ["menuName", "name", "label"]) || code,
+    children: Array.isArray(value.children)
+      ? value.children.map(normalizeMenuOption).filter(Boolean) as CompanyMenuOption[]
+      : []
+  };
+}
+
 function normalizeMember(value: unknown): CompanyMember | null {
   if (!isRecord(value)) return null;
   const id = readString(value, ["id", "userId", "memberId"]);
@@ -243,18 +261,7 @@ export async function updateCompanyMemberRoles(userId: string, roleCodes: string
 
 export async function getCompanyMenuOptions(): Promise<CompanyMenuOption[]> {
   const payload = await requestJson("/api/company/menus/permissions", { method: "GET" });
-  const rows = unwrapArray(payload);
-  const result: CompanyMenuOption[] = [];
-  const visit = (items: unknown[]) => {
-    items.forEach((item) => {
-      if (!isRecord(item)) return;
-      const code = readString(item, ["menuCode", "code", "key"]);
-      if (code) result.push({ code, name: readString(item, ["menuName", "name", "label"]) || code });
-      if (Array.isArray(item.children)) visit(item.children);
-    });
-  };
-  visit(rows);
-  return result;
+  return unwrapArray(payload).map(normalizeMenuOption).filter(Boolean) as CompanyMenuOption[];
 }
 
 export async function createCompanyRole(request: { roleCode?: string; roleName: string; menuPermissionKeys: string[] }): Promise<void> {

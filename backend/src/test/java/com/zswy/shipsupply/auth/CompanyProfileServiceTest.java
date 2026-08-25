@@ -1,6 +1,7 @@
 package com.zswy.shipsupply.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class CompanyProfileServiceTest {
@@ -41,6 +43,7 @@ class CompanyProfileServiceTest {
             "91330000TEST",
             "LOGO-1",
             "/api/files/LOGO-1",
+            "Professional marine supply enterprise.",
             "Wang Bo",
             "13800000000",
             "wb@example.com"
@@ -103,6 +106,26 @@ class CompanyProfileServiceTest {
         ));
     }
 
+    @Test
+    void rejectsFilePathContactNameWhenSavingEnterpriseProfile() {
+        EnterpriseProfileSaveRequest request = new EnterpriseProfileSaveRequest(
+            "Zhoushan Supplier",
+            "91330000TEST",
+            null,
+            null,
+            "Professional marine supply enterprise.",
+            "C:\\fakepath\\license.pdf",
+            "13800000000",
+            "wb@example.com"
+        );
+
+        assertThatThrownBy(() -> service.saveProfile("Bearer token", request))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("CONTACT_NAME_INVALID");
+        org.mockito.Mockito.verify(companyProfileRepository, org.mockito.Mockito.never())
+            .saveProfile(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+    }
+
     private EnterpriseProfileResponse profile(String logoFileId, String logoUrl) {
         return new EnterpriseProfileResponse(
             22L,
@@ -110,6 +133,7 @@ class CompanyProfileServiceTest {
             "91330000TEST",
             logoFileId,
             logoUrl,
+            "Professional marine supply enterprise.",
             "Wang Bo",
             "13800000000",
             "wb@example.com",

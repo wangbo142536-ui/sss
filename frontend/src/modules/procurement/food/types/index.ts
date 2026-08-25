@@ -173,6 +173,7 @@ export type FoodComparisonOption = {
   priceSource: string;
   quantitySatisfied: boolean;
   lowestPrice: boolean;
+  productTags?: string[];
 };
 
 export type FoodComparisonSettings = {
@@ -187,6 +188,12 @@ export type FoodComparisonSettings = {
   fixedProviderName?: string;
   trafficServiceJson?: string;
   selectedDemandItemIds?: number[] | null;
+  mixedSupplierCount?: number;
+  priceEnabled?: boolean;
+  priceLevel?: number;
+  qualityEnabled?: boolean;
+  qualityLevel?: number;
+  coreDemandItemIds?: number[];
 };
 
 export type FoodComparison = {

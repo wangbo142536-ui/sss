@@ -298,6 +298,7 @@ const menuLabelKeysByCode: Record<string, string> = {
   PROCUREMENT_MATERIALS: "nav.requests",
   MATERIALS: "nav.requests",
   STANDARD_LIBRARY_IMPA: "nav.impa",
+  STANDARD_LIBRARY_PROVISION: "nav.provisionStandard",
   SUPPLIERS: "nav.suppliers",
   SUPPLIER_PRODUCTS: "nav.supplierProducts",
   SHOP_PRODUCTS: "nav.supplierProducts",
@@ -382,6 +383,7 @@ const menuLabelKeysByRoute: Record<string, string> = {
   "/procurement/materials": "nav.requests",
   "/procurement/requests": "nav.requests",
   "/standard-library/impa": "nav.impa",
+  "/standard-library/provision": "nav.provisionStandard",
   "/suppliers": "nav.suppliers",
   "/supplier-products": "nav.supplierProducts",
   "/shop/products": "nav.supplierProducts",
@@ -443,7 +445,8 @@ function normalizeWorkbenchMenu(item: unknown): WorkbenchMenuItem | null {
     ...readDelimitedStringArray(source, ["visibleRoles"])
   ];
   const itemRoles = rawRoles.map(normalizeVisibleRole).filter((role): role is UserRole => Boolean(role));
-  const children = (node.children ?? [])
+  const rawChildren = Array.isArray(source.children) ? source.children : (node.children ?? []);
+  const children = rawChildren
     .map((child) => normalizeWorkbenchMenu(child))
     .filter(Boolean) as WorkbenchMenuItem[];
   if (!node.route && !children.length) return null;
@@ -461,24 +464,18 @@ function normalizeWorkbenchMenu(item: unknown): WorkbenchMenuItem | null {
 
 const basicManagementChildKeys = new Set([
   "STANDARD_LIBRARY_IMPA",
-  "SUPPLIERS",
-  "SUPPLIER_PRODUCTS",
-  "SHOP_PRODUCTS",
-  "STORE_MANAGEMENT",
-  "SHOP_MANAGEMENT",
-  "ADMIN_REGISTRATIONS",
+  "STANDARD_LIBRARY_PROVISION",
   "ADMIN_PERMISSION",
   "ADMIN_PERMISSIONS",
   "ADMIN_MENUS",
   "MENU_MANAGEMENT",
   "DATA_DICTIONARY",
+  "COMPANY_MEMBERS",
   "impa",
-  "suppliers",
-  "supplierProducts",
-  "registrations",
   "permissions",
   "menuManagement",
-  "dataDictionary"
+  "dataDictionary",
+  "companyMembers"
 ]);
 
 const materialProcurementChildKeys = new Set([
@@ -737,6 +734,115 @@ function groupWorkbenchChildren(
 const procurementServiceParentKeys = new Set(["PROCUREMENT_SERVICES", "procurementServices"]);
 const procurementServiceChildKeys = new Set(["MATERIAL_PROCUREMENT", "MATERIAL_PROCUREMENT_GROUP", "materialProcurement", "materialProcurementGroup", "FOOD_PROCUREMENT", "FOOD_PROCUREMENT_GROUP", "FOOD_PROCUREMENT_MANAGEMENT", "foodProcurement", "foodProcurementGroup"]);
 
+const platformOperationsParentKeys = new Set(["PLATFORM_OPERATIONS", "platformOperations"]);
+type PlatformOperationsDefinition = {
+  key: string;
+  keys: ReadonlySet<string>;
+  labelKey: string;
+  route: string;
+  icon: string;
+  sortOrder: number;
+};
+const platformOperationsDefinitions: PlatformOperationsDefinition[] = [
+  {
+    key: "supplierProducts",
+    keys: new Set(["SUPPLIER_PRODUCTS", "SHOP_PRODUCTS", "STORE_MANAGEMENT", "SHOP_MANAGEMENT", "supplierProducts"]),
+    labelKey: "nav.supplierProducts",
+    route: "/shop/products",
+    icon: "SKU",
+    sortOrder: 0
+  },
+  {
+    key: "supplierDataAnalysis",
+    keys: new Set(["SUPPLIER_DATA_ANALYSIS", "DATA_ANALYSIS", "supplierDataAnalysis"]),
+    labelKey: "nav.dataAnalysis",
+    route: "/platform-operations/data-analysis",
+    icon: "DA",
+    sortOrder: 10
+  },
+  {
+    key: "registrations",
+    keys: new Set(["ADMIN_REGISTRATIONS", "registrations"]),
+    labelKey: "nav.registrations",
+    route: "/admin/registrations",
+    icon: "RG",
+    sortOrder: 20
+  },
+  {
+    key: "suppliers",
+    keys: new Set(["SUPPLIERS", "suppliers"]),
+    labelKey: "nav.suppliers",
+    route: "/suppliers",
+    icon: "SP",
+    sortOrder: 30
+  }
+];
+
+function platformOperationsDefinition(item: { key: string; route?: string }) {
+  return platformOperationsDefinitions.find((definition) => definition.route === item.route || definition.keys.has(item.key));
+}
+
+function groupPlatformOperationsMenus(items: WorkbenchMenuItem[]): WorkbenchMenuItem[] {
+  let existingParent: WorkbenchMenuItem | undefined;
+  const candidates: WorkbenchMenuItem[] = [];
+  const extraChildren: WorkbenchMenuItem[] = [];
+  const rest: WorkbenchMenuItem[] = [];
+
+  items.forEach((item) => {
+    if (platformOperationsParentKeys.has(item.key)) {
+      existingParent = item;
+      (item.children || []).forEach((child) => {
+        if (platformOperationsDefinition(child)) candidates.push(child);
+        else extraChildren.push(child);
+      });
+      return;
+    }
+    if (item.key === "BASIC_MANAGEMENT" || item.key === "basicManagement") {
+      const children = (item.children || []).filter((child) => {
+        if (!platformOperationsDefinition(child)) return true;
+        candidates.push(child);
+        return false;
+      });
+      rest.push({ ...item, children });
+      return;
+    }
+    if (platformOperationsDefinition(item)) {
+      candidates.push(item);
+      return;
+    }
+    rest.push(item);
+  });
+
+  const children = platformOperationsDefinitions.flatMap((definition) => {
+    const candidate = candidates.find((item) => platformOperationsDefinition(item)?.key === definition.key);
+    return candidate
+      ? [{
+          ...candidate,
+          key: definition.key,
+          labelKey: definition.labelKey,
+          route: definition.route,
+          icon: candidate.icon || definition.icon,
+          sortOrder: definition.sortOrder
+        }]
+      : [];
+  }) as WorkbenchMenuItem[];
+  const mergedChildren = [...children, ...sortByMenuOrder(extraChildren)];
+  if (!existingParent && !mergedChildren.length) return rest;
+  return [
+    ...rest,
+    {
+      ...(existingParent || {}),
+      key: "platformOperations",
+      labelKey: "nav.platformOperations",
+      route: undefined,
+      icon: existingParent?.icon || "OP",
+      sortOrder: 95,
+      roles: mergeRolesFromChildren(mergedChildren),
+      children: mergedChildren
+    }
+  ];
+}
+
 const fixedRootMenuTemplates: WorkbenchMenuItem[] = [
   {
     key: "regulatoryServices",
@@ -755,16 +861,6 @@ const fixedRootMenuTemplates: WorkbenchMenuItem[] = [
   { key: "financialServices", labelKey: "nav.financialServices", route: "/financial-services", icon: "FN", sortOrder: 70, roles },
   { key: "weatherServices", labelKey: "nav.weatherServices", route: "/weather-services", icon: "WT", sortOrder: 80, roles },
   { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, roles },
-  {
-    key: "platformOperations",
-    labelKey: "nav.platformOperations",
-    icon: "OP",
-    sortOrder: 95,
-    roles: ["admin", "supplier"],
-    children: [
-      { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, roles: ["admin", "supplier"] }
-    ]
-  }
 ];
 
 function groupProcurementServiceMenus(items: WorkbenchMenuItem[]) {
@@ -817,13 +913,6 @@ function ensureDashboardGovernmentMenu(items: WorkbenchMenuItem[]) {
 
 function normalizeBargeRootMenu(items: WorkbenchMenuItem[]) {
   return items.map((item) => {
-    if (item.key === "platformOperations" || item.key === "PLATFORM_OPERATIONS") {
-      const analyticsChild = item.children?.find((child) => child.route === "/platform-operations/data-analysis" || ["SUPPLIER_DATA_ANALYSIS", "DATA_ANALYSIS", "supplierDataAnalysis"].includes(child.key));
-      const children = analyticsChild
-        ? [{ ...analyticsChild, key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: analyticsChild.icon || "DA", sortOrder: 0, roles: ["admin", "supplier"] as UserRole[] }]
-        : [{ key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, roles: ["admin", "supplier"] as UserRole[] }];
-      return { ...item, key: "platformOperations", labelKey: "nav.platformOperations", route: undefined, icon: "OP", sortOrder: 95, roles: ["admin", "supplier"] as UserRole[], children };
-    }
     if (item.key === "trafficService" || item.key === "TRAFFIC_SERVICE") {
       return { ...item, key: "trafficService", labelKey: "nav.bargeServices", icon: "BS", sortOrder: 20 };
     }
@@ -847,11 +936,10 @@ function ensureFixedRootMenus(items: WorkbenchMenuItem[]) {
 function mergeBasicChildrenIntoExistingWorkbenchTree(items: WorkbenchMenuItem[]) {
   const externalChildren = sortByMenuOrder(items.filter((item) => basicManagementChildKeys.has(item.key)));
   const rest = items.filter((item) => !basicManagementChildKeys.has(item.key));
-  if (!externalChildren.length) return rest;
   return rest.map((item) => {
     if (item.key !== "BASIC_MANAGEMENT" && item.key !== "basicManagement") return item;
     const children = sortByMenuOrder([...(item.children || []), ...externalChildren]).map((child, index) => ({ ...child, sortOrder: index * 10 }));
-    return { ...item, key: "basicManagement", labelKey: "nav.basicManagement", icon: "BSV", sortOrder: 100, children };
+    return { ...item, key: "basicManagement", labelKey: "nav.basicManagement", icon: "BSV", sortOrder: 100, roles: mergeRolesFromChildren(children), children };
   });
 }
 
@@ -873,6 +961,7 @@ function groupBasicManagementMenus(items: WorkbenchMenuItem[]) {
   });
   items = ensureDevelopmentFoodMenus(items);
   items = groupProcurementServiceMenus(items);
+  items = groupPlatformOperationsMenus(items);
   items = normalizeBargeRootMenu(items);
   const hasBasicTree = items.some((item) => item.key === "BASIC_MANAGEMENT" || item.key === "basicManagement");
   if (hasBasicTree) {
@@ -904,17 +993,69 @@ const fixedPermissionRootMenuTemplates: PermissionMenuNode[] = [
   { key: "financialServices", labelKey: "nav.financialServices", route: "/financial-services", icon: "FN", sortOrder: 70, enabled: true },
   { key: "weatherServices", labelKey: "nav.weatherServices", route: "/weather-services", icon: "WT", sortOrder: 80, enabled: true },
   { key: "vesselDynamicsServices", labelKey: "nav.vesselDynamicsServices", route: "/vessel-dynamics-services", icon: "VD", sortOrder: 90, enabled: true },
-  {
-    key: "platformOperations",
-    labelKey: "nav.platformOperations",
-    icon: "OP",
-    sortOrder: 95,
-    enabled: true,
-    children: [
-      { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, enabled: true }
-    ]
-  }
 ];
+
+function groupPlatformOperationsPermissionMenus(items: PermissionMenuNode[]): PermissionMenuNode[] {
+  let existingParent: PermissionMenuNode | undefined;
+  const candidates: PermissionMenuNode[] = [];
+  const extraChildren: PermissionMenuNode[] = [];
+  const rest: PermissionMenuNode[] = [];
+
+  items.forEach((item) => {
+    if (platformOperationsParentKeys.has(item.key)) {
+      existingParent = item;
+      (item.children || []).forEach((child) => {
+        if (platformOperationsDefinition(child)) candidates.push(child);
+        else extraChildren.push(child);
+      });
+      return;
+    }
+    if (item.key === "BASIC_MANAGEMENT" || item.key === "basicManagement") {
+      const children = (item.children || []).filter((child) => {
+        if (!platformOperationsDefinition(child)) return true;
+        candidates.push(child);
+        return false;
+      });
+      rest.push({ ...item, children });
+      return;
+    }
+    if (platformOperationsDefinition(item)) {
+      candidates.push(item);
+      return;
+    }
+    rest.push(item);
+  });
+
+  const children = platformOperationsDefinitions.flatMap((definition) => {
+    const candidate = candidates.find((item) => platformOperationsDefinition(item)?.key === definition.key);
+    return candidate
+      ? [{
+          ...candidate,
+          key: definition.key,
+          labelKey: definition.labelKey,
+          route: definition.route,
+          icon: candidate.icon || definition.icon,
+          sortOrder: definition.sortOrder,
+          enabled: candidate.enabled !== false
+        }]
+      : [];
+  });
+  const mergedChildren = [...children, ...sortByMenuOrder(extraChildren)];
+  if (!existingParent && !mergedChildren.length) return rest;
+  return [
+    ...rest,
+    {
+      ...(existingParent || {}),
+      key: "platformOperations",
+      labelKey: "nav.platformOperations",
+      route: undefined,
+      icon: existingParent?.icon || "OP",
+      sortOrder: 95,
+      enabled: existingParent?.enabled !== false,
+      children: mergedChildren
+    }
+  ];
+}
 
 function groupProcurementServicePermissionMenus(items: PermissionMenuNode[]) {
   const existing = items.find((item) => procurementServiceParentKeys.has(item.key));
@@ -938,21 +1079,6 @@ function groupProcurementServicePermissionMenus(items: PermissionMenuNode[]) {
 
 function normalizeBargeRootPermissionMenu(items: PermissionMenuNode[]) {
   return items.map((item) => {
-    if (item.key === "platformOperations" || item.key === "PLATFORM_OPERATIONS") {
-      const analyticsChild = item.children?.find((child) => child.route === "/platform-operations/data-analysis" || ["SUPPLIER_DATA_ANALYSIS", "DATA_ANALYSIS", "supplierDataAnalysis"].includes(child.key));
-      return {
-        ...item,
-        key: "platformOperations",
-        labelKey: "nav.platformOperations",
-        route: undefined,
-        icon: "OP",
-        sortOrder: 95,
-        enabled: true,
-        children: [analyticsChild
-          ? { ...analyticsChild, key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: analyticsChild.icon || "DA", sortOrder: 0, enabled: true }
-          : { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, enabled: true }]
-      };
-    }
     return item.key === "trafficService" || item.key === "TRAFFIC_SERVICE"
       ? { ...item, key: "trafficService", labelKey: "nav.bargeServices", icon: "BS", sortOrder: 20 }
       : item;
@@ -969,7 +1095,6 @@ function ensureFixedPermissionRootMenus(items: PermissionMenuNode[]) {
 function mergeBasicChildrenIntoExistingPermissionTree(items: PermissionMenuNode[]) {
   const externalChildren = sortByMenuOrder(items.filter((item) => basicManagementChildKeys.has(item.key)));
   const rest = items.filter((item) => !basicManagementChildKeys.has(item.key));
-  if (!externalChildren.length) return rest;
   return rest.map((item) => {
     if (item.key !== "BASIC_MANAGEMENT" && item.key !== "basicManagement") return item;
     const children = sortByMenuOrder([...(item.children || []), ...externalChildren]).map((child, index) => ({ ...child, sortOrder: index * 10 }));
@@ -992,6 +1117,7 @@ function groupBasicManagementPermissionMenus(items: PermissionMenuNode[]) {
     sortOrder: 10
   });
   items = groupProcurementServicePermissionMenus(items);
+  items = groupPlatformOperationsPermissionMenus(items);
   items = normalizeBargeRootPermissionMenu(items);
   const hasBasicTree = items.some((item) => item.key === "BASIC_MANAGEMENT" || item.key === "basicManagement");
   if (hasBasicTree) {

@@ -1,37 +1,58 @@
-# Dashboard 政 Design QA
+# 供货商信息明信片目录 Design QA
 
-- Source visual truth: `C:\Users\KING富贵儿\AppData\Local\Temp\codex-clipboard-d2993d4b-b81b-4c81-ba1c-f99d4f8f40e0.png`
-- Implementation screenshot: `C:\Users\KING富贵儿\AppData\Local\Temp\codex-design-qa\tmp-gov-code-dashboard-final.png`
-- Full-view comparison: `C:\Users\KING富贵儿\AppData\Local\Temp\codex-design-qa\tmp-gov-code-comparison-final.png`
-- Focused top-card comparison: `C:\Users\KING富贵儿\AppData\Local\Temp\codex-design-qa\tmp-gov-code-focus-final.png`
-- Route: `http://127.0.0.1:5173/dashboard-government`
-- Viewport: `1280 x 720`
-- State: Dashboard 政默认静态展示，左侧菜单展开
+- source visual truth path: `C:\\Users\\KING富贵儿\\.codex\\generated_images\\019fc677-1817-7ea1-8211-9f1fe947553c\\exec-fcb513df-cedb-4f09-9367-af61feef913c.png`
+- implementation route: `http://127.0.0.1:5173/suppliers`
+- implementation screenshot path: unavailable
+- viewport: intended desktop `1680 x 1030`; browser capture unavailable
+- source pixel dimensions: `1536 x 1024`
+- implementation pixel dimensions / CSS size / density: unavailable; no density normalization performed
+- state: authenticated platform administrator, supplier directory default state
+
+## Full-view comparison evidence
+
+The source visual was opened successfully and used as the implementation target. The implementation could not be captured from the Codex in-app browser because browser startup rejected its own runtime dependency under the Chinese Windows user path with `Trusted RPC dependency must resolve within a configured trusted code path`.
+
+Because there is no browser-rendered implementation screenshot, no full-view visual comparison is claimed.
+
+## Focused region comparison evidence
+
+Not available for the same browser-runtime blocker. Card typography, spacing, status states, action placement, hover/focus behavior and three-column density therefore remain unverified visually.
 
 ## Findings
 
-- No actionable P0/P1/P2 visual differences remain.
-- Typography: Chinese system UI typography, numeric weight, wrapping, and truncation were checked. All six metric titles fit without overflow.
-- Spacing and layout: the six-card header, 2.24:1 map/ranking split, and three-panel bottom grid reproduce the reference hierarchy inside the existing workbench shell.
-- Colors and tokens: pale blue glass surface, blue data emphasis, green positive trends, and restrained panel borders follow the source visual.
-- Image quality: only the source's individual metric icons and geographic map scene remain raster assets. Cards, text, tables, charts, rankings, refund summary, and ecosystem panel are code-rendered.
-- Copy and content: labels, figures, ranking names, trend period, refund details, and ecosystem counts match the supplied reference.
+- [P1] Browser-rendered visual evidence is missing.
+  - Location: `/suppliers` and `/suppliers/:supplierId/products`.
+  - Evidence: source image is available, but the Codex in-app browser cannot initialize under the current trusted-path configuration.
+  - Impact: visual fidelity and interaction behavior cannot be approved from source code or API evidence alone.
+  - Fix: repair the Codex in-app browser trusted-path handling for the Chinese Windows user directory, then capture the default supplier grid and one supplier enterprise detail at the intended desktop viewport.
 
-## Comparison History
+## Required fidelity surfaces
 
-1. Initial code pass: first metric title truncated and the map scene left unused vertical space.
-2. Fixes: reduced icon slot width, tightened card spacing, removed title overflow, and made the map scene fill the available map panel height.
-3. Post-fix evidence: browser layout reports six cards, no title overflow, no document-level horizontal overflow, and a filled `575 x 315` map scene.
+- Fonts and typography: implemented with the existing platform typography and truncation rules; browser evidence pending.
+- Spacing and layout rhythm: implemented as a compact filter row, summary strip and three-column postcard grid; browser evidence pending.
+- Colors and visual tokens: implemented with existing maritime blue-white tokens plus semantic green/neutral status colors; browser evidence pending.
+- Image quality and asset fidelity: real supplier logos are loaded through authenticated files; missing logos use a restrained data fallback; browser evidence pending.
+- Copy and content: company name, social credit code, contact data, port, SKU/category counts and real evaluation data are wired; API evidence passed.
 
-## Browser Verification
+## Primary interactions tested
 
-- Primary screen rendered successfully in the in-app browser.
-- Dashboard navigation and the period selector are present and operable.
-- Browser runtime logs contain Vite connection and hot-update messages only; no warning or error entries were recorded.
-- Production build passed.
+- Real API supplier aggregation: passed.
+- Cross-company read-only SKU query: passed.
+- Platform administrator disable and immediate restore: passed.
+- Frontend browser interaction and console errors: blocked by in-app browser runtime initialization.
 
-## Follow-up Polish
+## Comparison history
 
-- P3: the source map is intentionally retained as one geographic visualization asset because its coastline, vessel routes, and ship illustrations are not ordinary UI chrome.
+1. Source selected and opened.
+2. Implementation completed and passed frontend/backend automated checks plus real API checks.
+3. Codex in-app browser initialization retried with canonical and short Windows paths; both attempts failed at the same trusted-path validation before a tab could be controlled.
 
-final result: passed
+## Implementation checklist
+
+- Restore Codex in-app browser connectivity.
+- Capture `/suppliers` at the intended viewport.
+- Verify keyword/port/category/status filters, card hover/focus, paging and status confirmation.
+- Open one card and capture the read-only enterprise product catalog.
+- Check console errors and repeat the visual comparison.
+
+final result: blocked

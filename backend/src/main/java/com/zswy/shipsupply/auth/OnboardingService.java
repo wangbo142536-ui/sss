@@ -41,7 +41,7 @@ public class OnboardingService {
             "unifiedSocialCreditCode",
             "UNIFIED_SOCIAL_CREDIT_CODE_REQUIRED: 统一社会信用代码必填"
         );
-        String contactName = required(request.contactName(), "contactName");
+        String contactName = ContactNamePolicy.requireValid(request.contactName(), "contactName");
         String contactPhone = required(request.contactPhone(), "contactPhone");
         String contactEmail = required(request.contactEmail(), "contactEmail");
         List<String> fileIds = request.qualificationFileIds() == null ? List.of() : request.qualificationFileIds();

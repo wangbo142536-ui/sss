@@ -10,6 +10,24 @@ set "http_proxy="
 set "https_proxy="
 set "all_proxy="
 
+rem Load the local Volcengine Ark credentials into this backend process only.
+rem Explicit SHOP_IMPORT_MODEL_* environment variables always take precedence.
+set "MODEL_CONFIG_FILE=%~dp0huoshan.txt"
+if exist "%MODEL_CONFIG_FILE%" (
+  for /f "usebackq tokens=1,* delims==" %%A in ("%MODEL_CONFIG_FILE%") do (
+    if /i "%%A"=="ARK_BASE_URL" if not defined SHOP_IMPORT_MODEL_BASE_URL set "SHOP_IMPORT_MODEL_BASE_URL=%%B"
+    if /i "%%A"=="ARK_MODEL" if not defined SHOP_IMPORT_MODEL_NAME set "SHOP_IMPORT_MODEL_NAME=%%B"
+    if /i "%%A"=="ARK_API_KEY" if not defined SHOP_IMPORT_MODEL_API_KEY set "SHOP_IMPORT_MODEL_API_KEY=%%B"
+  )
+)
+if not defined SHOP_IMPORT_MODEL_ENABLED set "SHOP_IMPORT_MODEL_ENABLED=true"
+
+if defined SHOP_IMPORT_MODEL_BASE_URL if defined SHOP_IMPORT_MODEL_NAME if defined SHOP_IMPORT_MODEL_API_KEY (
+  echo AI model configuration loaded for this backend process.
+) else (
+  echo AI model configuration is incomplete. Deterministic matching will remain available.
+)
+
 set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
 set "JAVA_EXE=%JAVA_HOME%\bin\java.exe"
 set "MAVEN_CMD=%~dp0.tools\apache-maven-3.9.9\bin\mvn.cmd"

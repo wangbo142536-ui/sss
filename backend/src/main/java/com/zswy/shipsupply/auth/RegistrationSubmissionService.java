@@ -48,7 +48,7 @@ public class RegistrationSubmissionService {
         );
         String companyName = required(request.companyName(), "companyName");
         String creditCode = required(request.unifiedSocialCreditCode(), "unifiedSocialCreditCode");
-        String contactName = required(request.contactName(), "contactName");
+        String contactName = ContactNamePolicy.requireValid(request.contactName(), "contactName");
         String contactPhone = required(request.contactPhone(), "contactPhone");
         String contactEmail = required(request.contactEmail(), "contactEmail");
         if (files == null || files.isEmpty() || files.stream().anyMatch(file -> file == null || file.isEmpty())) {

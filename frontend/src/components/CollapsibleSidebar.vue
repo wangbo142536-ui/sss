@@ -8,7 +8,7 @@ const sidebarOpenGroups = ref<Record<string, boolean>>({});
 
 const props = defineProps<{
   items: WorkbenchMenuItem[];
-  role: UserRole;
+  role: UserRole | null;
   expanded: boolean;
 }>();
 
@@ -35,7 +35,7 @@ const iconLabels: Record<string, string> = {
   Store: "ST"
 };
 
-const hasVisibleRole = (item: WorkbenchMenuItem) => item.roles.includes(props.role);
+const hasVisibleRole = (item: WorkbenchMenuItem) => Boolean(props.role && item.roles.includes(props.role));
 const visibleItems = computed(() => {
   const filterItems = (items: WorkbenchMenuItem[]): WorkbenchMenuItem[] =>
     items

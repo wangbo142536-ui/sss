@@ -10,6 +10,11 @@ vi.mock("@/services/dataDictionaryService", () => ({
 
 vi.mock("@/services/procurementMaterialService", () => ({
   getMaterialDemandDetail: vi.fn(),
+  getMaterialAiCapabilities: vi.fn().mockResolvedValue({
+    categoryAnalysisConfigured: false,
+    comparisonRerankConfigured: false,
+    status: "MODEL_CONFIGURATION_REQUIRED"
+  }),
   saveMaterialDemand: vi.fn(),
   uploadMaterialMatchPreview: vi.fn()
 }));
@@ -57,17 +62,26 @@ describe("material procurement import timer", () => {
     document.body.innerHTML = "";
   });
 
-  it("counts elapsed import time in seconds and stops when the preview request completes", async () => {
+  it("使用统一遮罩展示真实耗时，并在无任务协议时保持诚实不确定进度", async () => {
     const request = deferred<Awaited<ReturnType<typeof uploadMaterialMatchPreview>>>();
     vi.mocked(uploadMaterialMatchPreview).mockReturnValueOnce(request.promise);
     const wrapper = await mountPage();
 
     await chooseFile(wrapper);
     await flushPromises();
-    expect(document.body.querySelector(".match-progress-timer")?.textContent).toContain("0");
+    const overlay = document.body.querySelector(".background-task-overlay") as HTMLElement;
+    expect(overlay).not.toBeNull();
+    expect(overlay.querySelectorAll(".background-task-overlay__stages li")).toHaveLength(1);
+    expect(overlay.textContent).toContain("标准库匹配与AI大类分析");
+    expect(overlay.textContent).toContain("MODEL_CONFIGURATION_REQUIRED");
+    expect(overlay.textContent).toContain("待配置");
+    expect(overlay.querySelector('[role="progressbar"]')?.hasAttribute("aria-valuenow")).toBe(false);
+    expect(overlay.textContent).toContain("等待服务端返回真实进度");
+    expect(overlay.textContent).not.toMatch(/24%|48%|72%|88%/);
+    expect(overlay.querySelector(".background-task-overlay__timer")?.textContent).toContain("0");
 
     await vi.advanceTimersByTimeAsync(2100);
-    expect(document.body.querySelector(".match-progress-timer")?.textContent).toContain("2");
+    expect(document.body.querySelector(".background-task-overlay__timer")?.textContent).toContain("2");
 
     request.resolve({
       sourceFileName: "materials.xlsx",
@@ -81,10 +95,11 @@ describe("material procurement import timer", () => {
       items: []
     });
     await flushPromises();
-    expect(document.body.querySelector(".match-progress-timer")?.textContent).toContain("2");
+    expect(document.body.querySelector(".background-task-overlay__timer")?.textContent).toContain("2");
+    expect(document.body.textContent).toContain("已匹配 1 / 待确认 0 / 失败 0");
 
     await vi.advanceTimersByTimeAsync(400);
-    expect(document.body.querySelector(".match-progress-timer")).toBeNull();
+    expect(document.body.querySelector(".background-task-overlay__timer")).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
     wrapper.unmount();
   });

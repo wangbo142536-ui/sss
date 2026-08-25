@@ -150,4 +150,71 @@ class ShopImportRecognitionServiceTest {
         assertThat(result.logicRecommendation().available()).isFalse();
         assertThat(result.reviewRequired()).isTrue();
     }
+
+    @Test
+    void exposesCleanNameAndStableCategoryWithoutForcingLowConfidenceImpa() {
+        when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000)))
+            .thenReturn(List.of(
+                new ImpaItemResponse("611801", "61", "一般作业工具类", "6118", "外卡簧钳", "EXTERNAL RING PLIER", "180MM", "PCS"),
+                new ImpaItemResponse("611802", "61", "一般作业工具类", "6118", "内卡簧钳", "INTERNAL RING PLIER", "180MM", "PCS"),
+                new ImpaItemResponse("172619", "17", "厨房用品", "1726", "手开罐头器", "HAND CAN OPENER PLIER TYPE", null, "PCS")
+            ));
+
+        ShopIntelligentImportAnalysis analysis = service.analyzeForIntelligentImport(
+            "7\"/180Mm Circlip Plier\nExternal Straight\nMaterial:Cr-V",
+            null,
+            "PP CARD HANGER"
+        );
+
+        assertThat(analysis.cleanName()).isEqualTo("Circlip Plier");
+        assertThat(analysis.specification()).contains("180mm", "Cr-V", "PP CARD HANGER");
+        assertThat(analysis.categoryCode()).isEqualTo("61");
+        assertThat(analysis.categoryName()).isEqualTo("一般作业工具类");
+        assertThat(analysis.recommendedImpaCode()).isNull();
+        assertThat(analysis.reviewRequired()).isTrue();
+    }
+
+    @Test
+    void usesStrongToolFamilyForCategoryButDoesNotForceAnExactImpaItem() {
+        when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000)))
+            .thenReturn(List.of(
+                new ImpaItemResponse("611101", "61", "一般作业工具类", "6111", "梅花扳手", "RING SPANNER", "10MM", "PCS"),
+                new ImpaItemResponse("611102", "61", "一般作业工具类", "6111", "梅花扳手", "RING SPANNER", "12MM", "PCS"),
+                new ImpaItemResponse("175001", "17", "厨房用品", "1750", "厨房扳手", "KITCHEN WRENCH", null, "PCS")
+            ));
+
+        ShopIntelligentImportAnalysis analysis = service.analyzeForIntelligentImport(
+            "Double Offset Ring Spanner\nChrome Vanadium Steel",
+            null,
+            "PP CARD"
+        );
+
+        assertThat(analysis.cleanName()).isEqualTo("Double Offset Ring Spanner");
+        assertThat(analysis.categoryCode()).isEqualTo("61");
+        assertThat(analysis.recommendedImpaCode()).isNull();
+        assertThat(analysis.reviewRequired()).isTrue();
+    }
+
+    @Test
+    void treatsSourceCodePrefixAsBroadCategoryEvidenceWithoutInventingExactImpa() {
+        when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000)))
+            .thenReturn(List.of(
+                new ImpaItemResponse("250101", "25", "船舶油漆", "2501", "防锈底漆", "ANTICORROSIVE PRIMER", null, "LTR"),
+                new ImpaItemResponse("250201", "25", "船舶油漆", "2502", "船壳面漆", "TOPSIDE PAINT", null, "LTR"),
+                new ImpaItemResponse("750101", "75", "阀、旋塞类", "7501", "截止阀", "GLOBE VALVE", null, "PCS")
+            ));
+
+        ShopIntelligentImportAnalysis analysis = service.analyzeForIntelligentImport(
+            "保养油漆品牌：PPG，类型：醇酸面漆 7238 SIGMARINE",
+            "48 标志红 3149",
+            "20L/桶",
+            "25D-7238-3149"
+        );
+
+        assertThat(analysis.categoryCode()).isEqualTo("25");
+        assertThat(analysis.categoryName()).isEqualTo("船舶油漆");
+        assertThat(analysis.candidateCategoryCodes()).containsExactly("25");
+        assertThat(analysis.recommendedImpaCode()).isNull();
+        assertThat(analysis.reviewRequired()).isTrue();
+    }
 }

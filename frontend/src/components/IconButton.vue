@@ -1,5 +1,15 @@
 <script setup lang="ts">
-withDefaults(
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import {
+  activeIconButtonTooltip,
+  createIconButtonTooltipOwnerId,
+  releaseIconButtonTooltip,
+  requestIconButtonTooltip,
+  resetIconButtonTooltipRegistry
+} from "@/components/iconButtonTooltipRegistry";
+import "@/styles/icon-button-tooltip.css";
+
+const props = withDefaults(
   defineProps<{
     icon:
       | "Search"
@@ -23,10 +33,13 @@ withDefaults(
       | "Maximize2"
       | "Minimize2"
       | "MoreHorizontal"
-      | "Image";
+      | "Image"
+      | "BookOpen"
+      | "List"
+      | "Settings";
     label: string;
     glyph?: string;
-    variant?: "primary" | "secondary" | "danger" | "plain";
+    variant?: "primary" | "secondary" | "danger" | "plain" | "strategy";
     type?: "button" | "submit";
     disabled?: boolean;
     loading?: boolean;
@@ -39,20 +52,149 @@ withDefaults(
   }
 );
 
-defineEmits<{
+const emit = defineEmits<{
   click: [event: MouseEvent];
 }>();
+
+const TOOLTIP_GAP = 8;
+const VIEWPORT_MARGIN = 8;
+const ownerId = createIconButtonTooltipOwnerId();
+const tooltipId = `${ownerId}-content`;
+const buttonRef = ref<HTMLButtonElement | null>(null);
+const tooltipRef = ref<HTMLElement | null>(null);
+const tooltipReady = ref(false);
+const placement = ref<"top" | "bottom">("top");
+const tooltipStyle = ref<Record<string, string>>({ position: "fixed", top: "0px", left: "0px" });
+const isTooltipActive = computed(() => activeIconButtonTooltip.value?.ownerId === ownerId);
+let isHovered = false;
+let isFocused = false;
+
+function syncTooltipRequest() {
+  if ((isHovered || isFocused) && buttonRef.value && props.label) {
+    requestIconButtonTooltip({ ownerId, label: props.label, anchor: buttonRef.value });
+    return;
+  }
+  releaseIconButtonTooltip(ownerId);
+}
+
+async function updateTooltipPosition() {
+  await nextTick();
+  if (!isTooltipActive.value) return;
+  const anchor = activeIconButtonTooltip.value?.anchor;
+  const tooltip = tooltipRef.value;
+  if (!anchor?.isConnected || !tooltip) {
+    releaseIconButtonTooltip(ownerId);
+    return;
+  }
+
+  const anchorRect = anchor.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const topSpace = anchorRect.top - VIEWPORT_MARGIN;
+  placement.value = topSpace >= tooltipRect.height + TOOLTIP_GAP ? "top" : "bottom";
+
+  let top = placement.value === "top"
+    ? anchorRect.top - tooltipRect.height - TOOLTIP_GAP
+    : anchorRect.bottom + TOOLTIP_GAP;
+  if (top + tooltipRect.height > viewportHeight - VIEWPORT_MARGIN) {
+    top = Math.max(VIEWPORT_MARGIN, viewportHeight - tooltipRect.height - VIEWPORT_MARGIN);
+  }
+
+  const centeredLeft = anchorRect.left + anchorRect.width / 2 - tooltipRect.width / 2;
+  const maxLeft = Math.max(VIEWPORT_MARGIN, viewportWidth - tooltipRect.width - VIEWPORT_MARGIN);
+  const left = Math.min(Math.max(centeredLeft, VIEWPORT_MARGIN), maxLeft);
+  tooltipStyle.value = {
+    position: "fixed",
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`
+  };
+  tooltipReady.value = true;
+}
+
+function handleMouseEnter() {
+  isHovered = true;
+  syncTooltipRequest();
+}
+
+function handleMouseLeave() {
+  isHovered = false;
+  syncTooltipRequest();
+}
+
+function handleFocus() {
+  try {
+    isFocused = buttonRef.value?.matches(":focus-visible") ?? true;
+  } catch {
+    isFocused = true;
+  }
+  syncTooltipRequest();
+}
+
+function handleBlur() {
+  isFocused = false;
+  syncTooltipRequest();
+}
+
+function closeTooltipsOnScroll() {
+  resetIconButtonTooltipRegistry();
+}
+
+function handleViewportResize() {
+  void updateTooltipPosition();
+}
+
+function handleClick(event: MouseEvent) {
+  if (props.disabled || props.loading) return;
+  emit("click", event);
+}
+
+watch(
+  isTooltipActive,
+  (active) => {
+    tooltipReady.value = false;
+    if (active) {
+      window.addEventListener("scroll", closeTooltipsOnScroll, true);
+      window.addEventListener("resize", handleViewportResize);
+      void updateTooltipPosition();
+      return;
+    }
+    window.removeEventListener("scroll", closeTooltipsOnScroll, true);
+    window.removeEventListener("resize", handleViewportResize);
+  },
+  { flush: "post" }
+);
+
+watch(
+  () => props.label,
+  () => {
+    if (isHovered || isFocused) {
+      syncTooltipRequest();
+      void updateTooltipPosition();
+    }
+  }
+);
+
+onBeforeUnmount(() => {
+  releaseIconButtonTooltip(ownerId);
+  window.removeEventListener("scroll", closeTooltipsOnScroll, true);
+  window.removeEventListener("resize", handleViewportResize);
+});
 </script>
 
 <template>
   <button
+    ref="buttonRef"
     :type="type"
     :class="['ui-icon-button', `ui-icon-button--${variant}`, { 'is-loading': loading }]"
     :aria-label="label"
-    :title="label"
-    :data-tooltip="label"
+    :aria-describedby="isTooltipActive ? tooltipId : undefined"
     :disabled="disabled || loading"
-    @click="$emit('click', $event)"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
+    @focus="handleFocus"
+    @blur="handleBlur"
+    @click="handleClick"
   >
     <span v-if="loading" class="button-spinner" aria-hidden="true"></span>
     <span v-else-if="glyph" class="ui-icon-button__glyph" aria-hidden="true">{{ glyph }}</span>
@@ -79,6 +221,22 @@ defineEmits<{
       <path v-else-if="icon === 'Minimize2'" d="M10 3v7H3M3 10l7-7M14 3v7h7M21 10l-7-7M10 21v-7H3M3 14l7 7M14 21v-7h7M21 14l-7 7" />
       <path v-else-if="icon === 'MoreHorizontal'" d="M5 12h.01M12 12h.01M19 12h.01" />
       <path v-else-if="icon === 'Image'" d="M4 5h16v14H4V5Zm3 10 3-3 2 2 3-4 3 5M8 8h.01" />
+      <path v-else-if="icon === 'BookOpen'" d="M4 5.5c2.8-.7 5.5-.1 8 1.8v12c-2.5-1.9-5.2-2.5-8-1.8v-12Zm16 0c-2.8-.7-5.5-.1-8 1.8v12c2.5-1.9 5.2-2.5 8-1.8v-12Z" />
+      <path v-else-if="icon === 'List'" d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />
+      <path v-else-if="icon === 'Settings'" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Zm7.1-1.2a7.9 7.9 0 0 0 0-4l2-1.6-2-3.4-2.5 1a8.2 8.2 0 0 0-3.5-2L12.7 1h-4l-.4 3a8.2 8.2 0 0 0-3.5 2L2.3 5l-2 3.4 2 1.6a7.9 7.9 0 0 0 0 4l-2 1.6 2 3.4 2.5-1a8.2 8.2 0 0 0 3.5 2l.4 3h4l.4-3a8.2 8.2 0 0 0 3.5-2l2.5 1 2-3.4-2-1.6Z" />
     </svg>
   </button>
+  <Teleport to="body">
+    <div
+      v-if="isTooltipActive"
+      :id="tooltipId"
+      ref="tooltipRef"
+      role="tooltip"
+      :class="['ui-icon-button-tooltip', { 'is-ready': tooltipReady }]"
+      :data-placement="placement"
+      :style="tooltipStyle"
+    >
+      {{ activeIconButtonTooltip?.label }}
+    </div>
+  </Teleport>
 </template>

@@ -96,4 +96,37 @@ class OnboardingServiceTest {
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("SUPPLIER_SERVICE_TYPE_REQUIRED");
     }
+
+    @Test
+    void submitProfileRejectsFilePathContactName() {
+        when(tokenService.requireUserId("Bearer token")).thenReturn(20L);
+        when(authRepository.getUserById(20L)).thenReturn(
+            new AuthenticatedUser(20L, "supplier-01", null, "hashed", "UNSPECIFIED", "PROFILE_REQUIRED", 10L)
+        );
+        CompanyProfileRequest request = new CompanyProfileRequest(
+            "SUPPLIER",
+            "舟山测试供货商",
+            "91330000TEST000001",
+            "C:\\fakepath\\license.pdf",
+            "13800138000",
+            "test@example.com",
+            List.of("FILE-1"),
+            List.of("MATERIAL")
+        );
+
+        assertThatThrownBy(() -> new OnboardingService(authRepository, tokenService).submitProfile("Bearer token", request))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("CONTACT_NAME_INVALID");
+        verify(authRepository, never()).updateCompanyProfile(
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any()
+        );
+    }
 }

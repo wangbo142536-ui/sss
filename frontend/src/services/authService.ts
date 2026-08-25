@@ -369,7 +369,11 @@ export async function uploadQualificationFile(file: File): Promise<Qualification
 }
 
 export function resolveAuthRoute(session: AuthSession): string {
-  if (session.profileStatus === "PROFILE_REQUIRED" || session.profileStatus === "PENDING_REVIEW" || session.profileStatus === "REJECTED") {
+  if (session.profileStatus === "PENDING_REVIEW") {
+    return "/onboarding/review-status";
+  }
+
+  if (session.profileStatus === "PROFILE_REQUIRED" || session.profileStatus === "REJECTED") {
     return "/onboarding/company-profile";
   }
 

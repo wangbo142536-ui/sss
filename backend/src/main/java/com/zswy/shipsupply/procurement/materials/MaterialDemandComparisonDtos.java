@@ -10,7 +10,66 @@ record MaterialDemandComparisonResponse(
     List<MaterialDemandComparisonItem> items,
     boolean isOrdered,
     boolean isDiscarded,
-    Long existingPurchaseOrderId
+    Long existingPurchaseOrderId,
+    MaterialComparisonAiSummary aiProcessing,
+    MaterialComparisonStrategySettings strategySettings
+) {
+    MaterialDemandComparisonResponse(
+        MaterialDemandSummaryResponse demand,
+        MaterialDemandSupplyInfo supplyInfo,
+        List<MaterialDemandComparisonStrategy> strategies,
+        List<MaterialDemandComparisonItem> items,
+        boolean isOrdered,
+        boolean isDiscarded,
+        Long existingPurchaseOrderId
+    ) {
+        this(demand, supplyInfo, strategies, items, isOrdered, isDiscarded, existingPurchaseOrderId,
+            new MaterialComparisonAiSummary("DETERMINISTIC", 0, 0), MaterialComparisonStrategySettings.defaults());
+    }
+
+    MaterialDemandComparisonResponse(
+        MaterialDemandSummaryResponse demand,
+        MaterialDemandSupplyInfo supplyInfo,
+        List<MaterialDemandComparisonStrategy> strategies,
+        List<MaterialDemandComparisonItem> items,
+        boolean isOrdered,
+        boolean isDiscarded,
+        Long existingPurchaseOrderId,
+        MaterialComparisonAiSummary aiProcessing
+    ) {
+        this(demand, supplyInfo, strategies, items, isOrdered, isDiscarded, existingPurchaseOrderId,
+            aiProcessing, MaterialComparisonStrategySettings.defaults());
+    }
+}
+
+record MaterialComparisonAiSummary(
+    String status,
+    int appliedItemCount,
+    int fallbackItemCount
+) {
+}
+
+record MaterialComparisonStrategySettings(
+    int mixedSupplierCount,
+    boolean priceEnabled,
+    int priceLevel,
+    boolean qualityEnabled,
+    int qualityLevel,
+    List<Long> coreDemandItemIds,
+    int strategyVersion
+) {
+    static MaterialComparisonStrategySettings defaults() {
+        return new MaterialComparisonStrategySettings(3, true, 5, true, 3, List.of(), 1);
+    }
+}
+
+record MaterialComparisonStrategySettingsRequest(
+    Integer mixedSupplierCount,
+    Boolean priceEnabled,
+    Integer priceLevel,
+    Boolean qualityEnabled,
+    Integer qualityLevel,
+    List<Long> coreDemandItemIds
 ) {
 }
 
@@ -38,7 +97,8 @@ record MaterialDemandComparisonStrategy(
     String currency,
     List<MaterialDemandComparisonSupplier> suppliers,
     boolean enabled,
-    String disabledReason
+    String disabledReason,
+    List<String> attributeTags
 ) {
     MaterialDemandComparisonStrategy(
         String strategyType,
@@ -53,7 +113,25 @@ record MaterialDemandComparisonStrategy(
         boolean enabled,
         String disabledReason
     ) {
-        this(strategyType, strategyName, matchedCount, totalCount, unmatchedCount, unpricedCount, totalAmount, null, currency, suppliers, enabled, disabledReason);
+        this(strategyType, strategyName, matchedCount, totalCount, unmatchedCount, unpricedCount, totalAmount, null, currency, suppliers, enabled, disabledReason, List.of());
+    }
+
+
+    MaterialDemandComparisonStrategy(
+        String strategyType,
+        String strategyName,
+        int matchedCount,
+        int totalCount,
+        int unmatchedCount,
+        int unpricedCount,
+        BigDecimal totalAmount,
+        BigDecimal totalAmountUsd,
+        String currency,
+        List<MaterialDemandComparisonSupplier> suppliers,
+        boolean enabled,
+        String disabledReason
+    ) {
+        this(strategyType, strategyName, matchedCount, totalCount, unmatchedCount, unpricedCount, totalAmount, totalAmountUsd, currency, suppliers, enabled, disabledReason, List.of());
     }
 }
 
@@ -67,7 +145,11 @@ record MaterialDemandComparisonSupplier(
     int stockSatisfiedCount,
     BigDecimal totalAmount,
     BigDecimal totalAmountUsd,
-    String currency
+    String currency,
+    List<String> attributeTags,
+    int coreItemCount,
+    int qualityScore,
+    int priceScore
 ) {
     MaterialDemandComparisonSupplier(
         Long companyId,
@@ -80,7 +162,22 @@ record MaterialDemandComparisonSupplier(
         BigDecimal totalAmount,
         String currency
     ) {
-        this(companyId, supplierName, matchedCount, totalCount, unmatchedCount, unpricedCount, stockSatisfiedCount, totalAmount, null, currency);
+        this(companyId, supplierName, matchedCount, totalCount, unmatchedCount, unpricedCount, stockSatisfiedCount, totalAmount, null, currency, List.of(), 0, 0, 0);
+    }
+
+    MaterialDemandComparisonSupplier(
+        Long companyId,
+        String supplierName,
+        int matchedCount,
+        int totalCount,
+        int unmatchedCount,
+        int unpricedCount,
+        int stockSatisfiedCount,
+        BigDecimal totalAmount,
+        BigDecimal totalAmountUsd,
+        String currency
+    ) {
+        this(companyId, supplierName, matchedCount, totalCount, unmatchedCount, unpricedCount, stockSatisfiedCount, totalAmount, totalAmountUsd, currency, List.of(), 0, 0, 0);
     }
 }
 

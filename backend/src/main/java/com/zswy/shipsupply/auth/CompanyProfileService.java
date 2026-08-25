@@ -38,7 +38,21 @@ public class CompanyProfileService {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "COMPANY_PROFILE_REQUIRED: company profile required");
         }
-        return companyProfileRepository.saveProfile(currentUser.companyId(), request);
+        ContactNamePolicy.rejectPathValue(request.contactName());
+        String introduction = request.companyIntroduction() == null ? null : request.companyIntroduction().trim();
+        if (introduction != null && introduction.length() > 2000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "COMPANY_INTRODUCTION_TOO_LONG");
+        }
+        return companyProfileRepository.saveProfile(currentUser.companyId(), new EnterpriseProfileSaveRequest(
+            request.companyName(),
+            request.unifiedSocialCreditCode(),
+            request.logoFileId(),
+            request.logoUrl(),
+            introduction,
+            request.contactName(),
+            request.contactPhone(),
+            request.contactEmail()
+        ));
     }
 
     public CompanyQualificationListResponse qualifications(String authorizationHeader, String status) {
@@ -173,9 +187,7 @@ public class CompanyProfileService {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_REQUIRED: contact required");
         }
-        if (blank(request.contactName())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_NAME_REQUIRED: contact name required");
-        }
+        String contactName = ContactNamePolicy.requireValid(request.contactName(), "contactName");
         if (blank(request.contactPhone())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_PHONE_REQUIRED: contact phone required");
         }
@@ -183,7 +195,7 @@ public class CompanyProfileService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTACT_EMAIL_INVALID: contact email invalid");
         }
         return new CompanyContactSaveRequest(
-            trim(request.contactName()),
+            contactName,
             trim(request.contactPhone()),
             trim(request.contactEmail()),
             normalizeContactStatus(request.status())

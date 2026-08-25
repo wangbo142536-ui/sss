@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.ArrayList;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -300,10 +301,35 @@ public class FoodQuoteRepository {
                    ROUND(qi.requested_quantity
                      * COALESCE(override_price.unit_price, qi.unit_price), 4) amount,
                    qi.availability,
-                   CASE WHEN override_price.id IS NULL THEN qi.price_source ELSE 'COMPARISON_IMPORTED' END price_source
+                   CASE WHEN override_price.id IS NULL THEN qi.price_source ELSE 'COMPARISON_IMPORTED' END price_source,
+                   CAST(matched_sku.product_tags AS CHAR) product_tags
             FROM food_supplier_quote_item qi
             JOIN food_supplier_quote q ON q.id = qi.quote_id AND q.status = 'SUBMITTED'
             JOIN company supplier ON supplier.id = q.supplier_company_id
+            JOIN food_demand_item demand_item ON demand_item.id = qi.demand_item_id
+            LEFT JOIN shop_sku matched_sku ON matched_sku.id = (
+              SELECT sku.id
+              FROM shop_sku sku
+              WHERE sku.company_id = q.supplier_company_id
+                AND sku.product_type = 'FOOD'
+                AND sku.shelf_status = 'ON_SHELF'
+                AND (
+                  LOWER(REPLACE(TRIM(sku.product_name), ' ', '')) IN (
+                    LOWER(REPLACE(TRIM(COALESCE(demand_item.name_zh, '')), ' ', '')),
+                    LOWER(REPLACE(TRIM(COALESCE(demand_item.name_en, '')), ' ', ''))
+                  )
+                  OR LOWER(REPLACE(TRIM(COALESCE(sku.normalized_name, '')), ' ', '')) IN (
+                    LOWER(REPLACE(TRIM(COALESCE(demand_item.name_zh, '')), ' ', '')),
+                    LOWER(REPLACE(TRIM(COALESCE(demand_item.name_en, '')), ' ', ''))
+                  )
+                )
+              ORDER BY
+                CASE WHEN LOWER(REPLACE(TRIM(COALESCE(sku.specification_summary, '')), ' ', ''))
+                  = LOWER(REPLACE(TRIM(COALESCE(demand_item.specification, '')), ' ', '')) THEN 0 ELSE 1 END,
+                sku.updated_at DESC,
+                sku.id DESC
+              LIMIT 1
+            )
             LEFT JOIN food_comparison_quote_override override_price
               ON override_price.demand_id = q.demand_id AND override_price.quote_item_id = qi.id
             WHERE q.demand_id = ?
@@ -327,10 +353,19 @@ public class FoodQuoteRepository {
                 rs.getString("availability"),
                 rs.getString("price_source"),
                 quantitySatisfied(rs.getBigDecimal("requested_quantity"), rs.getBigDecimal("quoted_quantity")),
-                false
+                false,
+                strategyTags(rs.getString("product_tags"))
             ),
             demandId
         );
+    }
+
+    private List<String> strategyTags(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        List<String> tags = new ArrayList<>();
+        if (json.contains("价格低")) tags.add("价格低");
+        if (json.contains("质量高")) tags.add("质量高");
+        return List.copyOf(tags);
     }
 
     public int submittedSupplierCount(long demandId) {

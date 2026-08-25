@@ -4,6 +4,8 @@ import { useRoute, useRouter } from "vue-router";
 import AnimatedTabs from "@/components/AnimatedTabs.vue";
 import AttributeSummary from "@/components/AttributeSummary.vue";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
+import CompanyRolePermissionTree from "@/components/CompanyRolePermissionTree.vue";
+import { normalizeMenuPermissionKeys } from "@/components/companyRolePermissionSelection";
 import DataTable from "@/components/DataTable.vue";
 import DetailDrawer from "@/components/DetailDrawer.vue";
 import ExpandablePanel from "@/components/ExpandablePanel.vue";
@@ -11,6 +13,7 @@ import FilterToolbar from "@/components/FilterToolbar.vue";
 import IconButton from "@/components/IconButton.vue";
 import ImagePreviewModal from "@/components/ImagePreviewModal.vue";
 import LoadingOverlay from "@/components/LoadingOverlay.vue";
+import BackgroundTaskOverlay from "@/modules/backgroundProcessing/components/BackgroundTaskOverlay.vue";
 import SkuThumbnail from "@/components/SkuThumbnail.vue";
 import StableDateTimeInput from "@/components/StableDateTimeInput.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
@@ -18,7 +21,16 @@ import WorkbenchLayout from "@/components/WorkbenchLayout.vue";
 import CustomsDeclarationPanel from "@/modules/customsManagement/components/CustomsDeclarationPanel.vue";
 import { declareCustoms, downloadCustomsAttachment, getCustomsContext } from "@/modules/customsManagement/services/customsDeclarationService";
 import type { CustomsDeclarationContext } from "@/modules/customsManagement/types";
+import { useMaterialComparisonAiOverlay } from "@/modules/procurement/materials/composables/useMaterialComparisonAiOverlay";
+import { buildMaterialSavedQuoteRestoreState, resolveMaterialInitialQuoteStrategy } from "@/modules/procurement/materials/services/materialComparisonQuoteRestore";
+import MaterialComparisonStrategyDialog from "@/modules/procurement/materials/components/MaterialComparisonStrategyDialog.vue";
+import MaterialStrategyIcon from "@/modules/procurement/materials/components/MaterialStrategyIcon.vue";
+import ShopSmartImportOverlay from "@/modules/shopManagement/components/ShopSmartImportOverlay.vue";
+import ShopProductCatalog from "@/modules/shopManagement/components/ShopProductCatalog.vue";
+import { useShopSmartImportJob } from "@/modules/shopManagement/composables/useShopSmartImportJob";
+import { extractShopProductName } from "@/modules/shopManagement/services/shopProductNameService";
 import "@/modules/shopManagement/styles/shop-import.css";
+import type { ShopSmartImportJob } from "@/modules/shopManagement/types/shopSmartImport";
 import dashboardShipSprite from "@/assets/dashboard-ship-sprite.png";
 import govMapScene from "@/assets/gov-dashboard/code-assets/map-scene.png";
 import govRefundScene from "@/assets/gov-dashboard/code-assets/icon/oe7C.png";
@@ -39,6 +51,7 @@ import {
 } from "@/data/mockWorkbench";
 import { t, useI18n } from "@/i18n";
 import { ApiError, clearAuthSession, getAuthSession, uploadQualificationFile } from "@/services/authService";
+import { isSuspiciousContactPath } from "@/services/contactNamePolicy";
 import {
   createCompanyRole,
   createCompanyMember,
@@ -105,6 +118,7 @@ import {
   listMaterialDemandItemSupplierCandidates,
   listMaterialDemands,
   saveMaterialDemand,
+  saveMaterialComparisonStrategy,
   saveMaterialComparisonQuotes
 } from "@/services/procurementMaterialService";
 import {
@@ -164,11 +178,12 @@ import {
   downloadShopSkuImportTemplate,
   listShopSuppliers,
   listShopSkus,
-  previewShopSkuImport,
   resolveShopSkuException,
+  updateShopSku,
   updateShopSkuShelfStatus
 } from "@/services/shopService";
-import { getImpaStandardCategories, getImpaStandardItems } from "@/services/standardLibraryService";
+import type { ShopCatalogSku } from "@/modules/shopManagement/types/shopProductCatalog";
+import { getImpaStandardCategories, getImpaStandardItemPage } from "@/services/standardLibraryService";
 import { createSettlementBatch, deleteSettlement, listSettlements, paySettlement, settleSettlement, submitSettlementInvoice, updateSettlement } from "@/services/settlementService";
 import { deleteFulfillmentAttachment, listBargeShuttleAttachments, listPurchaseFulfillmentAttachments, saveBargeNodeAttachments, saveSupplierFulfillmentAttachments } from "@/services/fulfillmentService";
 import {
@@ -293,6 +308,8 @@ type ShopExistingSnapshot = {
   skuId?: string | number;
   supplierSkuCode: string;
   productName: string;
+  productDescription: string;
+  productTags: string[];
   productType: string;
   category: string;
   categoryCode: string;
@@ -329,6 +346,8 @@ type ShopSkuRow = {
   impaCode?: string;
   supplierSkuCode: string;
   productName: string;
+  productDescription: string;
+  productTags: string[];
   specs: string[];
   specItems: ShopEditableSpec[];
   stock: number;
@@ -369,6 +388,9 @@ type ShopProfileForm = {
   companyType: string;
   status: string;
 };
+
+type ShopProfileFieldKey = "shopName" | "creditCode" | "contactName" | "contactPhone" | "contactEmail";
+type ShopProfileFieldErrors = Partial<Record<ShopProfileFieldKey, string>>;
 
 type ShopImportPreviewSummary = {
   batchId: string | number;
@@ -444,6 +466,8 @@ type CompareSupplierCard = {
   supplier: string;
   skuCount: number;
   amount: string;
+  companyId?: number;
+  attributeTags: string[];
 };
 
 type CompareStrategyCard = {
@@ -603,6 +627,19 @@ const showCompareBackTop = ref(false);
 const compareData = ref<MaterialDemandComparisonResponse | null>(null);
 const compareLoading = ref(false);
 const compareError = ref("");
+const compareStrategyDialogOpen = ref(false);
+const compareStrategySaving = ref(false);
+const {
+  visible: materialComparisonAiVisible,
+  status: materialComparisonAiStatus,
+  progressPercent: materialComparisonAiProgressPercent,
+  elapsedSeconds: materialComparisonAiElapsedSeconds,
+  message: materialComparisonAiMessage,
+  counters: materialComparisonAiCounters,
+  stages: materialComparisonAiStages,
+  runLoad: runMaterialComparisonAiLoad,
+  close: closeMaterialComparisonAiOverlay
+} = useMaterialComparisonAiOverlay();
 const compareSupplyForm = ref<Record<CompareSupplyFormKey, string>>({
   vessel: t("compare.supply.vesselValue"),
   inquiryNo: "",
@@ -615,7 +652,8 @@ const compareSupplyForm = ref<Record<CompareSupplyFormKey, string>>({
   supplyMode: "SEA"
 });
 const compareSkuKeyword = ref("");
-const comparePreferenceFilters = ref<string[]>([]);
+const compareCoreOnly = ref(false);
+const compareUnmatchedOnly = ref(false);
 const selectedCompareRowIds = ref<string[]>([]);
 const compareQuantityInputs = ref<Record<string, string>>({});
 const compareUnitSelections = ref<Record<string, string>>({});
@@ -835,12 +873,24 @@ const shopImportInput = ref<HTMLInputElement | null>(null);
 const shopSkuImageInput = ref<HTMLInputElement | null>(null);
 const selectedShopSkuImageRowId = ref("");
 const shopSkuImageUploading = ref(false);
-const shopImportOverlayVisible = ref(false);
-const shopImportProgress = ref(0);
-const shopImportStageIndex = ref(0);
-const shopImportFileName = ref("");
-const shopImportPending = ref(false);
+const {
+  visible: shopSmartImportVisible,
+  job: shopSmartImportJob,
+  elapsedSeconds: shopSmartImportElapsedSeconds,
+  isRunning: shopSmartImportIsRunning,
+  startAnalysis: startShopSmartImportAnalysis,
+  execute: executeShopSmartImportJob,
+  beginExecution: beginShopSmartImportExecution,
+  finishExecution: finishShopSmartImportExecution,
+  close: closeShopSmartImport,
+  show: showShopSmartImport,
+  retry: retryShopSmartImportJob
+} = useShopSmartImportJob();
 const shopProfileLoading = ref(false);
+const shopProfileEditing = ref(false);
+const shopProfileSnapshot = ref<ShopProfileForm | null>(null);
+const shopProfileLogoPreviewSnapshot = ref("");
+const shopProfileFieldErrors = ref<ShopProfileFieldErrors>({});
 const companyQualificationLoading = ref(false);
 const companyContactLoading = ref(false);
 const companyVesselLoading = ref(false);
@@ -855,6 +905,9 @@ const shopPersistedSkuRows = ref<ShopSkuRow[]>([]);
 const shopPreviewSkuRows = ref<ShopSkuRow[]>([]);
 const shopPreviewTypeTab = ref<"MATERIAL" | "FOOD">("MATERIAL");
 const shopSkuRows = ref<ShopSkuRow[]>([]);
+const shopProductViewMode = ref<"list" | "catalog">("catalog");
+const shopCatalogRows = ref<ShopSkuRow[]>([]);
+const shopCatalogLoading = ref(false);
 const supplierInfoRows = ref<SupplierInfoRow[]>([]);
 const shopDirtySkuIds = ref<Set<string>>(new Set());
 const expandedShopSkuId = ref("");
@@ -877,8 +930,28 @@ const shopProfileForm = ref<ShopProfileForm>({
 });
 const shopProductKeyword = ref("");
 const shopProductTypeFilter = ref("");
+const shopProductCategoryNameFilter = ref("");
+const shopProductClassificationFilter = computed({
+  get: () => {
+    if (shopProductCategoryNameFilter.value) {
+      return `CATEGORY::${shopProductTypeFilter.value}::${encodeURIComponent(shopProductCategoryNameFilter.value)}`;
+    }
+    return shopProductTypeFilter.value ? `TYPE::${shopProductTypeFilter.value}` : "";
+  },
+  set: (value: string) => {
+    if (!value) {
+      shopProductTypeFilter.value = "";
+      shopProductCategoryNameFilter.value = "";
+      return;
+    }
+    const [kind, productType, encodedCategory = ""] = value.split("::");
+    shopProductTypeFilter.value = productType || "";
+    shopProductCategoryNameFilter.value = kind === "CATEGORY" ? decodeURIComponent(encodedCategory) : "";
+    shopSkuPage.value = 1;
+  }
+});
 const shopProductCodeStatusFilter = ref("");
-const shopProductShelfStatusFilter = ref("");
+const shopProductShelfStatusFilter = ref("ON_SHELF");
 const shopSkuPage = ref(1);
 const shopSkuPageSize = 50;
 const shopSkuTotal = ref(0);
@@ -914,16 +987,22 @@ type ShopSkuPageCacheEntry = {
   rows: ShopSkuRow[];
 };
 const shopSkuPageCache = new Map<string, ShopSkuPageCacheEntry>();
-let shopImportTimer: number | undefined;
 let liveFilterTimer: number | undefined;
 const previewOpen = ref(false);
 const previewTitle = ref("");
 const previewImages = ref<SkuImage[]>([]);
 const previewAttributes = ref<SkuAttribute[]>([]);
+const previewShopSkuRowId = ref("");
+let registrationPreviewObjectUrl = "";
+let registrationPreviewRequestId = 0;
 const impaCategories = ref<StandardCategoryNode[]>([]);
 const selectedImpaCategoryCode = ref("");
 const impaKeyword = ref("");
 const impaItems = ref<ImpaStandardItem[]>([]);
+const IMPA_PAGE_SIZE = 50;
+const impaPage = ref(1);
+const impaTotal = ref(0);
+const impaPageTotalPages = ref(0);
 const impaCategoriesLoading = ref(false);
 const impaItemsLoading = ref(false);
 const expandedImpaCode = ref("");
@@ -1041,7 +1120,6 @@ const registrationActionId = ref("");
 const registrationErrorKey = ref("");
 const registrationKeyword = ref("");
 const registrationStatusFilter = ref("PENDING_REVIEW");
-const expandedRegistrationId = ref("");
 const rejectDialogOpen = ref(false);
 const rejectReason = ref("");
 const rejectReasonError = ref(false);
@@ -1069,7 +1147,7 @@ const memberForm = ref({
 });
 const memberFormErrors = ref<Record<string, string>>({});
 const companyMenuOptions = ref<CompanyMenuOption[]>([]);
-const roleForm = ref({ roleCode: "", roleName: "", menuPermissionKeys: [] as string[] });
+const roleForm = ref({ roleName: "", menuPermissionKeys: [] as string[] });
 const selectedCompanyRoleCode = ref("");
 const memberConfirmOpen = ref(false);
 const memberConfirmAction = ref<"enable" | "disable" | "reset" | "disableRole">("disable");
@@ -1969,6 +2047,7 @@ const shopSkuColumns = computed<TableColumn[]>(() => [
   { key: "brand", label: t("page.supplierProducts.field.brand"), width: "108px" },
   { key: "unit", label: t("page.supplierProducts.field.unit"), width: "82px" },
   { key: "packing", label: t("page.supplierProducts.field.packing"), width: "118px" },
+  { key: "marker", label: "标记", width: "72px", align: "center" },
   { key: "operation", label: t("common.operation"), width: "150px", align: "center" }
 ]);
 
@@ -2134,24 +2213,16 @@ const readShopImportRawName = (source: Record<string, unknown>) =>
   readShopString(source, "description") ||
   readShopRawColumn(source, ["Name of Commodity & Specification", "Name of Commodity Specification", "DESCRIPTION", "Description"]);
 
-const normalizeShopNameForCompare = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
-
-const looksLikeRawShopDescription = (value: string) =>
-  /[\r\n]/.test(value) ||
-  /\b(material|packing|barcode|stock|finish|handle|specification)\s*[:：]/i.test(value) ||
-  value.length > 120;
-
 const readBackendCleanShopProductName = (source: Record<string, unknown>) => {
-  const productName = readShopString(source, "productName");
-  if (productName) {
-    const rawName = readShopImportRawName(source);
-    if ((!rawName || normalizeShopNameForCompare(productName) !== normalizeShopNameForCompare(rawName)) && !looksLikeRawShopDescription(productName)) {
-      return productName;
-    }
-  }
-
   const cleanName = readShopString(source, "cleanName");
-  return cleanName && !looksLikeRawShopDescription(cleanName) ? cleanName : "";
+  if (cleanName) return extractShopProductName(cleanName);
+  return extractShopProductName(readShopString(source, "productName") || readShopImportRawName(source));
+};
+
+const revokeRegistrationPreviewObjectUrl = () => {
+  if (!registrationPreviewObjectUrl) return;
+  URL.revokeObjectURL(registrationPreviewObjectUrl);
+  registrationPreviewObjectUrl = "";
 };
 
 const createShopSpecItem = (value: Partial<ShopEditableSpec> = {}): ShopEditableSpec => ({
@@ -2229,6 +2300,8 @@ const normalizeShopExistingSnapshot = (value: unknown): ShopExistingSnapshot | u
     skuId: typeof skuId === "string" || typeof skuId === "number" ? skuId : undefined,
     supplierSkuCode: readShopString(value, "supplierSkuCode"),
     productName: readShopString(value, "productName") || readShopString(value, "cleanName"),
+    productDescription: readShopString(value, "productDescription"),
+    productTags: readShopStringArray(value, "productTags"),
     productType: readShopString(value, "productType"),
     category: categoryName || categoryCode,
     categoryCode,
@@ -2283,7 +2356,7 @@ const normalizeShopProfile = (payload: unknown): ShopProfileForm => {
       readShopString(source, "businessLicenseNo"),
     logoFileId,
     logoUrl: logoUrl ? normalizeShopImageUrl(logoUrl) : "",
-    description: readShopString(source, "description"),
+    description: readShopString(source, "companyIntroduction") || readShopString(source, "description"),
     mainCategories: readShopStringArray(source, "mainCategories"),
     servicePorts: readShopStringArray(source, "servicePorts"),
     deliveryAreas: readShopStringArray(source, "deliveryAreas"),
@@ -2357,6 +2430,8 @@ const normalizeShopSku = (value: unknown, options: { preview?: boolean; batchId?
     productName:
       readBackendCleanShopProductName(value) ||
       t("page.supplierProducts.waitingManual"),
+    productDescription: readShopString(value, "productDescription"),
+    productTags: readShopStringArray(value, "productTags"),
     specs,
     specItems,
     stock: readShopNumber(value, "stockQty"),
@@ -2490,9 +2565,9 @@ const normalizeCompanyValueAddedService = (payload: unknown) => {
   };
 };
 
-const filteredShopProductRows = computed(() => {
+const filterShopProductRows = (rows: ShopSkuRow[]) => {
   const keyword = shopProductKeyword.value.trim().toLowerCase();
-  return shopSkuRows.value.filter((row) => {
+  return rows.filter((row) => {
     const keywordMatched =
       !keyword ||
       [row.platformCode, row.impaCode, row.supplierSkuCode, row.productName, row.brand, row.barcode, row.exceptionReason, ...row.specs]
@@ -2502,17 +2577,33 @@ const filteredShopProductRows = computed(() => {
     const typeMatched = hasPendingShopImport.value
       ? row.productType === shopPreviewTypeTab.value
       : !shopProductTypeFilter.value || row.productType === shopProductTypeFilter.value;
+    const normalizedCategoryName = (row.categoryName || row.category || "").trim();
+    const categoryMatched = !shopProductCategoryNameFilter.value || (
+      shopProductCategoryNameFilter.value === "__UNCATEGORIZED__"
+        ? !normalizedCategoryName
+        : normalizedCategoryName === shopProductCategoryNameFilter.value
+    );
     const codeStatusMatched =
       !shopProductCodeStatusFilter.value ||
       getShopCodeStatusFilterValues(shopProductCodeStatusFilter.value).includes(row.codingStatus);
     const shelfStatusMatched = !shopProductShelfStatusFilter.value || row.listingStatus === shopProductShelfStatusFilter.value;
-    return keywordMatched && typeMatched && codeStatusMatched && shelfStatusMatched;
+    return keywordMatched && typeMatched && categoryMatched && codeStatusMatched && shelfStatusMatched;
   });
-});
+};
 
-const SHOP_MATCHED_CODE_STATUSES = ["CODE_MATCHED", "SPEC_MATCHED", "MATCHED", "CODE_MATCH", "SPEC_MATCH", "SPECIFICATION_MATCH"];
+const filteredShopProductRows = computed(() => filterShopProductRows(shopSkuRows.value));
+const filteredShopCatalogRows = computed(() =>
+  filterShopProductRows(hasPendingShopImport.value ? shopPreviewSkuRows.value : shopCatalogRows.value)
+);
+
+const SHOP_MATCHED_CODE_STATUSES = ["CODE_MATCHED", "SPEC_MATCHED", "CONFIRMED", "IGNORED", "MATCHED", "CODE_MATCH", "SPEC_MATCH", "SPECIFICATION_MATCH"];
 
 const isShopMatchedCodeStatus = (status: string) => SHOP_MATCHED_CODE_STATUSES.includes(status);
+
+const hasShopCodeCandidate = (row: ShopSkuRow) => {
+  const code = String(row.impaCode || row.platformCode || "").trim();
+  return Boolean(code && !["-", "--", "待编码"].includes(code));
+};
 
 const shopExceptionRows = computed(() => shopSkuRows.value.filter((row) => isShopManualReviewStatus(row.codingStatus)));
 const shopBlockedPreviewRows = computed(() =>
@@ -2567,6 +2658,23 @@ const getShopCategoryOptions = computed(() => {
     .filter((item) => item.value && !options.some((option) => option.value === item.value));
   return [...options, ...existing];
 });
+
+const shopProductClassificationGroups = computed(() => ["MATERIAL", "FOOD"].map((productType) => {
+  const counts = new Map<string, number>();
+  shopCatalogRows.value
+    .filter((row) => row.productType === productType)
+    .forEach((row) => {
+      const name = (row.categoryName || row.category || "").trim() || "__UNCATEGORIZED__";
+      counts.set(name, (counts.get(name) || 0) + 1);
+    });
+  return {
+    productType,
+    label: productType === "FOOD" ? t("page.supplierProducts.typeFood") : t("page.supplierProducts.typeMaterial"),
+    categories: [...counts.entries()]
+      .map(([name, count]) => ({ name, count, label: name === "__UNCATEGORIZED__" ? "未分类" : name }))
+      .sort((left, right) => left.label.localeCompare(right.label, "zh-CN", { numeric: true, sensitivity: "base" }))
+  };
+}));
 
 const getShopCategoryOptionsForRow = (row: ShopSkuRow) => {
   const options = [...getShopCategoryOptions.value];
@@ -2635,6 +2743,8 @@ const buildShopSkuSavePayload = (row: ShopSkuRow) => ({
   impaCode: row.impaCode || row.platformCode,
   supplierSkuCode: row.supplierSkuCode,
   productName: row.productName,
+  productDescription: row.productDescription,
+  productTags: row.productTags,
   specifications: row.specItems
     .map((item) => ({
       key: item.key || item.name || "specification",
@@ -2713,15 +2823,6 @@ const getShopExistingChangeRows = (row: ShopSkuRow) => {
     { key: "shelfStatus", label: t("page.supplierProducts.field.listingStatus"), oldValue: getShopShelfStatusLabel(snapshot.listingStatus), newValue: getShopShelfStatusLabel(row.listingStatus) }
   ].filter((item) => formatShopDisplayValue(item.oldValue) !== formatShopDisplayValue(item.newValue));
 };
-
-const shopImportStages = computed(() => [
-  t("page.supplierProducts.importStageUpload"),
-  t("page.supplierProducts.importStagePreview"),
-  t("page.supplierProducts.importStageImpa"),
-  t("page.supplierProducts.importStageException")
-]);
-
-const shopImportProgressStyle = computed(() => ({ "--progress": `${shopImportProgress.value}%` }));
 
 const shopCompanyName = computed(() => {
   const session = getAuthSession();
@@ -2807,6 +2908,7 @@ const getShopErrorText = (error: unknown, fallbackKey = "page.supplierProducts.r
 
 const buildShopSkuQuery = (page = shopSkuPage.value) => ({
   productType: shopProductTypeFilter.value,
+  categoryName: shopProductCategoryNameFilter.value,
   codeStatus: "",
   shelfStatus: shopProductShelfStatusFilter.value,
   keyword: shopProductKeyword.value.trim(),
@@ -2836,12 +2938,26 @@ const loadSupplierInfoRows = async () => {
     const payload = await listShopSuppliers(buildSupplierInfoQuery());
     supplierInfoRows.value = readShopItems(payload).map((item) => normalizeSupplierInfo(item)).filter((item): item is SupplierInfoRow => Boolean(item));
   } catch (error) {
-    supplierInfoErrorMessage.value = error instanceof ApiError && error.message ? error.message : "供货商信息查询失败";
+    supplierInfoErrorMessage.value = error instanceof ApiError && error.message ? error.message : "服务商管理查询失败";
     supplierInfoRows.value = [];
   } finally {
     supplierInfoLoading.value = false;
   }
 };
+
+const addShopProductTag = (row: ShopSkuRow) => {
+  if (row.productTags.length >= 6) return;
+  row.productTags.push("");
+  markShopSkuDirty(row);
+};
+
+const removeShopProductTag = (row: ShopSkuRow, index: number) => {
+  row.productTags.splice(index, 1);
+  markShopSkuDirty(row);
+};
+
+const isShopNewSkuRow = (row: ShopSkuRow) =>
+  row.previewAction === "INSERT" || (!row.skuId && !row.existingSkuId);
 
 const resetSupplierInfoFilters = () => {
   supplierInfoKeyword.value = "";
@@ -2879,13 +2995,13 @@ const fetchAllSavedShopSkuRows = async (): Promise<ShopSkuRow[]> => {
   const rows: ShopSkuRow[] = [];
   const size = 100;
   let page = 1;
-  let total = shopSkuTotal.value || 0;
+  let total: number | null = null;
 
   do {
     const payload = await listShopSkus({
-      ...buildShopSkuQuery(page),
       page,
-      size
+      size,
+      shelfStatus: shopProductShelfStatusFilter.value
     });
     const unwrapped = unwrapShopPayload(payload);
     const source = isPlainRecord(unwrapped) ? unwrapped : {};
@@ -2893,12 +3009,95 @@ const fetchAllSavedShopSkuRows = async (): Promise<ShopSkuRow[]> => {
       .map((item) => normalizeShopSku(item))
       .filter((item): item is ShopSkuRow => Boolean(item?.skuId && !item.isPreview));
     rows.push(...items);
-    total = readShopNumber(source, "total") || total || rows.length;
-    if (!items.length || rows.length >= total) break;
+    const responseTotal = readShopNumber(source, "total");
+    if (responseTotal > 0 || !items.length) {
+      total = responseTotal;
+    }
+    if (
+      !items.length ||
+      (total !== null && rows.length >= total) ||
+      (total === null && items.length < size)
+    ) break;
     page += 1;
-  } while (page <= Math.ceil(Math.max(total, rows.length) / size) + 1);
+  } while (total === null || page <= Math.ceil(total / size));
 
   return rows;
+};
+
+const loadShopProductCatalogRows = async () => {
+  if (hasPendingShopImport.value) {
+    shopCatalogRows.value = [];
+    return;
+  }
+  shopCatalogLoading.value = true;
+  try {
+    shopCatalogRows.value = await hydrateShopSkuImages(await fetchAllSavedShopSkuRows());
+  } finally {
+    shopCatalogLoading.value = false;
+  }
+};
+
+const showShopProductCatalog = async () => {
+  shopProductViewMode.value = "catalog";
+  shopErrorMessage.value = "";
+  try {
+    await loadShopProductCatalogRows();
+  } catch (error) {
+    shopCatalogRows.value = [];
+    shopErrorMessage.value = getShopErrorText(error);
+  }
+};
+
+const showShopProductList = () => {
+  shopProductViewMode.value = "list";
+};
+
+const saveShopCatalogSku = async (draft: ShopCatalogSku) => {
+  const row = shopCatalogRows.value.find(
+    (item) => item.id === draft.id || (draft.skuId !== undefined && String(item.skuId || "") === String(draft.skuId))
+  );
+  if (!row?.skuId) throw new Error("未找到可保存的商品记录");
+
+  Object.assign(row, {
+    productType: draft.productType,
+    category: draft.category || draft.categoryName || draft.categoryCode,
+    categoryCode: draft.categoryCode,
+    categoryName: draft.categoryName,
+    platformCode: draft.platformCode,
+    impaCode: draft.platformCode || draft.impaCode || "",
+    supplierSkuCode: draft.supplierSkuCode,
+    productName: draft.productName,
+    productDescription: draft.productDescription || "",
+    productTags: [...(draft.productTags || [])],
+    stock: Number(draft.stock) || 0,
+    leadTimeDays: Number(draft.leadTimeDays) || 0,
+    deliveryArea: draft.deliveryArea || "",
+    price: Number(draft.price) || 0,
+    currency: draft.currency || "CNY",
+    brand: draft.brand || "",
+    unit: draft.unit || "",
+    packing: draft.packing || "",
+    barcode: draft.barcode || "",
+    specItems: (draft.specItems || []).map((item) => ({ ...item })),
+    specs: (draft.specItems || []).map((item) => [item.name, item.value].filter(Boolean).join(":"))
+  });
+
+  shopSaving.value = true;
+  shopErrorMessage.value = "";
+  shopNoticeMessage.value = "";
+  try {
+    await updateShopSku(row.skuId, buildShopSkuSavePayload(row));
+    shopSkuPageCache.clear();
+    shopNoticeKey.value = "";
+    shopNoticeMessage.value = "商品信息已保存";
+    await refreshShopSkuList();
+  } catch (error) {
+    const message = getShopErrorText(error, "page.supplierProducts.skuSaveFailed");
+    shopErrorMessage.value = message;
+    throw new Error(message);
+  } finally {
+    shopSaving.value = false;
+  }
 };
 
 const runShopShelfUpdates = async (rows: ShopSkuRow[], shelfStatus: "ON_SHELF" | "OFF_SHELF") => {
@@ -2926,12 +3125,69 @@ const prefetchShopSkuPage = async (page: number) => {
   }
 };
 
+const cloneShopProfileForm = (form: ShopProfileForm): ShopProfileForm => ({
+  ...form,
+  mainCategories: [...form.mainCategories],
+  servicePorts: [...form.servicePorts],
+  deliveryAreas: [...form.deliveryAreas]
+});
+
+const startShopProfileEdit = () => {
+  if (shopProfileLoading.value || shopSaving.value || shopLogoUploading.value) return;
+  shopProfileSnapshot.value = cloneShopProfileForm(shopProfileForm.value);
+  shopProfileLogoPreviewSnapshot.value = shopLogoPreview.value;
+  shopProfileFieldErrors.value = {};
+  shopErrorMessage.value = "";
+  shopNoticeKey.value = "";
+  shopNoticeMessage.value = "";
+  shopProfileEditing.value = true;
+};
+
+const cancelShopProfileEdit = () => {
+  if (shopSaving.value || shopLogoUploading.value) return;
+  if (shopProfileSnapshot.value) {
+    shopProfileForm.value = cloneShopProfileForm(shopProfileSnapshot.value);
+  }
+  shopLogoPreview.value = shopProfileLogoPreviewSnapshot.value;
+  shopProfileSnapshot.value = null;
+  shopProfileLogoPreviewSnapshot.value = "";
+  shopProfileFieldErrors.value = {};
+  shopErrorMessage.value = "";
+  shopNoticeKey.value = "";
+  shopProfileEditing.value = false;
+};
+
+const validateShopProfileForm = () => {
+  const form = shopProfileForm.value;
+  const errors: ShopProfileFieldErrors = {};
+  form.shopName = form.shopName.trim();
+  form.creditCode = form.creditCode.trim();
+  form.contactName = form.contactName.trim();
+  form.contactPhone = form.contactPhone.trim();
+  form.contactEmail = form.contactEmail.trim();
+
+  if (!form.shopName) errors.shopName = "page.onboarding.companyNameRequired";
+  if (!form.creditCode) errors.creditCode = "page.onboarding.creditCodeRequired";
+  if (!form.contactName) errors.contactName = "page.onboarding.contactNameRequired";
+  if (!form.contactPhone) errors.contactPhone = "page.onboarding.contactPhoneRequired";
+  if (!form.contactEmail) errors.contactEmail = "page.onboarding.contactEmailRequired";
+  else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail)) {
+    errors.contactEmail = "page.supplierProducts.profileEmailInvalid";
+  }
+  shopProfileFieldErrors.value = errors;
+  return Object.keys(errors).length === 0;
+};
+
 const loadShopProfile = async () => {
   shopProfileLoading.value = true;
   try {
     const payload = await getCompanyProfile();
     shopProfileForm.value = normalizeShopProfile(payload);
     shopLogoPreview.value = await resolveAuthenticatedImageUrl(shopProfileForm.value.logoUrl);
+    shopProfileSnapshot.value = null;
+    shopProfileLogoPreviewSnapshot.value = "";
+    shopProfileFieldErrors.value = {};
+    shopProfileEditing.value = false;
   } finally {
     shopProfileLoading.value = false;
   }
@@ -3014,7 +3270,15 @@ const loadShopWorkspace = async () => {
   shopNoticeMessage.value = "";
   shopSkuPageCache.clear();
   try {
-    await Promise.all([loadShopProfile(), loadCompanyQualifications(), loadCompanyContacts(), loadCompanyVessels(), loadCompanyValueAddedServices(), loadShopSkuList()]);
+    await Promise.all([
+      loadShopProfile(),
+      loadCompanyQualifications(),
+      loadCompanyContacts(),
+      loadCompanyVessels(),
+      loadCompanyValueAddedServices(),
+      loadShopSkuList(),
+      loadShopProductCatalogRows()
+    ]);
   } catch (error) {
     shopErrorMessage.value = getShopErrorText(error);
     companyQualificationRows.value = [];
@@ -3041,6 +3305,7 @@ const buildCompanyProfilePayload = (overrides: Record<string, unknown> = {}) => 
     unifiedSocialCreditCode: form.creditCode,
     logoFileId: form.logoFileId,
     logoUrl: form.logoUrl,
+    companyIntroduction: form.description,
     contactName: form.contactName,
     contactPhone: form.contactPhone,
     contactEmail: form.contactEmail,
@@ -3051,9 +3316,11 @@ const buildCompanyProfilePayload = (overrides: Record<string, unknown> = {}) => 
 };
 
 const saveShopProfile = async () => {
+  if (!shopProfileEditing.value || !validateShopProfileForm()) return;
   shopSaving.value = true;
   shopErrorMessage.value = "";
   shopNoticeMessage.value = "";
+  shopNoticeKey.value = "";
   try {
     await updateCompanyProfile(buildCompanyProfilePayload());
     shopNoticeKey.value = "page.supplierProducts.profileSaved";
@@ -3335,6 +3602,7 @@ const searchShopSkus = async () => {
   shopSkuPageCache.clear();
   try {
     await loadShopSkuList();
+    if (shopProductViewMode.value === "catalog") await loadShopProductCatalogRows();
   } catch (error) {
     shopErrorMessage.value = getShopErrorText(error);
     shopSkuRows.value = [];
@@ -3346,6 +3614,7 @@ const refreshShopSkuList = async () => {
   shopSkuPageCache.clear();
   try {
     await loadShopSkuList();
+    if (shopProductViewMode.value === "catalog") await loadShopProductCatalogRows();
   } catch (error) {
     shopErrorMessage.value = getShopErrorText(error);
     shopSkuRows.value = [];
@@ -3366,15 +3635,8 @@ const goShopSkuPage = async (page: number) => {
   }
 };
 
-const clearShopImportTimer = () => {
-  if (shopImportTimer !== undefined) {
-    window.clearTimeout(shopImportTimer);
-    shopImportTimer = undefined;
-  }
-};
-
 const openShopLogoPicker = () => {
-  if (shopLogoUploading.value || shopSaving.value) return;
+  if (!shopProfileEditing.value || shopLogoUploading.value || shopSaving.value) return;
   shopLogoInput.value?.click();
 };
 
@@ -3397,9 +3659,7 @@ const handleShopLogoChange = async (event: Event) => {
     const fileUrl = uploaded.url ? normalizeShopImageUrl(uploaded.url) : fileId ? buildFileUrlFromId(fileId) : "";
     shopProfileForm.value.logoFileId = fileId;
     shopProfileForm.value.logoUrl = fileUrl;
-    await updateCompanyProfile(buildCompanyProfilePayload({ logoFileId: fileId, logoUrl: fileUrl }));
-    await loadShopProfile();
-    shopNoticeKey.value = "page.supplierProducts.logoUploadReady";
+    shopNoticeKey.value = "page.supplierProducts.logoUploadPendingSave";
   } catch (error) {
     shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.logoUploadFailed");
   } finally {
@@ -3463,7 +3723,10 @@ const handleCompanyQualificationFileChange = async (event: Event) => {
 };
 
 const openShopImportPicker = () => {
-  if (shopImportOverlayVisible.value) return;
+  if (shopImporting.value || shopSmartImportIsRunning.value) {
+    showShopSmartImport();
+    return;
+  }
   shopImportInput.value?.click();
 };
 
@@ -3522,6 +3785,9 @@ const handleShopSkuImageChange = async (event: Event) => {
     row.imageUrl = fileUrl;
     row.images = fileId || fileUrl ? [{ fileId, imageUrl: fileUrl, thumbnailUrl: fileUrl, primary: true, sortOrder: 0 }] : [];
     row.thumbnail = await resolveAuthenticatedImageUrl(fileUrl || buildFileUrlFromId(fileId));
+    if (previewOpen.value && previewShopSkuRowId.value === row.id) {
+      previewImages.value = [{ src: row.thumbnail, alt: row.productName || row.supplierSkuCode || t("action.previewImage") }];
+    }
     markShopSkuDirty(row);
     shopNoticeKey.value = "page.supplierProducts.imageUploadReady";
   } catch (error) {
@@ -3533,22 +3799,70 @@ const handleShopSkuImageChange = async (event: Event) => {
   }
 };
 
+const applyShopSmartImportPreview = async (job: ShopSmartImportJob) => {
+  const payload = unwrapShopPayload(job.result ?? job);
+  const source = isPlainRecord(payload) ? payload : {};
+  const backendItems = readShopItems(source);
+  shopImportPreview.value = {
+    batchId: readShopString(source, "batchId") || readShopNumber(source, "batchId") || job.batchId,
+    status: readShopString(source, "status") || job.status,
+    totalCount: readShopNumber(source, "totalCount") || job.counts.itemTotal,
+    successCount: readShopNumber(source, "successCount") || Math.max(0, job.counts.itemProcessed - job.counts.failedCount),
+    exceptionCount: readShopNumber(source, "exceptionCount") || job.counts.pendingReviewCount + job.counts.failedCount
+  };
+  const batchId = shopImportPreview.value.batchId;
+  const previewRows = backendItems.map((item) => normalizeShopSku(item, { preview: true, batchId })).filter((item): item is ShopSkuRow => Boolean(item));
+  shopPreviewSkuRows.value = await hydrateShopSkuImages(previewRows);
+  shopSkuRows.value = shopPreviewSkuRows.value;
+  shopPreviewTypeTab.value = shopPreviewSkuRows.value.some((row) => row.productType === "MATERIAL") ? "MATERIAL" : "FOOD";
+  shopProductCodeStatusFilter.value = "";
+  shopNoticeKey.value = "page.supplierProducts.importPreviewReady";
+};
+
+const finishShopSmartImportAnalysis = async (job: ShopSmartImportJob) => {
+  if (job.status === "FAILED") {
+    shopProductCodeStatusFilter.value = "PENDING_EXCEPTION";
+    shopErrorMessage.value = job.message || t("page.supplierProducts.importFailed");
+    return;
+  }
+  await applyShopSmartImportPreview(job);
+};
+
+const retryShopSmartImport = async () => {
+  shopErrorMessage.value = "";
+  shopImporting.value = true;
+  try {
+    if (shopSmartImportJob.value.phase === "EXECUTION") {
+      await executeShopSmartImportPreview();
+      return;
+    }
+    const job = await retryShopSmartImportJob();
+    if (job) await finishShopSmartImportAnalysis(job);
+  } catch (error) {
+    shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.importFailed");
+  } finally {
+    shopImporting.value = false;
+  }
+};
+
+const viewShopSmartImportPreview = () => {
+  closeShopSmartImport();
+  shopManagementTab.value = "products";
+  void nextTick(() => {
+    document.querySelector(".shop-import-type-tabs, .shop-list-toolbar")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+};
+
 const handleShopImportFile = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
   if (!file.name.toLowerCase().endsWith(".xlsx")) {
-    shopErrorMessage.value = "商品导入仅支持固定双 Sheet 的 XLSX 模板，请先下载模板后填写。";
+    shopErrorMessage.value = "商品智能导入当前支持 XLSX 文件。";
     input.value = "";
     return;
   }
-  clearShopImportTimer();
-  shopImportFileName.value = file.name;
-  shopImportOverlayVisible.value = true;
-  shopImportPending.value = false;
   shopImporting.value = true;
-  shopImportProgress.value = 8;
-  shopImportStageIndex.value = 0;
   shopImportPreview.value = null;
   shopPreviewSkuRows.value = [];
   shopDirtySkuIds.value = new Set();
@@ -3557,56 +3871,13 @@ const handleShopImportFile = async (event: Event) => {
   shopErrorMessage.value = "";
   shopNoticeMessage.value = "";
 
-  const steps = [
-    { delay: 360, percent: 28, stage: 0 },
-    { delay: 520, percent: 52, stage: 1 },
-    { delay: 620, percent: 76, stage: 2 },
-    { delay: 620, percent: 88, stage: 3 }
-  ];
-  let cursor = 0;
-  const runStep = () => {
-    const step = steps[cursor++];
-    if (!step) return;
-    shopImportProgress.value = step.percent;
-    shopImportStageIndex.value = step.stage;
-    shopImportTimer = window.setTimeout(runStep, step.delay);
-  };
-  shopImportTimer = window.setTimeout(runStep, 320);
-
   try {
-    const formData = new FormData();
-    formData.append("file", file);
-    const payload = unwrapShopPayload(await previewShopSkuImport(formData));
-    const source = isPlainRecord(payload) ? payload : {};
-    const backendItems = readShopItems(source);
-    shopImportPreview.value = {
-      batchId: readShopString(source, "batchId") || readShopNumber(source, "batchId"),
-      status: readShopString(source, "status"),
-      totalCount: readShopNumber(source, "totalCount"),
-      successCount: readShopNumber(source, "successCount"),
-      exceptionCount: readShopNumber(source, "exceptionCount")
-    };
-    const batchId = shopImportPreview.value.batchId;
-    const previewRows = backendItems.map((item) => normalizeShopSku(item, { preview: true, batchId })).filter((item): item is ShopSkuRow => Boolean(item));
-    shopPreviewSkuRows.value = await hydrateShopSkuImages(previewRows);
-    shopSkuRows.value = shopPreviewSkuRows.value;
-    shopPreviewTypeTab.value = shopPreviewSkuRows.value.some((row) => row.productType === "MATERIAL") ? "MATERIAL" : "FOOD";
-    shopImportProgress.value = 100;
-    shopImportStageIndex.value = 3;
-    shopImportPending.value = false;
-    shopProductCodeStatusFilter.value = "";
-    shopNoticeKey.value = "page.supplierProducts.importPreviewReady";
+    await finishShopSmartImportAnalysis(await startShopSmartImportAnalysis(file));
   } catch (error) {
-    shopImportPending.value = true;
     shopProductCodeStatusFilter.value = "PENDING_EXCEPTION";
     shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.importFailed");
   } finally {
     shopImporting.value = false;
-    clearShopImportTimer();
-    shopImportTimer = window.setTimeout(() => {
-      shopImportOverlayVisible.value = false;
-      shopImportTimer = undefined;
-    }, 900);
     input.value = "";
   }
 };
@@ -3614,8 +3885,9 @@ const handleShopImportFile = async (event: Event) => {
 const resetShopFilters = () => {
   shopProductKeyword.value = "";
   shopProductTypeFilter.value = "";
+  shopProductCategoryNameFilter.value = "";
   shopProductCodeStatusFilter.value = "";
-  shopProductShelfStatusFilter.value = "";
+  shopProductShelfStatusFilter.value = "ON_SHELF";
   shopSkuPage.value = 1;
   if (!hasPendingShopImport.value) void searchShopSkus();
 };
@@ -3686,6 +3958,43 @@ const formatShopBatchFailureText = (failures: ReturnType<typeof readShopBatchFai
     )
     .join("\n");
 
+const executeShopSmartImportPreview = async () => {
+  const previewRowIds = shopPreviewSkuRows.value
+    .map((row) => row.previewRowId)
+    .filter((value): value is string | number => value !== undefined && value !== null && String(value).trim() !== "");
+  if (!shopSmartImportJob.value.jobId || !previewRowIds.length) {
+    shopErrorMessage.value = "智能导入批次或预览行不完整，请重新上传文件。";
+    return;
+  }
+
+  shopSaving.value = true;
+  shopErrorMessage.value = "";
+  shopNoticeMessage.value = "";
+  try {
+    const job = await executeShopSmartImportJob(previewRowIds);
+    if (job.status === "FAILED") {
+      shopErrorMessage.value = job.message || t("page.supplierProducts.skuSaveFailed");
+      return;
+    }
+    shopNoticeKey.value = "";
+    shopNoticeMessage.value = `共 ${job.counts.itemTotal} 个商品，已完成 ${job.counts.itemProcessed} 个，待处理 ${job.counts.failedCount || job.counts.pendingReviewCount} 个`;
+    if (job.status === "COMPLETED") {
+      shopImportPreview.value = null;
+      shopPreviewSkuRows.value = [];
+      shopDirtySkuIds.value = new Set();
+      expandedShopSkuId.value = "";
+      await searchShopSkus();
+    } else {
+      await applyShopSmartImportPreview(job);
+      shopProductCodeStatusFilter.value = "PENDING_EXCEPTION";
+    }
+  } catch (error) {
+    shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.skuSaveFailed");
+  } finally {
+    shopSaving.value = false;
+  }
+};
+
 const confirmShopImportPreview = async () => {
   if (!unsavedShopSkuRows.value.length && !hasDirtyShopSkuRows.value) return;
   if (shopBlockedPreviewRows.value.length) {
@@ -3693,14 +4002,24 @@ const confirmShopImportPreview = async () => {
     shopErrorMessage.value = formatShopPreviewBlockMessage(shopBlockedPreviewRows.value);
     return;
   }
+  if (shopSmartImportJob.value.jobId && shopPreviewSkuRows.value.length) {
+    await executeShopSmartImportPreview();
+    return;
+  }
+  const dirtyPersistedRows = shopPersistedSkuRows.value.filter((row) => shopDirtySkuIds.value.has(row.id) && row.skuId && !row.isPreview);
+  const rowsToSave = shopPreviewSkuRows.value.length
+    ? [...dirtyPersistedRows, ...shopPreviewSkuRows.value]
+    : [...dirtyPersistedRows, ...unsavedShopSkuRows.value];
   shopSaving.value = true;
   shopErrorMessage.value = "";
   shopNoticeMessage.value = "";
+  beginShopSmartImportExecution(shopSmartImportJob.value.fileName || "商品批量入库", {
+    itemTotal: rowsToSave.length,
+    itemProcessed: 0,
+    materialCount: rowsToSave.filter((row) => row.productType === "MATERIAL").length,
+    foodCount: rowsToSave.filter((row) => row.productType === "FOOD").length
+  });
   try {
-    const dirtyPersistedRows = shopPersistedSkuRows.value.filter((row) => shopDirtySkuIds.value.has(row.id) && row.skuId && !row.isPreview);
-    const rowsToSave = shopPreviewSkuRows.value.length
-      ? [...dirtyPersistedRows, ...shopPreviewSkuRows.value]
-      : [...dirtyPersistedRows, ...unsavedShopSkuRows.value];
     const payload = unwrapShopPayload(await batchUpsertShopSkus({
       importBatchId: shopImportPreview.value?.batchId || undefined,
       items: rowsToSave.map((row) => ({
@@ -3743,8 +4062,21 @@ const confirmShopImportPreview = async () => {
       expandedShopSkuId.value = "";
       await searchShopSkus();
     }
+    finishShopSmartImportExecution(failures.length ? "PARTIAL" : "COMPLETED", {
+      message: failures.length ? `已入库 ${Math.max(0, rowsToSave.length - failures.length)} 个商品，${failures.length} 个待处理` : `已完成 ${rowsToSave.length} 个商品入库`,
+      counts: {
+        itemTotal: rowsToSave.length,
+        itemProcessed: Math.max(0, rowsToSave.length - failures.length),
+        failedCount: failures.length,
+        pendingReviewCount: failures.length
+      }
+    });
   } catch (error) {
     shopErrorMessage.value = getShopErrorText(error, "page.supplierProducts.skuSaveFailed");
+    finishShopSmartImportExecution("FAILED", {
+      message: shopErrorMessage.value,
+      counts: { itemTotal: rowsToSave.length, failedCount: rowsToSave.length }
+    });
   } finally {
     shopSaving.value = false;
   }
@@ -3802,11 +4134,11 @@ const updateAllShopShelfStatus = async (shelfStatus: "ON_SHELF" | "OFF_SHELF") =
 };
 
 const resolveShopException = async (row: ShopSkuRow) => {
-  if (!row.skuId || row.isPreview) return;
+  if (!row.skuId || row.isPreview || !hasShopCodeCandidate(row) || isShopMatchedCodeStatus(row.codingStatus)) return;
   shopErrorMessage.value = "";
   try {
     await resolveShopSkuException(row.skuId, {
-      action: row.platformCode || row.impaCode ? "SELECT_CANDIDATE" : "IGNORE",
+      action: "SELECT_CANDIDATE",
       platformCode: row.platformCode,
       impaCode: row.impaCode,
       reason: t("page.supplierProducts.manualConfirmReason")
@@ -3834,9 +4166,10 @@ const handleShopFullscreenKeydown = (event: KeyboardEvent) => {
 };
 
 onUnmounted(() => {
-  clearShopImportTimer();
   if (liveFilterTimer) window.clearTimeout(liveFilterTimer);
   purchaseOrderDetailScrollPanel?.removeEventListener("scroll", updatePurchaseOrderDetailBackTopVisibility);
+  registrationPreviewRequestId += 1;
+  revokeRegistrationPreviewObjectUrl();
   revokeProtectedImageObjectUrls();
   if (typeof window !== "undefined") {
     window.removeEventListener("keydown", handleShopFullscreenKeydown);
@@ -3845,7 +4178,7 @@ onUnmounted(() => {
 });
 
 const compareSkuColumns = computed<TableColumn[]>(() => [
-  { key: "selection", label: t("table.index"), width: "72px", align: "center" },
+  { key: "selection", label: t("table.index"), width: "92px", align: "center" },
   { key: "sourceSkuCode", label: t("compare.impaCnCode"), width: "20%" },
   { key: "quantity", label: t("compare.quantity"), width: "10%", align: "right" },
   { key: "matchedProductCode", label: t("compare.candidateCode"), width: "20%" },
@@ -3920,27 +4253,15 @@ const impaItemColumns = computed<TableColumn[]>(() => [
   { key: "operation", label: t("common.operation"), width: "96px", align: "center" }
 ]);
 
-const registrationColumns = computed<TableColumn[]>(() => [
-  { key: "companyType", label: t("registration.companyType"), width: "118px" },
-  { key: "supplierServiceTypes", label: t("registration.supplierServices"), width: "150px" },
-  { key: "companyName", label: t("registration.companyName"), width: "240px" },
-  { key: "contactName", label: t("registration.contactName"), width: "98px" },
-  { key: "phone", label: t("registration.phone"), width: "126px" },
-  { key: "email", label: t("registration.email"), width: "160px" },
-  { key: "qualificationFiles", label: t("registration.qualificationFiles"), width: "128px" },
-  { key: "submittedAt", label: t("registration.submittedAt"), width: "150px" },
-  { key: "operation", label: t("common.operation"), width: "122px", align: "center" }
-]);
-
 const companyMemberColumns = computed<TableColumn[]>(() => [
-  { key: "username", label: t("companyMembers.field.account"), width: "132px" },
-  { key: "name", label: t("companyMembers.field.name"), width: "116px" },
-  { key: "contact", label: t("companyMembers.field.contact") },
-  { key: "roleCodes", label: t("companyMembers.field.roles") },
-  { key: "status", label: t("field.status"), width: "112px" },
-  { key: "lastLoginAt", label: t("companyMembers.field.lastLoginAt"), width: "150px" },
-  { key: "source", label: t("companyMembers.field.source"), width: "118px" },
-  { key: "operation", label: t("common.operation"), width: "172px", align: "center" }
+  { key: "username", label: t("companyMembers.field.account"), width: "220px" },
+  { key: "name", label: t("companyMembers.field.name"), width: "160px" },
+  { key: "contact", label: t("companyMembers.field.contact"), width: "260px" },
+  { key: "roleCodes", label: t("companyMembers.field.roles"), width: "240px" },
+  { key: "status", label: t("field.status"), width: "120px" },
+  { key: "lastLoginAt", label: t("companyMembers.field.lastLoginAt"), width: "180px" },
+  { key: "source", label: t("companyMembers.field.source"), width: "140px" },
+  { key: "operation", label: t("common.operation"), width: "220px", align: "center" }
 ]);
 
 const requestColumns = computed<TableColumn[]>(() => [
@@ -4186,7 +4507,6 @@ const compareFixedFeeDisplayItems = computed(() => [
 ]);
 const companyRoleColumns = computed<TableColumn[]>(() => [
   { key: "name", label: t("companyMembers.field.roleName") },
-  { key: "code", label: t("companyMembers.field.roleCode"), width: "220px" },
   { key: "menuPermissionKeys", label: t("permission.menuPermissions") },
   { key: "operation", label: t("common.operation"), width: "150px", align: "center" }
 ]);
@@ -4433,7 +4753,8 @@ const compareCandidateToRow = (item: MaterialComparisonItem, candidate: Material
   const demandLineKey = compareDemandItemKey(item, candidateIndex);
   const unitOptions = candidate.unitPriceOptions?.filter((option) => option.unit && option.unitPrice != null) ?? [];
   const defaultUnitOption = unitOptions.find((option) => option.defaultSelected) ?? unitOptions[0];
-  const selectedUnit = normalizeCompareText(compareUnitSelections.value[demandLineKey]) || normalizeCompareText(candidate.selectedUnit) || normalizeCompareText(defaultUnitOption?.unit) || normalizeCompareText(candidate.stockUnit) || normalizeCompareText(candidate.unit);
+  const usesActiveQuoteContext = strategyKey === selectedStrategy.value;
+  const selectedUnit = normalizeCompareText(usesActiveQuoteContext ? compareUnitSelections.value[demandLineKey] : "") || normalizeCompareText(candidate.selectedUnit) || normalizeCompareText(defaultUnitOption?.unit) || normalizeCompareText(candidate.stockUnit) || normalizeCompareText(candidate.unit);
   const selectedUnitOption = unitOptions.find((option) => normalizeCompareText(option.unit) === selectedUnit) ?? defaultUnitOption;
   const price = selectedUnitOption?.unitPrice ?? candidate.unitPrice ?? 0;
   const unitPriceUsd = selectedUnitOption?.unitPriceUsd ?? candidate.unitPriceUsd;
@@ -4444,7 +4765,7 @@ const compareCandidateToRow = (item: MaterialComparisonItem, candidate: Material
   const quantityMissing = !sourceQuantity;
   const rowMarkup = parseCompareNonNegative(compareQuoteMarkupInputs.value[demandLineKey]);
   const markupPercent = rowMarkup ?? compareQuoteMarkupPercent.value;
-  const actualQuoteText = compareQuoteActualPrices.value[demandLineKey] ?? "";
+  const actualQuoteText = usesActiveQuoteContext ? (compareQuoteActualPrices.value[demandLineKey] ?? "") : "";
   const actualQuotePrice = ceilMoneyToCents(parseCompareQuantity(actualQuoteText) ?? (price > 0 ? price * (1 + markupPercent / 100) : undefined));
   const actualQuoteSubtotal = actualQuotePrice != null && pricingQuantity ? ceilMoneyToCents(actualQuotePrice * pricingQuantity) : undefined;
   const rowId = `${strategyKey}:${selectedCompareSupplier.value || "strategy"}:${demandLineKey}:${candidateIndex}`;
@@ -4546,10 +4867,18 @@ const compareUnmatchedItemToRow = (item: MaterialComparisonItem, itemIndex: numb
   };
 };
 
-const compareRowsForStrategy = (strategyKey: string): CompareSkuRow[] => {
+const compareRowsForStrategy = (strategyKey: string, supplierKey?: string | null): CompareSkuRow[] => {
   if (!compareData.value) return [];
+  const strategy = compareData.value.strategies.find((item) => item.strategyType === strategyKey);
+  const selectedSupplier = supplierKey
+    ? strategy?.suppliers.find((supplier, index) => compareSupplierKey(strategy, supplier, index) === supplierKey)
+    : undefined;
   return compareData.value.items.flatMap((item, itemIndex) => {
-    const candidate = strategyKey === "SINGLE_SUPPLIER" ? item.singleSupplierCandidate : item.lowestCandidate;
+    const candidate = strategyKey === "SINGLE_SUPPLIER"
+      ? (selectedSupplier
+          ? item.candidates.find((candidateItem) => sameCompareSupplier(candidateItem, selectedSupplier))
+          : item.singleSupplierCandidate)
+      : item.lowestCandidate;
     return candidate ? [compareCandidateToRow(item, candidate, itemIndex * 1000, strategyKey)] : [];
   });
 };
@@ -4582,8 +4911,8 @@ const compareStrategyCards = computed<CompareStrategyCard[]>(() =>
     const quoteAmountUsd = rowsForTotals.reduce((sum, row) => sum + (row.subtotalUsd != null && Number.isFinite(row.subtotalUsd) ? row.subtotalUsd : 0), 0);
     const fixedFeeAmount = compareFixedFeeTotal.value;
     const fixedFeeAmountUsd = compareFixedFeeTotalUsd.value;
-    const profitAmount = Math.max(0, quoteAmount - costAmount - fixedFeeAmount);
-    const profitAmountUsd = Math.max(0, quoteAmountUsd - costAmountUsd - fixedFeeAmountUsd);
+    const profitAmount = quoteAmount - costAmount;
+    const profitAmountUsd = quoteAmountUsd - costAmountUsd;
     return {
       key: strategy.strategyType,
       label: strategy.strategyName || (strategy.strategyType === "SINGLE_SUPPLIER" ? t("compare.singleSupplier") : t("compare.lowestMixed")),
@@ -4596,7 +4925,9 @@ const compareStrategyCards = computed<CompareStrategyCard[]>(() =>
       enabled: strategy.enabled !== false,
       disabledReason: strategy.disabledReason,
       suppliers: strategy.suppliers.map((supplier, supplierIndex) => {
-        const supplierRows = rowsForTotals.filter((row) => sameCompareSupplier(row.candidate, supplier));
+        const supplierRows = strategy.strategyType === "SINGLE_SUPPLIER"
+          ? compareRowsForStrategy(strategy.strategyType, compareSupplierKey(strategy, supplier, supplierIndex))
+          : rowsForTotals.filter((row) => sameCompareSupplier(row.candidate, supplier));
         const supplierCostAmount = supplierRows.reduce((sum, row) => {
           const quantity = row.pricingQuantity && Number.isFinite(row.pricingQuantity) ? row.pricingQuantity : 0;
           const price = Number.isFinite(row.price) ? row.price : 0;
@@ -4611,6 +4942,8 @@ const compareStrategyCards = computed<CompareStrategyCard[]>(() =>
           key: compareSupplierKey(strategy, supplier, supplierIndex),
           supplier: normalizeCompareText(supplier.supplierName) || "-",
           skuCount: supplierRows.length,
+          companyId: supplier.companyId,
+          attributeTags: supplier.attributeTags ?? [],
           amount: formatCompareMoney(
             supplierCostAmount,
             supplierCostAmountUsd
@@ -4620,6 +4953,12 @@ const compareStrategyCards = computed<CompareStrategyCard[]>(() =>
     };
   })
 );
+
+const strategyIconType = (tag: string): "core" | "price" | "quality" => {
+  if (tag.includes("核心")) return "core";
+  if (tag.includes("质量")) return "quality";
+  return "price";
+};
 
 const compareSupplyEditableFields = computed<Array<{ key: CompareSupplyEditableKey; label: string; inputType: string }>>(() => [
   { key: "vessel", label: t("compare.supply.vessel"), inputType: "text" },
@@ -4653,7 +4992,7 @@ const compareSkuRows = computed<CompareSkuRow[]>(() => {
   if (!compareData.value || !activeCompareStrategy.value) return [];
   const strategyKey = activeCompareStrategy.value.key;
   if (selectedCompareSupplier.value) {
-    return compareRowsForStrategy(strategyKey).filter((row) => row.supplierKey === selectedCompareSupplier.value);
+    return compareRowsForStrategy(strategyKey, selectedCompareSupplier.value).filter((row) => row.supplierKey === selectedCompareSupplier.value);
   }
   return compareData.value.items.flatMap((item, itemIndex) => {
     let candidates: MaterialComparisonCandidate[] = [];
@@ -4669,8 +5008,43 @@ const compareSkuRows = computed<CompareSkuRow[]>(() => {
   });
 });
 
+const regenerateMaterialComparison = async (
+  payload: import("@/types/procurementMaterials").MaterialComparisonStrategySettingsPayload
+) => {
+  if (!compareDemandId.value || compareStrategySaving.value) return;
+  compareStrategySaving.value = true;
+  compareQuoteNotice.value = "";
+  compareQuoteError.value = "";
+  try {
+    await saveMaterialComparisonStrategy(compareDemandId.value, payload);
+    compareStrategyDialogOpen.value = false;
+    await loadCompareWorkspace();
+  } catch (error) {
+    compareQuoteError.value = error instanceof Error && error.message ? error.message : "策略保存失败";
+  } finally {
+    compareStrategySaving.value = false;
+  }
+};
+
+const isCompareIssueRow = (row: CompareSkuRow) =>
+  Boolean(row.unmatched) || !selectedCompareRowIds.value.includes(row.id);
+
+const compareCoreDemandItemIds = computed(() => new Set(
+  (compareData.value?.strategySettings?.coreDemandItemIds ?? [])
+    .map(Number)
+    .filter((itemId) => Number.isFinite(itemId) && itemId > 0)
+));
+
+const isCompareCoreProduct = (row: CompareSkuRow) =>
+  compareCoreDemandItemIds.value.has(Number(row.demandItemId));
+
+const isCompareQualityProduct = (row: CompareSkuRow) =>
+  (row.candidate.productTags ?? []).some((tag) => tag === "质量高" || tag === "质量好");
+
 const compareFilteredSkus = computed<CompareSkuRow[]>(() =>
   compareSkuRows.value.filter((row) => {
+    if (compareCoreOnly.value && !isCompareCoreProduct(row)) return false;
+    if (compareUnmatchedOnly.value && !isCompareIssueRow(row)) return false;
     const supplierMatches = row.unmatched
       ? !selectedCompareSupplier.value
       : activeCompareSupplierKeys.value.length === 0 || activeCompareSupplierKeys.value.includes(row.supplierKey);
@@ -4678,10 +5052,17 @@ const compareFilteredSkus = computed<CompareSkuRow[]>(() =>
     const keywordMatches =
       !keyword ||
       [row.impaCode, row.itemNo, row.name, row.supplier, ...row.attributes.map((attribute) => attribute.value)].some((value) => value.toLowerCase().includes(keyword));
-    const priceMatches = !comparePreferenceFilters.value.includes("priceLow") || row.lowestPrice == null || row.price <= row.lowestPrice;
-    return supplierMatches && keywordMatches && priceMatches;
+    return supplierMatches && keywordMatches;
   }).map((row, index) => ({ ...row, displayNo: index + 1 }))
 );
+
+const compareListEmptyLabel = computed(() => {
+  if (compareError.value) return t("compare.loadFailed");
+  if (compareCoreOnly.value && compareUnmatchedOnly.value) return t("compare.noCoreIssueItems");
+  if (compareCoreOnly.value) return t("compare.noCoreItems");
+  if (compareUnmatchedOnly.value) return t("compare.noUnmatchedItems");
+  return t("compare.noCandidates");
+});
 
 const compareSkuRowClass = (row: Record<string, unknown>) => {
   const compareRow = row as unknown as CompareSkuRow;
@@ -4689,7 +5070,8 @@ const compareSkuRowClass = (row: Record<string, unknown>) => {
   const isSelected = selectedCompareRowIds.value.includes(compareRow.id);
   return {
     "is-compare-unmatched": Boolean(row.unmatched),
-    "is-compare-deselected": isOrderable && !isSelected
+    "is-compare-deselected": isOrderable && !isSelected,
+    "is-compare-core-product": compareCoreDemandItemIds.value.has(Number(compareRow.demandItemId))
   };
 };
 
@@ -5335,8 +5717,8 @@ const selectedCompareOrderGrandAmount = computed(() => selectedCompareOrderAmoun
 const selectedCompareOrderGrandAmountUsd = computed(() => selectedCompareOrderAmountUsd.value + compareFixedFeeTotalUsd.value);
 const selectedCompareCostAmount = computed(() => activePurchaseOrderItems.value.reduce((sum, item) => sum + (Number.isFinite(item.costAmount) ? item.costAmount : 0), 0));
 const selectedCompareCostAmountUsd = computed(() => activePurchaseOrderItems.value.reduce((sum, item) => sum + (item.costAmountUsd != null && Number.isFinite(item.costAmountUsd) ? item.costAmountUsd : 0), 0));
-const selectedCompareProfitAmount = computed(() => selectedCompareOrderAmount.value - selectedCompareCostAmount.value - compareFixedFeeTotal.value);
-const selectedCompareProfitAmountUsd = computed(() => selectedCompareOrderAmountUsd.value - selectedCompareCostAmountUsd.value - compareFixedFeeTotalUsd.value);
+const selectedCompareProfitAmount = computed(() => selectedCompareOrderAmount.value - selectedCompareCostAmount.value);
+const selectedCompareProfitAmountUsd = computed(() => selectedCompareOrderAmountUsd.value - selectedCompareCostAmountUsd.value);
 const selectedCompareSupplierSummaries = computed(() => {
   const map = new Map<string, { supplier: string; count: number; amount: number; amountUsd: number; currency: string }>();
   activePurchaseOrderItems.value.forEach((item) => {
@@ -5426,6 +5808,8 @@ const updateCompareUnit = (row: CompareSkuRow, value: string) => {
     ...compareUnitSelections.value,
     [row.demandItemId]: value
   };
+  const { [row.demandItemId]: _removed, ...remainingActualPrices } = compareQuoteActualPrices.value;
+  compareQuoteActualPrices.value = remainingActualPrices;
   expandedCompareRowId.value = "";
   window.setTimeout(syncCompareSelectedRows, 0);
 };
@@ -6201,6 +6585,7 @@ const previewBusinessAttachments = async (title: string, items: Array<BusinessAt
   previewTitle.value = title;
   previewImages.value = images.filter((item): item is { src: string; alt: string } => Boolean(item?.src));
   previewAttributes.value = [];
+  previewShopSkuRowId.value = "";
   previewOpen.value = true;
 };
 const evaluationScope = computed(() => isRegulatoryEvaluationPage.value ? "REGULATORY" as const : "BUYER" as const);
@@ -6424,7 +6809,7 @@ const purchaseDetailFixedFeeAmount = computed(() => {
     + Number(order.fixedOtherFee ?? 0);
 });
 
-const purchaseDetailProfitAmount = computed(() => purchaseDetailQuoteAmount.value - purchaseDetailCostAmount.value - purchaseDetailFixedFeeAmount.value);
+const purchaseDetailProfitAmount = computed(() => purchaseDetailQuoteAmount.value - purchaseDetailCostAmount.value);
 
 const supplierVisibleItemTotal = computed(() =>
   purchaseDetailItemRows.value.reduce((sum, row) => sum + Number(row.amount ?? 0), 0)
@@ -6563,23 +6948,22 @@ const selectCompareStrategy = (key: string) => {
   selectedStrategy.value = key;
   selectedCompareSupplier.value = null;
   expandedCompareRowId.value = "";
-  window.setTimeout(syncCompareSelectedRows, 0);
+  restoreCompareSavedQuoteState(selectedStrategy.value);
 };
 
 const selectCompareSupplier = (strategyKey: string, supplierKey: string) => {
   const strategy = compareStrategyCards.value.find((item) => item.key === strategyKey);
   if (!strategy?.enabled || isCompareReadonly.value) return;
+  const strategyChanged = selectedStrategy.value !== strategyKey;
   const shouldClear = selectedStrategy.value === strategyKey && selectedCompareSupplier.value === supplierKey;
   selectedStrategy.value = strategyKey;
   selectedCompareSupplier.value = shouldClear ? null : supplierKey;
   expandedCompareRowId.value = "";
-  window.setTimeout(syncCompareSelectedRows, 0);
-};
-
-const toggleComparePreferenceFilter = (value: string) => {
-  comparePreferenceFilters.value = comparePreferenceFilters.value.includes(value)
-    ? comparePreferenceFilters.value.filter((item) => item !== value)
-    : [...comparePreferenceFilters.value, value];
+  if (strategyChanged) {
+    restoreCompareSavedQuoteState(selectedStrategy.value);
+  } else {
+    window.setTimeout(syncCompareSelectedRows, 0);
+  }
 };
 
 const openReplacementDialog = async (sku: CompareSkuRow) => {
@@ -6609,10 +6993,15 @@ const closeReplacementDialog = () => {
 
 const applyReplacementCandidate = (candidate: MaterialComparisonCandidate) => {
   if (!replacementSku.value?.demandItemId) return;
+  const demandItemId = replacementSku.value.demandItemId;
   compareRowReplacements.value = {
     ...compareRowReplacements.value,
-    [replacementSku.value.demandItemId]: candidate
+    [demandItemId]: candidate
   };
+  const { [demandItemId]: _removedPrice, ...remainingActualPrices } = compareQuoteActualPrices.value;
+  const { [demandItemId]: _removedUnit, ...remainingUnitSelections } = compareUnitSelections.value;
+  compareQuoteActualPrices.value = remainingActualPrices;
+  compareUnitSelections.value = remainingUnitSelections;
   replacementSku.value = null;
   replacementCandidates.value = [];
   replacementSearchKeyword.value = "";
@@ -6632,6 +7021,24 @@ const scrollCompareToTop = () => {
 
 const compareDemandId = computed(() => String(route.params.requestId || "").trim());
 
+const restoreCompareSavedQuoteState = (strategyType: string) => {
+  const restored = buildMaterialSavedQuoteRestoreState(
+    compareData.value?.items ?? [],
+    strategyType,
+    compareQuoteMarkupPercent.value
+  );
+  compareUnitSelections.value = restored.unitSelections;
+  compareQuoteActualPrices.value = restored.actualPriceInputs;
+  const matchedItemIds = new Set(restored.matchedItemIds);
+  const rowsAfterRestore = compareSkuRows.value;
+  selectedCompareRowIds.value = restored.useDefaultSelection
+    ? rowsAfterRestore.filter(isCompareRowOrderable).map((row) => row.id)
+    : rowsAfterRestore
+      .filter((row) => matchedItemIds.has(String(row.demandItemId)) && isCompareRowOrderable(row))
+      .map((row) => row.id);
+  return restored;
+};
+
 const loadCompareWorkspace = async () => {
   if (pageKey.value !== "compare") return;
   const currentDemandId = compareDemandId.value;
@@ -6647,15 +7054,16 @@ const loadCompareWorkspace = async () => {
   compareQuantityInputs.value = {};
   compareRemarkInputs.value = {};
   compareQuoteMarkupInputs.value = {};
+  compareQuoteActualPrices.value = {};
+  compareUnitSelections.value = {};
   expandedCompareRowId.value = "";
-  comparePreferenceFilters.value = comparePreferenceFilters.value.filter((item) => item === "priceLow");
   if (!currentDemandId) {
     compareError.value = t("compare.missingDemandId");
     return;
   }
   compareLoading.value = true;
   try {
-    const response = await getMaterialDemandComparison(currentDemandId);
+    const response = await runMaterialComparisonAiLoad(() => getMaterialDemandComparison(currentDemandId));
     compareData.value = response;
     applyCompareTrafficService(response.demand?.trafficService);
     applyCompareSupplyModeFromTrafficService(response.demand?.trafficService);
@@ -6677,24 +7085,8 @@ const loadCompareWorkspace = async () => {
         .map((item, index) => [compareDemandItemKey(item, index), item.quoteMarkupPercent == null || item.quoteMarkupPercent === defaultMarkup ? "" : String(item.quoteMarkupPercent)] as const)
         .filter(([, value]) => value)
     );
-    compareQuoteActualPrices.value = Object.fromEntries(
-      response.items
-        .map((item, index) => {
-          const key = compareDemandItemKey(item, index);
-          const candidate = item.lowestCandidate ?? item.singleSupplierCandidate ?? item.candidates[0];
-          const expected = candidate?.unitPrice == null ? undefined : ceilMoneyToCents(candidate.unitPrice * (1 + (item.quoteMarkupPercent ?? defaultMarkup) / 100));
-          const saved = item.actualQuotePrice == null ? undefined : ceilMoneyToCents(item.actualQuotePrice);
-          return [key, saved != null && expected != null && Math.abs(saved - expected) > 0.01 ? String(saved) : ""] as const;
-        })
-        .filter(([, value]) => value)
-    );
-    compareUnitSelections.value = {};
-    selectedStrategy.value = response.strategies.find((strategy) => strategy.enabled !== false)?.strategyType || response.strategies[0]?.strategyType || "LOWEST_MIXED";
-    const savedQuoteItemIds = new Set(response.items.filter((item) => item.actualQuotePrice != null).map((item, index) => compareDemandItemKey(item, index)));
-    const rowsAfterLoad = compareSkuRows.value;
-    selectedCompareRowIds.value = savedQuoteItemIds.size
-      ? rowsAfterLoad.filter((row) => savedQuoteItemIds.has(String(row.demandItemId)) && isCompareRowOrderable(row)).map((row) => row.id)
-      : rowsAfterLoad.filter(isCompareRowOrderable).map((row) => row.id);
+    selectedStrategy.value = resolveMaterialInitialQuoteStrategy(response.items, response.strategies);
+    restoreCompareSavedQuoteState(selectedStrategy.value);
     compareSelectionInitialized.value = true;
     const supplyInfo = response.supplyInfo;
     const handlerContact = [response.demand?.handlerName, response.demand?.handlerEmail].filter(Boolean).join(" / ");
@@ -9099,6 +9491,7 @@ const openSkuPreview = (sku: SupplierSku) => {
   previewTitle.value = `${sku.name} / ${sku.itemNo}`;
   previewImages.value = sku.images;
   previewAttributes.value = sku.attributes;
+  previewShopSkuRowId.value = "";
   previewOpen.value = true;
 };
 
@@ -9110,11 +9503,30 @@ const openImagePreview = (title: string, src: string, alt: string, attributes: S
   previewTitle.value = title || t("action.previewImage");
   previewImages.value = [{ src, alt: alt || title || t("action.previewImage") }];
   previewAttributes.value = attributes;
+  previewShopSkuRowId.value = "";
   previewOpen.value = true;
 };
 
 const openShopSkuImagePreview = (row: ShopSkuRow) => {
-  openImagePreview(row.productName || row.supplierSkuCode || t("page.supplierProducts.skuList"), row.thumbnail, row.productName || row.supplierSkuCode);
+  previewTitle.value = row.productName || row.supplierSkuCode || t("page.supplierProducts.skuList");
+  previewImages.value = row.thumbnail ? [{ src: row.thumbnail, alt: row.productName || row.supplierSkuCode || t("action.previewImage") }] : [];
+  previewAttributes.value = [];
+  previewShopSkuRowId.value = row.id;
+  previewOpen.value = true;
+};
+
+const replacePreviewedShopSkuImage = () => {
+  const row = shopSkuRows.value.find((item) => item.id === previewShopSkuRowId.value);
+  if (row) openShopSkuImagePicker(row);
+};
+
+const closeImagePreview = () => {
+  const closingRegistrationPreview = Boolean(registrationPreviewObjectUrl);
+  registrationPreviewRequestId += 1;
+  revokeRegistrationPreviewObjectUrl();
+  previewOpen.value = false;
+  previewShopSkuRowId.value = "";
+  if (closingRegistrationPreview) previewImages.value = [];
 };
 
 const openCompanyQualificationImagePreview = (row: CompanyQualificationRow) => {
@@ -9161,6 +9573,9 @@ const keepInquiryStaticNotice = () => {
 };
 
 const formatEmpty = (value?: string | null) => value || "-";
+
+const formatRegistrationContactName = (value?: string | null) =>
+  isSuspiciousContactPath(value) ? "-" : formatEmpty(value);
 
 const formatDemandDateTime = (value?: string | null) => {
   if (!value) return "-";
@@ -9368,16 +9783,23 @@ const toggleImpaDetail = (item: ImpaStandardItem) => {
   expandedImpaCode.value = expandedImpaCode.value === item.impaCode ? "" : item.impaCode;
 };
 
-const loadImpaItems = async (categoryCode: string, keyword = impaKeyword.value) => {
+const loadImpaItems = async (categoryCode: string, keyword = impaKeyword.value, page = 1) => {
   if (!categoryCode && !keyword.trim()) {
     impaItems.value = [];
+    impaPage.value = 1;
+    impaTotal.value = 0;
+    impaPageTotalPages.value = 0;
     expandedImpaCode.value = "";
     return;
   }
 
   impaItemsLoading.value = true;
   try {
-    impaItems.value = await getImpaStandardItems({ categoryCode, keyword, limit: 50 });
+    const result = await getImpaStandardItemPage({ categoryCode, keyword, page, pageSize: IMPA_PAGE_SIZE });
+    impaItems.value = result.items;
+    impaPage.value = result.page;
+    impaTotal.value = result.total;
+    impaPageTotalPages.value = result.totalPages;
     expandedImpaCode.value = "";
   } finally {
     impaItemsLoading.value = false;
@@ -9808,6 +10230,11 @@ const saveStaticUserPermissions = () => {
   }, 450);
 };
 
+const goImpaPage = async (page: number) => {
+  if (impaItemsLoading.value || page < 1 || page > impaPageTotalPages.value || page === impaPage.value) return;
+  await loadImpaItems(selectedImpaCategoryCode.value, impaKeyword.value, page);
+};
+
 const loadPlatformAccounts = async () => {
   platformAccountLoading.value = true;
   platformAccountErrorKey.value = "";
@@ -10075,9 +10502,6 @@ const loadRegistrations = async () => {
       page: 1,
       pageSize: 50
     });
-    if (!registrations.value.some((item) => item.id === expandedRegistrationId.value)) {
-      expandedRegistrationId.value = "";
-    }
   } catch (error) {
     registrations.value = [];
     registrationErrorKey.value = getRegistrationErrorKey(error);
@@ -10121,17 +10545,9 @@ const getRegistrationStatusVariant = (status: AdminRegistration["status"]): Stat
   return "warning";
 };
 
-const getRegistrationCompanyTypeLabel = (companyType: string) => {
-  const keyByType: Record<string, string> = {
-    SHIP_AGENT: "page.register.companyTypeShipAgent",
-    SUPPLIER: "page.register.companyTypeSupplier",
-    BARGE_AGENT: "page.register.companyTypeBargeAgent"
-  };
-  return t(keyByType[companyType] || "page.register.companyType");
-};
-
 const openRegistrationFile = async (file: { name: string; url: string }) => {
   registrationErrorKey.value = "";
+  const requestId = ++registrationPreviewRequestId;
   try {
     const session = getAuthSession();
     const headers = new Headers();
@@ -10141,16 +10557,24 @@ const openRegistrationFile = async (file: { name: string; url: string }) => {
       throw new ApiError(`HTTP_${response.status}`, response.status);
     }
     const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const opened = window.open(objectUrl, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = file.name;
-      anchor.click();
+    if (requestId !== registrationPreviewRequestId) return;
+    const imageFileName = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(file.name);
+    if (!blob.type.startsWith("image/") && !imageFileName) {
+      throw new Error("REGISTRATION_FILE_PREVIEW_UNSUPPORTED");
     }
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    revokeRegistrationPreviewObjectUrl();
+    registrationPreviewObjectUrl = URL.createObjectURL(blob);
+    previewTitle.value = file.name || t("registration.qualificationFiles");
+    previewImages.value = [{ src: registrationPreviewObjectUrl, alt: file.name || t("registration.qualificationFiles") }];
+    previewAttributes.value = [{
+      key: "registration-file-name",
+      labelKey: "registration.qualificationFiles",
+      value: file.name || "-"
+    }];
+    previewShopSkuRowId.value = "";
+    previewOpen.value = true;
   } catch (error) {
+    if (requestId !== registrationPreviewRequestId) return;
     registrationErrorKey.value = getRegistrationErrorKey(error) === "registration.error.requestFailed"
       ? "registration.error.fileOpenFailed"
       : getRegistrationErrorKey(error);
@@ -10165,10 +10589,6 @@ const getRegistrationFileLinks = (registration: AdminRegistration) =>
       url: file.url || (file.fileId ? `/api/files/${encodeURIComponent(file.fileId)}` : "")
     }))
     .filter((file) => file.url);
-
-const toggleRegistrationDetail = (registration: AdminRegistration) => {
-  expandedRegistrationId.value = expandedRegistrationId.value === registration.id ? "" : registration.id;
-};
 
 const approveSelectedRegistration = async (registration: AdminRegistration) => {
   registrationErrorKey.value = "";
@@ -10301,7 +10721,7 @@ const openCreateCompanyMember = () => {
 const openCreateCompanyRole = async () => {
   memberDrawerMode.value = "role";
   selectedCompanyMemberId.value = "";
-  roleForm.value = { roleCode: "", roleName: "", menuPermissionKeys: [] };
+  roleForm.value = { roleName: "", menuPermissionKeys: [] };
   selectedCompanyRoleCode.value = "";
   memberFormErrors.value = {};
   if (!companyMenuOptions.value.length) {
@@ -10317,7 +10737,7 @@ const openCreateCompanyRole = async () => {
 const openEditCompanyRole = async (role: CompanyRole) => {
   memberDrawerMode.value = "role";
   selectedCompanyRoleCode.value = role.code;
-  roleForm.value = { roleCode: role.code, roleName: role.name, menuPermissionKeys: [...role.menuPermissionKeys] };
+  roleForm.value = { roleName: role.name, menuPermissionKeys: [...role.menuPermissionKeys] };
   memberFormErrors.value = {};
   if (!companyMenuOptions.value.length) {
     try {
@@ -10408,17 +10828,18 @@ const submitCompanyMemberDrawer = async () => {
   companyMemberErrorKey.value = "";
   try {
     if (memberDrawerMode.value === "role") {
+      const normalizedMenuPermissionKeys = normalizeMenuPermissionKeys(companyMenuOptions.value, roleForm.value.menuPermissionKeys);
+      roleForm.value.menuPermissionKeys = normalizedMenuPermissionKeys;
       if (selectedCompanyRoleCode.value) {
         await updateCompanyRole(selectedCompanyRoleCode.value, {
           roleName: roleForm.value.roleName.trim(),
-          menuPermissionKeys: roleForm.value.menuPermissionKeys
+          menuPermissionKeys: normalizedMenuPermissionKeys
         });
         companyMemberNoticeKey.value = "companyMembers.notice.roleUpdated";
       } else {
         await createCompanyRole({
-          roleCode: roleForm.value.roleCode.trim() || undefined,
           roleName: roleForm.value.roleName.trim(),
-          menuPermissionKeys: roleForm.value.menuPermissionKeys
+          menuPermissionKeys: normalizedMenuPermissionKeys
         });
         companyMemberNoticeKey.value = "companyMembers.notice.roleCreated";
       }
@@ -11206,7 +11627,7 @@ const workbenchGlobalLoading = computed(() => {
             </label>
             <div class="toolbar-icon-actions">
               <IconButton icon="Search" :label="t('action.search')" variant="primary" :loading="impaItemsLoading" @click="searchImpaItems" />
-              <IconButton icon="RefreshCw" :label="t('action.refresh')" @click="loadImpaItems(selectedImpaCategoryCode)" />
+              <IconButton icon="RefreshCw" :label="t('action.refresh')" @click="loadImpaItems(selectedImpaCategoryCode, impaKeyword, impaPage)" />
             </div>
           </div>
           <div class="library-shell">
@@ -11292,6 +11713,24 @@ const workbenchGlobalLoading = computed(() => {
                   </div>
                 </template>
               </DataTable>
+              <div v-if="impaTotal > 0" class="shop-pagination impa-pagination" aria-live="polite">
+                <span>{{ t("page.impa.paginationSummary", { total: impaTotal }) }}</span>
+                <div class="shop-pagination__actions">
+                  <IconButton
+                    icon="ChevronLeft"
+                    :label="t('page.impa.prevPage')"
+                    :disabled="impaPage <= 1 || impaItemsLoading"
+                    @click="goImpaPage(impaPage - 1)"
+                  />
+                  <strong>{{ t("page.impa.pageIndicator", { page: impaPage, total: impaPageTotalPages }) }}</strong>
+                  <IconButton
+                    icon="ChevronRight"
+                    :label="t('page.impa.nextPage')"
+                    :disabled="impaPage >= impaPageTotalPages || impaItemsLoading"
+                    @click="goImpaPage(impaPage + 1)"
+                  />
+                </div>
+              </div>
             </section>
           </div>
         </div>
@@ -11332,112 +11771,85 @@ const workbenchGlobalLoading = computed(() => {
             </div>
           </form>
           <p v-if="registrationErrorKey" class="registration-error" role="alert">{{ t(registrationErrorKey) }}</p>
-          <DataTable
-            :columns="registrationColumns"
-            :rows="registrations"
-            :loading="registrationLoading"
-            :expanded-row-key="expandedRegistrationId"
-            row-key="id"
-            row-interactive
-            @row-click="toggleRegistrationDetail"
-          >
-            <template #cell-companyType="{ value }">
-              {{ getRegistrationCompanyTypeLabel(String(value)) }}
-            </template>
-            <template #cell-supplierServiceTypes="{ value }">
-              <div class="member-role-chips">
-                <span v-for="item in asStringList(value)" :key="item">
-                  {{ item === "MATERIAL" ? t("page.register.supplierServiceMaterial") : t("page.register.supplierServiceFood") }}
-                </span>
-                <em v-if="!asStringList(value).length">-</em>
-              </div>
-            </template>
-            <template #cell-companyName="{ value }">
-              <span class="registration-company-name" :title="String(value || '')">{{ value || "-" }}</span>
-            </template>
-            <template #cell-qualificationFiles="{ row }">
-              {{ row.qualificationFiles.length }}
-            </template>
-            <template #cell-operation="{ row }">
-              <div class="icon-action-row">
-                <IconButton
-                  icon="Check"
-                  :label="t('registration.approve')"
-                  variant="primary"
-                  :disabled="row.status !== 'pending' || registrationActionLoading"
-                  :loading="registrationActionLoading && registrationActionId === row.id"
-                  @click.stop="approveSelectedRegistration(row)"
-                />
-                <IconButton
-                  icon="X"
-                  :label="t('registration.reject')"
-                  variant="danger"
-                  :disabled="row.status !== 'pending' || registrationActionLoading"
-                  @click.stop="openRejectDialog(row)"
-                />
-              </div>
-            </template>
-            <template #expanded-row="{ row }">
-              <section class="registration-inline-detail">
-                <div class="registration-detail-grid">
+          <div v-if="registrationLoading" class="registration-card-state" role="status" aria-live="polite">
+            <span class="loading-spinner" aria-hidden="true"></span>
+            <strong>{{ t("common.loading") }}</strong>
+          </div>
+          <div v-else-if="!registrations.length" class="registration-card-state">
+            <strong>{{ t("common.empty") }}</strong>
+          </div>
+          <section v-else class="registration-card-list" aria-label="服务商审核列表">
+            <article
+              v-for="row in registrations"
+              :key="row.id"
+              class="registration-review-card"
+            >
+              <header class="registration-review-card__head">
+                <div class="registration-review-card__avatar" aria-hidden="true">{{ (row.companyName || row.username || "企").slice(0, 1) }}</div>
+                <div class="registration-review-card__identity">
                   <div>
-                    <span>{{ t("registration.account") }}</span>
-                    <strong>{{ formatEmpty(row.username) }}</strong>
+                    <strong :title="row.companyName">{{ formatEmpty(row.companyName) }}</strong>
+                    <StatusBadge :label="t(getRegistrationStatusKey(row.status))" :variant="getRegistrationStatusVariant(row.status)" />
                   </div>
-                  <div>
-                    <span>{{ t("registration.companyType") }}</span>
-                    <strong>{{ getRegistrationCompanyTypeLabel(row.companyType) }}</strong>
-                  </div>
-                  <div>
+                  <div class="registration-review-card__service-line">
                     <span>{{ t("registration.supplierServices") }}</span>
                     <strong>{{ row.supplierServiceTypes.map((item) => item === "MATERIAL" ? t("page.register.supplierServiceMaterial") : t("page.register.supplierServiceFood")).join("、") || "-" }}</strong>
                   </div>
-                  <div>
-                    <span>{{ t("registration.companyName") }}</span>
-                    <strong>{{ formatEmpty(row.companyName) }}</strong>
-                  </div>
-                  <div>
-                    <span>{{ t("registration.contactName") }}</span>
-                    <strong>{{ formatEmpty(row.contactName) }}</strong>
-                  </div>
-                  <div>
-                    <span>{{ t("registration.phone") }}</span>
-                    <strong>{{ formatEmpty(row.phone) }}</strong>
-                  </div>
-                  <div>
-                    <span>{{ t("registration.email") }}</span>
-                    <strong>{{ formatEmpty(row.email) }}</strong>
-                  </div>
-                  <div>
-                    <span>{{ t("registration.accountStatus") }}</span>
-                    <strong>{{ formatEmpty(row.accountStatus) }}</strong>
-                  </div>
-                  <div>
-                    <span>{{ t("registration.companyStatus") }}</span>
-                    <strong>{{ formatEmpty(row.companyStatus) }}</strong>
-                  </div>
-                  <div>
-                    <span>{{ t("registration.rejectReason") }}</span>
-                    <strong>{{ formatEmpty(row.rejectReason) }}</strong>
-                  </div>
                 </div>
-                <div class="registration-inline-files">
+              </header>
+
+              <div class="registration-review-card__info-grid">
+                <div class="registration-review-card__contact">
+                  <span>{{ t("registration.contactName") }} · {{ t("registration.phone") }}</span>
+                  <strong class="registration-review-card__contact-value">
+                    <b>{{ formatRegistrationContactName(row.contactName) }}</b>
+                    <em>· {{ formatEmpty(row.phone) }}</em>
+                  </strong>
+                </div>
+                <div><span>{{ t("registration.email") }}</span><strong>{{ formatEmpty(row.email) }}</strong></div>
+                <div><span>{{ t("registration.account") }}</span><strong>{{ formatEmpty(row.username) }}</strong></div>
+                <div><span>{{ t("registration.submittedAt") }}</span><strong>{{ formatEmpty(row.submittedAt) }}</strong></div>
+                <div class="registration-review-card__files">
                   <span>{{ t("registration.qualificationFiles") }}</span>
                   <div v-if="getRegistrationFileLinks(row).length" class="registration-file-actions">
                     <button
                       v-for="file in getRegistrationFileLinks(row)"
                       :key="file.key"
                       type="button"
-                      @click.stop="openRegistrationFile(file)"
+                      @click="openRegistrationFile(file)"
                     >
                       {{ file.name }}
                     </button>
                   </div>
-                  <strong v-else>{{ t("common.empty") }}</strong>
+                  <strong v-else class="registration-review-card__files-empty">{{ t("common.empty") }}</strong>
                 </div>
-              </section>
-            </template>
-          </DataTable>
+                <div v-if="row.rejectReason" class="registration-review-card__reject-reason">
+                  <span>{{ t("registration.rejectReason") }}</span>
+                  <strong>{{ row.rejectReason }}</strong>
+                </div>
+              </div>
+
+              <footer class="registration-review-card__footer">
+                <div class="icon-action-row">
+                  <IconButton
+                    icon="Check"
+                    :label="t('registration.approve')"
+                    variant="primary"
+                    :disabled="row.status !== 'pending' || registrationActionLoading"
+                    :loading="registrationActionLoading && registrationActionId === row.id"
+                    @click="approveSelectedRegistration(row)"
+                  />
+                  <IconButton
+                    icon="X"
+                    :label="t('registration.reject')"
+                    variant="danger"
+                    :disabled="row.status !== 'pending' || registrationActionLoading"
+                    @click="openRejectDialog(row)"
+                  />
+                </div>
+              </footer>
+            </article>
+          </section>
         </section>
       </ExpandablePanel>
 
@@ -11455,7 +11867,7 @@ const workbenchGlobalLoading = computed(() => {
             <div v-if="companyMemberWorkspaceTab === 'members'" class="company-members-toolbar list-search-toolbar">
               <div class="company-members-filters">
                 <label class="member-filter-field member-filter-keyword list-search-field">
-                  <span>{{ t("filter.keyword") }}</span>
+                  <span>{{ t("companyMembers.filter.searchLabel") }}</span>
                   <span class="list-search-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24">
                       <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
@@ -11513,7 +11925,7 @@ const workbenchGlobalLoading = computed(() => {
               <span>{{ t(companyMemberNoticeKey) }}</span>
             </div>
 
-            <DataTable v-if="companyMemberWorkspaceTab === 'members'" :columns="companyMemberColumns" :rows="companyMembers" :loading="companyMemberLoading" row-key="id">
+            <DataTable v-if="companyMemberWorkspaceTab === 'members'" class="company-members-table" :columns="companyMemberColumns" :rows="companyMembers" :loading="companyMemberLoading" row-key="id">
               <template #cell-contact="{ row }">
                 <div class="member-contact-cell">
                   <span>{{ row.phone || "-" }}</span>
@@ -11562,7 +11974,6 @@ const workbenchGlobalLoading = computed(() => {
               <template #cell-operation="{ row }">
                 <div class="icon-action-row">
                   <IconButton icon="Pencil" :label="t('companyMembers.action.editRole')" @click.stop="openEditCompanyRole(row)" />
-                  <IconButton icon="Check" :label="t('companyMembers.action.configureRole')" @click.stop="openEditCompanyRole(row)" />
                   <IconButton icon="Ban" :label="t('companyMembers.action.disableRole')" variant="danger" @click.stop="openDisableCompanyRoleConfirm(row)" />
                 </div>
               </template>
@@ -11621,45 +12032,110 @@ const workbenchGlobalLoading = computed(() => {
       <ExpandablePanel v-else-if="pageKey === 'supplierProducts'" :show-header="false" :show-expand="false" class="supplier-products-panel">
         <section class="shop-products-workspace">
           <div class="shop-store-card" :aria-busy="shopProfileLoading">
-            <div class="shop-store-head">
-              <div class="shop-title-field">
-                <h2>
-                  <span>{{ shopStoreName }}</span>
-                  <small v-if="shopCreditCode">&#65288;{{ shopCreditCode }}&#65289;</small>
-                </h2>
-              </div>
-              <div class="toolbar-icon-actions">
-                <IconButton icon="Save" :label="t('common.save')" :loading="shopSaving || shopLogoUploading" @click="saveShopProfile" />
-                <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="shopLoading" @click="loadShopWorkspace" />
-              </div>
-            </div>
             <div class="shop-store-body">
-              <button type="button" class="shop-store-logo" :aria-label="t('page.supplierProducts.logoUpload')" :title="t('page.supplierProducts.logoUpload')" @click="openShopLogoPicker">
+              <button
+                type="button"
+                class="shop-store-logo"
+                :class="{ 'is-editable': shopProfileEditing }"
+                :aria-label="shopProfileEditing ? t('page.supplierProducts.logoUpload') : t('page.supplierProducts.logoAlt')"
+                :disabled="!shopProfileEditing || shopLogoUploading || shopSaving"
+                @click="openShopLogoPicker"
+              >
                 <img v-if="shopLogoPreview" :src="shopLogoPreview" :alt="t('page.supplierProducts.logoAlt')" />
                 <span v-else aria-hidden="true">LOGO</span>
               </button>
               <input ref="shopLogoInput" type="file" accept="image/*" hidden @change="handleShopLogoChange" />
               <div class="shop-store-main">
-                <div class="shop-profile-fields">
-                  <label>
-                    <span>{{ t("page.supplierProducts.field.contactName") }}</span>
-                    <input v-model="shopProfileForm.contactName" />
-                  </label>
-                  <label>
-                    <span>{{ t("page.supplierProducts.field.contactPhone") }}</span>
-                    <input v-model="shopProfileForm.contactPhone" />
-                  </label>
-                  <label>
-                    <span>{{ t("page.supplierProducts.field.contactEmail") }}</span>
-                    <input v-model="shopProfileForm.contactEmail" />
-                  </label>
-                </div>
-                <div class="shop-store-metrics">
-                  <div v-for="metric in shopMetrics" :key="metric.label" class="shop-store-metric">
-                    <span>{{ metric.label }}</span>
-                    <strong>{{ metric.value }}</strong>
+                <div class="shop-store-identity-row">
+                  <div v-if="shopProfileEditing" class="shop-store-identity-fields">
+                    <label :class="{ 'has-error': shopProfileFieldErrors.shopName }">
+                      <span>{{ t("page.supplierProducts.field.shopName") }}</span>
+                      <input
+                        v-model="shopProfileForm.shopName"
+                        :aria-invalid="Boolean(shopProfileFieldErrors.shopName)"
+                        :placeholder="t('page.onboarding.companyNamePlaceholder')"
+                      />
+                      <small v-if="shopProfileFieldErrors.shopName">{{ t(shopProfileFieldErrors.shopName) }}</small>
+                    </label>
+                    <label :class="{ 'has-error': shopProfileFieldErrors.creditCode }">
+                      <span>{{ t("page.supplierProducts.field.creditCode") }}</span>
+                      <input
+                        v-model="shopProfileForm.creditCode"
+                        :aria-invalid="Boolean(shopProfileFieldErrors.creditCode)"
+                        :placeholder="t('page.onboarding.creditCodePlaceholder')"
+                      />
+                      <small v-if="shopProfileFieldErrors.creditCode">{{ t(shopProfileFieldErrors.creditCode) }}</small>
+                    </label>
+                  </div>
+                  <div v-else class="shop-title-field">
+                    <h2>
+                      <span>{{ shopStoreName }}</span>
+                      <small v-if="shopCreditCode">{{ shopCreditCode }}</small>
+                    </h2>
+                  </div>
+                  <div class="shop-store-profile-actions">
+                    <StatusBadge
+                      :label="shopProfileForm.status === 'DISABLED' ? t('status.disabled') : t('status.active')"
+                      :variant="shopProfileForm.status === 'DISABLED' ? 'neutral' : 'success'"
+                    />
+                    <IconButton
+                      icon="Pencil"
+                      :label="t('page.supplierProducts.profileEdit')"
+                      :disabled="shopProfileEditing || shopProfileLoading || shopSaving || shopLogoUploading"
+                      @click="startShopProfileEdit"
+                    />
+                    <IconButton
+                      icon="Save"
+                      :label="t('page.supplierProducts.profileSave')"
+                      variant="primary"
+                      :disabled="!shopProfileEditing || shopSaving || shopLogoUploading"
+                      :loading="shopSaving"
+                      @click="saveShopProfile"
+                    />
+                    <IconButton
+                      v-if="shopProfileEditing"
+                      icon="X"
+                      :label="t('page.supplierProducts.profileCancel')"
+                      :disabled="shopSaving || shopLogoUploading"
+                      @click="cancelShopProfileEdit"
+                    />
                   </div>
                 </div>
+                <div :class="['shop-store-facts', 'shop-profile-fields', { 'is-readonly': !shopProfileEditing }]">
+                  <label :class="{ 'has-error': shopProfileFieldErrors.contactName }">
+                    <span>{{ t("page.supplierProducts.field.contactName") }}</span>
+                    <input v-model="shopProfileForm.contactName" :readonly="!shopProfileEditing" :aria-invalid="Boolean(shopProfileFieldErrors.contactName)" />
+                    <small v-if="shopProfileFieldErrors.contactName">{{ t(shopProfileFieldErrors.contactName) }}</small>
+                  </label>
+                  <label :class="{ 'has-error': shopProfileFieldErrors.contactPhone }">
+                    <span>{{ t("page.supplierProducts.field.contactPhone") }}</span>
+                    <input v-model="shopProfileForm.contactPhone" :readonly="!shopProfileEditing" :aria-invalid="Boolean(shopProfileFieldErrors.contactPhone)" />
+                    <small v-if="shopProfileFieldErrors.contactPhone">{{ t(shopProfileFieldErrors.contactPhone) }}</small>
+                  </label>
+                  <label :class="{ 'has-error': shopProfileFieldErrors.contactEmail }">
+                    <span>{{ t("page.supplierProducts.field.contactEmail") }}</span>
+                    <input v-model="shopProfileForm.contactEmail" :readonly="!shopProfileEditing" :aria-invalid="Boolean(shopProfileFieldErrors.contactEmail)" />
+                    <small v-if="shopProfileFieldErrors.contactEmail">{{ t(shopProfileFieldErrors.contactEmail) }}</small>
+                  </label>
+                  <div v-for="metric in shopMetrics" :key="metric.label" class="shop-store-metric-field">
+                    <span>{{ metric.label }}</span>
+                    <output>{{ metric.value }}</output>
+                  </div>
+                </div>
+                <label class="shop-company-introduction">
+                  <span>
+                    <strong>企业介绍</strong>
+                    <small>{{ shopProfileForm.description.length }}/2000</small>
+                  </span>
+                  <textarea
+                    v-model="shopProfileForm.description"
+                    :readonly="!shopProfileEditing"
+                    maxlength="2000"
+                    rows="2"
+                    placeholder="介绍企业能力、服务范围与经营特色"
+                    aria-label="企业介绍"
+                  ></textarea>
+                </label>
               </div>
             </div>
             <div v-if="shopProfileLoading" class="shop-panel-loading" role="status" aria-live="polite">
@@ -11672,7 +12148,8 @@ const workbenchGlobalLoading = computed(() => {
           <p v-if="shopNoticeMessage" class="permission-static-notice">{{ shopNoticeMessage }}</p>
           <p v-if="shopNoticeKey" class="permission-static-notice">{{ t(shopNoticeKey) }}</p>
 
-          <div :class="['shop-list-card', { 'is-section-fullscreen': shopListFullscreen }]" :aria-busy="shopSkuListLoading || companyQualificationLoading || companyContactLoading || companyVesselLoading || companyValueAddedServiceLoading || trafficBoatLoading">
+          <Teleport to="body" :disabled="!shopListFullscreen">
+          <div :class="['shop-list-card', { 'is-section-fullscreen': shopListFullscreen }]" :aria-busy="shopSkuListLoading || shopCatalogLoading || companyQualificationLoading || companyContactLoading || companyVesselLoading || companyValueAddedServiceLoading || trafficBoatLoading">
             <div class="shop-management-bar">
               <div class="shop-management-tabs" role="tablist">
                 <button type="button" :class="{ active: shopManagementTab === 'products' }" role="tab" :aria-selected="shopManagementTab === 'products'" @click="shopManagementTab = 'products'">
@@ -11695,14 +12172,13 @@ const workbenchGlobalLoading = computed(() => {
                 </button>
               </div>
               <div v-if="shopManagementTab === 'products'" class="toolbar-icon-actions">
-                <IconButton icon="Plus" :label="t('page.supplierProducts.contact.add')" @click="openCompanyContactCreateFromAnyTab" />
+                <IconButton v-if="shopProductViewMode === 'list'" icon="BookOpen" label="切换到产品名册" @click="showShopProductCatalog" />
+                <IconButton v-else icon="List" label="切换到商品列表" @click="showShopProductList" />
                 <IconButton class="shop-bulk-shelf-button is-on" icon="Check" :label="t('page.supplierProducts.actionAllOnShelf')" :disabled="!hasSavedShopSkuRows || shopSaving" @click="updateAllShopShelfStatus('ON_SHELF')" />
                 <IconButton class="shop-bulk-shelf-button is-off" icon="Ban" :label="t('page.supplierProducts.actionAllOffShelf')" :disabled="!hasSavedShopSkuRows || shopSaving" @click="updateAllShopShelfStatus('OFF_SHELF')" />
                 <IconButton icon="Download" label="下载双 Sheet 导入模板" @click="downloadShopImportTemplate" />
                 <IconButton icon="Upload" :label="t('page.supplierProducts.importButton')" @click="openShopImportPicker" />
-                <IconButton icon="Download" label="导出导入异常" :disabled="!shopExceptionRows.length" @click="exportShopImportExceptions" />
                 <IconButton icon="Save" :label="t('common.save')" :disabled="!canConfirmShopImport" :loading="shopSaving" @click="confirmShopImportPreview" />
-                <IconButton icon="RefreshCw" :label="t('action.refresh')" :loading="shopSkuListLoading" @click="refreshShopSkuList" />
                 <IconButton :icon="shopListFullscreen ? 'Minimize2' : 'Maximize2'" :label="shopListFullscreen ? t('page.supplierProducts.exitSectionFullscreen') : t('page.supplierProducts.enterSectionFullscreen')" @click="toggleShopListFullscreen" />
               </div>
               <div v-else-if="shopManagementTab === 'qualifications'" class="toolbar-icon-actions">
@@ -11725,7 +12201,11 @@ const workbenchGlobalLoading = computed(() => {
             <input ref="shopImportInput" type="file" accept=".xlsx" hidden @change="handleShopImportFile" />
             <input ref="shopSkuImageInput" type="file" accept="image/*" hidden @change="handleShopSkuImageChange" />
             <input ref="companyQualificationFileInput" type="file" accept="image/*" hidden @change="handleCompanyQualificationFileChange" />
-            <div v-show="shopManagementTab === 'products'" class="shop-management-pane">
+            <div
+              v-show="shopManagementTab === 'products'"
+              class="shop-management-pane shop-management-pane--products"
+              :class="{ 'is-catalog-mode': shopProductViewMode === 'catalog' }"
+            >
             <div class="shop-list-toolbar">
               <label class="shop-filter-field shop-filter-field--search">
                 <span>{{ t("filter.keyword") }}</span>
@@ -11733,10 +12213,18 @@ const workbenchGlobalLoading = computed(() => {
               </label>
               <label class="shop-filter-field">
                 <span>{{ t("page.supplierProducts.filterType") }}</span>
-                <select v-model="shopProductTypeFilter">
-                  <option value="">{{ t("common.all") }}</option>
-                  <option value="MATERIAL">{{ t("page.supplierProducts.typeMaterial") }}</option>
-                  <option value="FOOD">{{ t("page.supplierProducts.typeFood") }}</option>
+                <select v-model="shopProductClassificationFilter" @change="searchShopSkus">
+                  <option value="">全部分类</option>
+                  <optgroup v-for="group in shopProductClassificationGroups" :key="group.productType" :label="group.label">
+                    <option :value="`TYPE::${group.productType}`">{{ group.label }}（全部）</option>
+                    <option
+                      v-for="category in group.categories"
+                      :key="`${group.productType}-${category.name}`"
+                      :value="`CATEGORY::${group.productType}::${encodeURIComponent(category.name)}`"
+                    >
+                      {{ category.label }}（{{ category.count }}）
+                    </option>
+                  </optgroup>
                 </select>
               </label>
               <label class="shop-filter-field">
@@ -11757,7 +12245,7 @@ const workbenchGlobalLoading = computed(() => {
                 </select>
               </label>
               <div class="toolbar-icon-actions">
-                <IconButton icon="Search" :label="t('common.search')" :loading="shopSkuListLoading" @click="searchShopSkus" />
+                <IconButton icon="Search" :label="t('common.search')" :loading="shopSkuListLoading || shopCatalogLoading" @click="searchShopSkus" />
                 <IconButton icon="X" :label="t('common.reset')" @click="resetShopFilters" />
               </div>
             </div>
@@ -11769,6 +12257,7 @@ const workbenchGlobalLoading = computed(() => {
                 伙食 Sheet（{{ shopPreviewTypeCounts.FOOD }}）
               </button>
             </div>
+            <template v-if="shopProductViewMode === 'list'">
             <DataTable
               :columns="shopSkuColumns"
               :rows="filteredShopProductRows"
@@ -11782,10 +12271,13 @@ const workbenchGlobalLoading = computed(() => {
             >
               <template #cell-image="{ row }">
                 <div class="shop-image-editor" @click.stop>
-                  <SkuThumbnail :src="row.thumbnail" :alt="row.productName" @preview="openShopSkuImagePreview(row)" />
-                  <button type="button" :disabled="shopSkuImageUploading" :title="t('page.supplierProducts.imageReplace')" @click.stop="openShopSkuImagePicker(row)">
-                    {{ t("page.supplierProducts.imageReplaceShort") }}
-                  </button>
+                  <SkuThumbnail
+                    :src="row.thumbnail"
+                    :alt="row.productName"
+                    :action-label="t('action.previewImage')"
+                    :disabled="shopSkuImageUploading"
+                    @preview="openShopSkuImagePreview(row)"
+                  />
                 </div>
               </template>
               <template #cell-category="{ row }">
@@ -11798,12 +12290,7 @@ const workbenchGlobalLoading = computed(() => {
                 <input v-model="row.platformCode" class="shop-edit-control" :placeholder="t('page.supplierProducts.waitingCode')" @click.stop @input="markShopSkuDirty(row)" />
               </template>
               <template #cell-productName="{ row }">
-                <div class="shop-product-name-cell">
-                  <input v-model="row.productName" class="shop-edit-control shop-edit-control--name" @click.stop @input="markShopSkuDirty(row)" />
-                  <span v-if="row.previewAction" :class="['shop-preview-action-pill', `is-${row.previewAction.toLowerCase()}`]">
-                    {{ getShopPreviewActionLabel(row.previewAction) }}
-                  </span>
-                </div>
+                <input v-model="row.productName" class="shop-edit-control shop-edit-control--name" @click.stop @input="markShopSkuDirty(row)" />
               </template>
               <template #cell-specs="{ row }">
                 <button type="button" class="shop-spec-summary-button" @click.stop="expandedShopSkuId = expandedShopSkuId === row.id ? '' : row.id">
@@ -11839,12 +12326,32 @@ const workbenchGlobalLoading = computed(() => {
               <template #cell-packing="{ row }">
                 <input v-model="row.packing" class="shop-edit-control" @click.stop @input="markShopSkuDirty(row)" />
               </template>
+              <template #cell-marker="{ row }">
+                <span
+                  v-if="row.previewAction"
+                  :class="['shop-preview-action-pill', `is-${row.previewAction.toLowerCase()}`]"
+                  :title="getShopPreviewActionLabel(row.previewAction)"
+                >
+                  {{ getShopPreviewActionLabel(row.previewAction) }}
+                </span>
+                <span v-else-if="isShopNewSkuRow(row)" class="shop-preview-action-pill is-insert">{{ t("page.supplierProducts.previewActionInsert") }}</span>
+                <span v-else class="shop-marker-empty">--</span>
+              </template>
               <template #cell-operation="{ row }">
                 <div class="icon-action-row">
-                  <button v-if="row.skuId && !row.isPreview" type="button" :class="['shop-row-shelf-action', row.listingStatus === 'ON_SHELF' ? 'is-off' : 'is-on']" @click.stop="toggleShopShelfStatus(row)">
-                    {{ row.listingStatus === "ON_SHELF" ? t("page.supplierProducts.actionOffShelf") : t("page.supplierProducts.actionOnShelf") }}
-                  </button>
-                  <IconButton v-if="row.skuId && !row.isPreview" icon="Check" :label="t('page.supplierProducts.actionCandidate')" :disabled="isShopMatchedCodeStatus(row.codingStatus)" @click.stop="resolveShopException(row)" />
+                  <IconButton
+                    v-if="row.skuId && !row.isPreview"
+                    :class="['shop-row-shelf-button', row.listingStatus === 'ON_SHELF' ? 'is-off' : 'is-on']"
+                    :icon="row.listingStatus === 'ON_SHELF' ? 'ArrowDown' : 'ArrowUp'"
+                    :label="row.listingStatus === 'ON_SHELF' ? t('page.supplierProducts.actionOffShelf') : t('page.supplierProducts.actionOnShelf')"
+                    @click.stop="toggleShopShelfStatus(row)"
+                  />
+                  <IconButton
+                    v-if="row.skuId && !row.isPreview && hasShopCodeCandidate(row) && !isShopMatchedCodeStatus(row.codingStatus)"
+                    icon="Check"
+                    :label="t('page.supplierProducts.actionCandidate')"
+                    @click.stop="resolveShopException(row)"
+                  />
                   <IconButton v-if="row.skuId && !row.isPreview" icon="Trash2" :label="t('action.delete')" variant="danger" @click.stop="removeShopSku(row)" />
                 </div>
               </template>
@@ -11901,10 +12408,45 @@ const workbenchGlobalLoading = computed(() => {
                         </div>
                       </dd>
                     </div>
+                    <div class="shop-sku-expanded__description">
+                      <dt>{{ t("page.supplierProducts.field.productDescription") }}</dt>
+                      <dd>
+                        <textarea
+                          v-model="row.productDescription"
+                          rows="2"
+                          maxlength="4000"
+                          :placeholder="t('page.supplierProducts.productDescriptionPlaceholder')"
+                          @click.stop
+                          @input="markShopSkuDirty(row)"
+                        ></textarea>
+                      </dd>
+                    </div>
+                    <div class="shop-sku-expanded__tags">
+                      <dt class="shop-spec-title">
+                        <span>商品标签</span>
+                        <IconButton icon="Plus" label="添加商品标签" :disabled="row.productTags.length >= 6" @click.stop="addShopProductTag(row)" />
+                      </dt>
+                      <dd>
+                        <div v-if="row.productTags.length" class="shop-tag-editor">
+                          <div v-for="(_, tagIndex) in row.productTags" :key="tagIndex" class="shop-tag-editor-row">
+                            <input
+                              v-model="row.productTags[tagIndex]"
+                              maxlength="12"
+                              :aria-label="`商品标签${tagIndex + 1}`"
+                              placeholder="如：热卖、上新、质量好"
+                              @click.stop
+                              @input="markShopSkuDirty(row)"
+                            />
+                            <IconButton icon="Trash2" :label="`删除第${tagIndex + 1}个商品标签`" variant="danger" @click.stop="removeShopProductTag(row, tagIndex)" />
+                          </div>
+                        </div>
+                        <span v-else class="shop-tag-editor-empty">暂无标签，最多可添加 6 个。</span>
+                      </dd>
+                    </div>
                     <div class="shop-sku-expanded__specs">
                       <dt class="shop-spec-title">
                         <span>{{ t("page.supplierProducts.field.specs") }}</span>
-                        <button type="button" class="shop-spec-add" @click.stop="addShopSpec(row)">{{ t("page.supplierProducts.addSpec") }}</button>
+                        <IconButton icon="Plus" :label="t('page.supplierProducts.addSpec')" @click.stop="addShopSpec(row)" />
                       </dt>
                       <dd>
                         <div class="shop-spec-editor">
@@ -11940,7 +12482,15 @@ const workbenchGlobalLoading = computed(() => {
                 />
               </div>
             </div>
-            <div v-if="shopSkuListLoading" class="shop-panel-loading" role="status" aria-live="polite">
+            </template>
+            <ShopProductCatalog
+              v-else-if="shopProductViewMode === 'catalog'"
+              :rows="filteredShopCatalogRows"
+              :loading="shopCatalogLoading"
+              :category-options="getShopCategoryOptions"
+              :save-sku="saveShopCatalogSku"
+            />
+            <div v-if="shopProductViewMode === 'list' && shopSkuListLoading" class="shop-panel-loading" role="status" aria-live="polite">
               <span class="loading-spinner" aria-hidden="true"></span>
               <strong>{{ t("common.loading") }}</strong>
             </div>
@@ -12130,38 +12680,18 @@ const workbenchGlobalLoading = computed(() => {
               </section>
             </div>
           </div>
-
-          <Teleport to="body">
-            <div v-if="shopImportOverlayVisible" class="shop-import-backdrop" role="status" aria-live="polite">
-              <section class="shop-import-progress-panel" :class="{ 'is-pending': shopImportPending }">
-                <div class="shop-import-progress-head">
-                  <span>{{ t("page.supplierProducts.importProgressKicker") }}</span>
-                  <h2>{{ shopImportPending ? t("page.supplierProducts.importFailedTitle") : t("page.supplierProducts.importProgressTitle") }}</h2>
-                  <p>{{ shopImportFileName }}</p>
-                </div>
-                <ol class="shop-import-progress-stages">
-                  <li v-for="(stage, index) in shopImportStages" :key="stage" :class="{ active: index === shopImportStageIndex, done: index < shopImportStageIndex || shopImportProgress === 100 }">
-                    <i>{{ index + 1 }}</i>
-                    <span>{{ stage }}</span>
-                  </li>
-                </ol>
-                <div class="shop-ship-progress" :style="shopImportProgressStyle">
-                  <div class="shop-ship-progress-track">
-                    <div class="shop-ship-progress-fill"></div>
-                    <div class="shop-ship-runner" aria-hidden="true">
-                      <svg viewBox="0 0 64 40">
-                        <path class="ship-flag" d="M35 5v13M36 7h15l-4 5 4 5H36" />
-                        <path class="ship-body" d="M8 21h45l-6 10H16L8 21Z" />
-                        <path class="ship-cabin" d="M23 13h18l5 8H18l5-8Z" />
-                        <path class="ship-wave" d="M6 34c5-3 9-3 14 0s9 3 14 0 9-3 14 0 8 3 12 0" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-                <p class="shop-import-progress-note">{{ shopImportPending ? (shopErrorMessage || t("page.supplierProducts.importFailed")) : t("page.supplierProducts.importProgressHint") }}</p>
-              </section>
-            </div>
           </Teleport>
+
+          <ShopSmartImportOverlay
+            :visible="shopSmartImportVisible"
+            :job="shopSmartImportJob"
+            :elapsed-seconds="shopSmartImportElapsedSeconds"
+            @background="closeShopSmartImport"
+            @retry="retryShopSmartImport"
+            @close="closeShopSmartImport"
+            @view-preview="viewShopSmartImportPreview"
+            @download-errors="exportShopImportExceptions"
+          />
         </section>
       </ExpandablePanel>
 
@@ -12392,6 +12922,29 @@ const workbenchGlobalLoading = computed(() => {
       </ExpandablePanel>
 
       <section v-else-if="pageKey === 'compare'" ref="compareWorkspaceRef" class="compare-workspace" @scroll="handleCompareScroll">
+        <BackgroundTaskOverlay
+          :visible="materialComparisonAiVisible"
+          kicker="物料智能比价"
+          title="候选筛选与必要时模型重排"
+          :status="materialComparisonAiStatus"
+          :stages="materialComparisonAiStages"
+          :stage-index="0"
+          :progress-percent="materialComparisonAiProgressPercent"
+          :elapsed-seconds="materialComparisonAiElapsedSeconds"
+          :message="materialComparisonAiMessage"
+          :counters="materialComparisonAiCounters"
+          close-label="关闭比价进度"
+          @close="closeMaterialComparisonAiOverlay"
+        />
+        <MaterialComparisonStrategyDialog
+          :open="compareStrategyDialogOpen"
+          :settings="compareData?.strategySettings"
+          :items="compareData?.items ?? []"
+          :saving="compareStrategySaving"
+          :readonly="isCompareReadonly"
+          @close="compareStrategyDialogOpen = false"
+          @apply="regenerateMaterialComparison"
+        />
         <LoadingOverlay :active="compareLoading" :label="t('common.loading')">
         <article class="compare-supply-card">
           <div class="compare-supply-title">
@@ -12472,7 +13025,17 @@ const workbenchGlobalLoading = computed(() => {
                         :disabled="!strategy.enabled || isCompareReadonly"
                         @click="selectCompareSupplier(strategy.key, supplier.key)"
                       >
-                        <span>{{ supplier.supplier }}</span>
+                        <span class="strategy-supplier-identity">
+                          <span>{{ supplier.supplier }}</span>
+                          <span v-if="supplier.attributeTags.length" class="strategy-supplier-tags">
+                            <MaterialStrategyIcon
+                              v-for="tag in supplier.attributeTags"
+                              :key="tag"
+                              :type="strategyIconType(tag)"
+                              :label="tag"
+                            />
+                          </span>
+                        </span>
                         <span class="strategy-supplier-meta">
                           <strong>{{ supplier.amount }}</strong>
                         </span>
@@ -12525,22 +13088,25 @@ const workbenchGlobalLoading = computed(() => {
               </span>
               <input v-model="compareSkuKeyword" type="search" :placeholder="t('compare.skuSearchPlaceholder')" />
             </label>
-            <div class="compare-preference-filters" role="group" :aria-label="t('compare.preferenceFilter')">
+            <div class="compare-quick-filters" role="group" :aria-label="t('compare.quickFilters')">
               <button
                 type="button"
-                :class="{ active: comparePreferenceFilters.includes('priceLow') }"
-                :disabled="isCompareReadonly"
-                @click="toggleComparePreferenceFilter('priceLow')"
+                class="compare-core-filter"
+                :class="{ 'is-active': compareCoreOnly }"
+                :aria-pressed="compareCoreOnly"
+                @click="compareCoreOnly = !compareCoreOnly"
               >
-                {{ t("compare.priceLow") }}
+                <MaterialStrategyIcon type="core" :label="t('compare.coreOnly')" compact />
               </button>
               <button
                 type="button"
-                :class="{ active: comparePreferenceFilters.includes('qualityFirst') }"
-                :disabled="true"
-                :title="t('compare.qualityPending')"
+                class="compare-unmatched-filter"
+                :class="{ 'is-active': compareUnmatchedOnly }"
+                :aria-pressed="compareUnmatchedOnly"
+                :aria-label="t('compare.unmatchedOnlyLabel')"
+                @click="compareUnmatchedOnly = !compareUnmatchedOnly"
               >
-                {{ t("compare.qualityFirst") }}
+                <MaterialStrategyIcon type="unmatched" :label="t('compare.unmatchedOnlyLabel')" compact />
               </button>
             </div>
             <label class="compare-markup-field">
@@ -12550,6 +13116,7 @@ const workbenchGlobalLoading = computed(() => {
             <div class="toolbar-icon-actions">
               <IconButton icon="RefreshCw" :label="t('action.refresh')" :disabled="compareLoading" @click="loadCompareWorkspace" />
               <IconButton icon="Save" :label="t('compare.saveQuote')" :disabled="compareLoading || compareQuoteSaving || isCompareReadonly || !selectedCompareOrderableRows.length" @click="() => saveCompareQuotePrices()" />
+              <IconButton icon="Settings" label="比价策略引擎" variant="strategy" :disabled="compareLoading || isCompareReadonly" @click="compareStrategyDialogOpen = true" />
               <IconButton icon="Download" :label="t('compare.exportQuote')" :disabled="compareLoading || compareQuoteExporting" @click="exportCompareQuotePrices" />
               <IconButton icon="Upload" label="导入" :disabled="compareLoading || compareQuoteImporting || isCompareReadonly" @click="openCompareQuoteImport" />
               <IconButton icon="Send" :label="t('purchaseOrder.action.confirmOrder')" variant="primary" :disabled="compareLoading || isCompareReadonly || !selectedCompareOrderableRows.length" @click="openPurchaseOrderDialog" />
@@ -12566,7 +13133,7 @@ const workbenchGlobalLoading = computed(() => {
             :columns="compareSkuColumns"
             :rows="compareFilteredSkus"
             :loading="false"
-            :empty-label="compareError ? t('compare.loadFailed') : t('compare.noCandidates')"
+            :empty-label="compareListEmptyLabel"
             :show-index="false"
             row-key="id"
             row-interactive
@@ -12589,6 +13156,8 @@ const workbenchGlobalLoading = computed(() => {
             <template #cell-selection="{ row }">
               <label class="compare-row-select" @click.stop>
                 <input type="checkbox" :checked="selectedCompareRowIds.includes(row.id) && isCompareRowOrderable(row)" :disabled="isCompareReadonly || !isCompareRowOrderable(row)" @change.stop="toggleCompareRowSelection(row)" />
+                <MaterialStrategyIcon v-if="isCompareCoreProduct(row)" type="core" label="核心商品" compact />
+                <MaterialStrategyIcon v-if="isCompareQualityProduct(row)" type="quality" label="质量高" compact />
                 <span>{{ row.displayNo || "-" }}</span>
               </label>
             </template>
@@ -12744,7 +13313,7 @@ const workbenchGlobalLoading = computed(() => {
           </div>
           <p v-if="purchaseOrderDetailNotice" class="permission-static-notice">{{ purchaseOrderDetailNotice }}</p>
           <div v-if="purchaseOrderDetailLoading" class="compare-state-message">{{ t("common.loading") }}</div>
-          <section v-else-if="purchaseOrderDetail" ref="purchaseOrderDetailPanelRef" class="purchase-order-detail">
+          <section v-else-if="purchaseOrderDetail" ref="purchaseOrderDetailPanelRef" class="purchase-order-detail order-detail-glass">
             <div v-if="purchaseOrderDetailReminding" class="purchase-order-remind-mask">
               {{ t("purchaseOrder.notice.remindSending") }}
             </div>
@@ -14763,17 +15332,9 @@ const workbenchGlobalLoading = computed(() => {
           <input v-model="roleForm.roleName" type="text" :placeholder="t('companyMembers.placeholder.roleName')" />
           <small v-if="memberFormErrors.roleName">{{ t(memberFormErrors.roleName) }}</small>
         </label>
-        <label>
-          <span>{{ t("companyMembers.field.roleCode") }}</span>
-          <input v-model="roleForm.roleCode" type="text" :readonly="Boolean(selectedCompanyRoleCode)" :placeholder="t('companyMembers.placeholder.roleCode')" />
-        </label>
         <section class="member-role-select">
           <strong>{{ t("permission.menuPermissions") }}</strong>
-          <label v-for="menu in companyMenuOptions" :key="menu.code" class="member-check-row">
-            <input v-model="roleForm.menuPermissionKeys" type="checkbox" :value="menu.code" />
-            <span>{{ menu.name }}</span>
-            <em>{{ menu.code }}</em>
-          </label>
+          <CompanyRolePermissionTree v-model="roleForm.menuPermissionKeys" :nodes="companyMenuOptions" />
           <p v-if="!companyMenuOptions.length" class="permission-empty">{{ t("common.empty") }}</p>
         </section>
         <footer class="member-drawer-actions">
@@ -16219,7 +16780,16 @@ const workbenchGlobalLoading = computed(() => {
       </template>
     </DetailDrawer>
 
-    <ImagePreviewModal :open="previewOpen" :title="previewTitle" :images="previewImages" :attributes="previewAttributes" @close="previewOpen = false" />
+    <ImagePreviewModal
+      :open="previewOpen"
+      :title="previewTitle"
+      :images="previewImages"
+      :attributes="previewAttributes"
+      :action-label="previewShopSkuRowId ? t('page.supplierProducts.imageReplace') : undefined"
+      :action-loading="shopSkuImageUploading"
+      @action="replacePreviewedShopSkuImage"
+      @close="closeImagePreview"
+    />
 
     <ConfirmDialog
       :open="confirmOpen"

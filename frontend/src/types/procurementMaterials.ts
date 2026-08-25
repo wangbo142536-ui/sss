@@ -40,6 +40,9 @@ export interface MaterialSupplierCandidate {
   codeStatus?: string;
   matchType?: string;
   reason?: string;
+  productTags?: string[];
+  qualityScore?: number;
+  priceScore?: number;
 }
 
 export interface MaterialParsedAttribute {
@@ -263,6 +266,10 @@ export interface MaterialComparisonSupplierSummary {
   totalAmountUsd?: number;
   amount?: number;
   currency?: string;
+  attributeTags?: string[];
+  coreItemCount?: number;
+  qualityScore?: number;
+  priceScore?: number;
 }
 
 export interface MaterialComparisonStrategy {
@@ -278,6 +285,7 @@ export interface MaterialComparisonStrategy {
   suppliers: MaterialComparisonSupplierSummary[];
   enabled?: boolean;
   disabledReason?: string;
+  attributeTags?: string[];
 }
 
 export interface MaterialComparisonCandidate {
@@ -316,7 +324,22 @@ export interface MaterialComparisonCandidate {
   codeStatus?: string;
   matchType?: string;
   reason?: string;
+  productTags?: string[];
+  qualityScore?: number;
+  priceScore?: number;
 }
+
+export interface MaterialComparisonStrategySettings {
+  mixedSupplierCount: number;
+  priceEnabled: boolean;
+  priceLevel: number;
+  qualityEnabled: boolean;
+  qualityLevel: number;
+  coreDemandItemIds: number[];
+  strategyVersion: number;
+}
+
+export type MaterialComparisonStrategySettingsPayload = Omit<MaterialComparisonStrategySettings, "strategyVersion">;
 
 export interface MaterialComparisonItem {
   demandItemId?: number;
@@ -355,6 +378,20 @@ export interface MaterialDemandComparisonResponse {
   isOrdered?: boolean;
   isDiscarded?: boolean;
   existingPurchaseOrderId?: number;
+  aiProcessing?: MaterialComparisonAiProcessing;
+  strategySettings?: MaterialComparisonStrategySettings;
+}
+
+export type MaterialComparisonAiStatus =
+  | "DETERMINISTIC"
+  | "MODEL_APPLIED"
+  | "MODEL_FALLBACK"
+  | "MODEL_CONFIGURATION_REQUIRED";
+
+export interface MaterialComparisonAiProcessing {
+  status: MaterialComparisonAiStatus;
+  appliedItemCount: number;
+  fallbackItemCount: number;
 }
 
 export interface MaterialComparisonQuoteImportItem {

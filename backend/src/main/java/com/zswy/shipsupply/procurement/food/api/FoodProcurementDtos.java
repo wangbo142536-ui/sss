@@ -253,8 +253,19 @@ public final class FoodProcurementDtos {
         String availability,
         String priceSource,
         boolean quantitySatisfied,
-        boolean lowestPrice
+        boolean lowestPrice,
+        List<String> productTags
     ) {
+        public ComparisonQuoteOption(
+            Long demandItemId, Long quoteItemId, Long quoteId, Long supplierCompanyId, String supplierName,
+            BigDecimal requestedQuantity, BigDecimal quotedQuantity, BigDecimal unitPrice, BigDecimal amount,
+            String availability, String priceSource, boolean quantitySatisfied, boolean lowestPrice
+        ) {
+            this(
+                demandItemId, quoteItemId, quoteId, supplierCompanyId, supplierName, requestedQuantity,
+                quotedQuantity, unitPrice, amount, availability, priceSource, quantitySatisfied, lowestPrice, List.of()
+            );
+        }
     }
 
     public record ComparisonItem(
@@ -292,8 +303,25 @@ public final class FoodProcurementDtos {
         String fixedProviderId,
         String fixedProviderName,
         String trafficServiceJson,
-        List<Long> selectedDemandItemIds
+        List<Long> selectedDemandItemIds,
+        Integer mixedSupplierCount,
+        Boolean priceEnabled,
+        Integer priceLevel,
+        Boolean qualityEnabled,
+        Integer qualityLevel,
+        List<Long> coreDemandItemIds
     ) {
+        public ComparisonSettings(
+            BigDecimal markupPercent, BigDecimal fixedFreightFee, BigDecimal fixedCustomsFee,
+            BigDecimal fixedCraneFee, BigDecimal fixedOtherFee, String supplyMode, String fixedProviderType,
+            String fixedProviderId, String fixedProviderName, String trafficServiceJson, List<Long> selectedDemandItemIds
+        ) {
+            this(
+                markupPercent, fixedFreightFee, fixedCustomsFee, fixedCraneFee, fixedOtherFee, supplyMode,
+                fixedProviderType, fixedProviderId, fixedProviderName, trafficServiceJson, selectedDemandItemIds,
+                3, true, 5, true, 3, List.of()
+            );
+        }
     }
 
     public record ComparisonResponse(

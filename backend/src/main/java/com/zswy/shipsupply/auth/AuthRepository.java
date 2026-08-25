@@ -572,6 +572,21 @@ public class AuthRepository {
         );
     }
 
+    public boolean hasRole(long userId, String roleCode) {
+        Integer count = jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(*)
+            FROM sys_role role
+            JOIN sys_user_role user_role ON user_role.role_id = role.id
+            WHERE user_role.user_id = ? AND role.role_code = ? AND role.enabled = 1
+            """,
+            Integer.class,
+            userId,
+            roleCode
+        );
+        return count != null && count > 0;
+    }
+
     public List<PermissionResponse> permissionsForUser(long userId) {
         return jdbcTemplate.query(
             """
@@ -1226,10 +1241,13 @@ public class AuthRepository {
             """
             SELECT file.file_id, file.original_name, file.content_type, file.file_size,
                    file.storage_path, file.uploader_user_id,
-                   qualification.company_id AS qualification_company_id
+                   COALESCE(qualification.company_id, quality_selection.company_id) AS qualification_company_id
             FROM sys_file file
             LEFT JOIN company_qualification qualification
               ON qualification.file_id = file.file_id
+            LEFT JOIN shop_sku_quality_selection quality_selection
+              ON quality_selection.inspection_report_file_id = file.file_id
+             AND quality_selection.status = 'ACTIVE'
             WHERE file.file_id = ?
             LIMIT 1
             """,
@@ -1243,6 +1261,38 @@ public class AuthRepository {
                 nullableLong(rs, "qualification_company_id")
             ),
             fileId
+        );
+        return files.stream().findFirst();
+    }
+
+    public Optional<StoredFileResponse> findPublicSupplierQualificationFile(long companyId, long qualificationId) {
+        List<StoredFileResponse> files = jdbcTemplate.query(
+            """
+            SELECT file.file_id, file.original_name, file.content_type, file.file_size,
+                   file.storage_path, file.uploader_user_id,
+                   qualification.company_id AS qualification_company_id
+            FROM company_qualification qualification
+            JOIN company company ON company.id = qualification.company_id
+            JOIN sys_file file ON file.file_id = qualification.file_id
+            WHERE qualification.company_id = ?
+              AND qualification.id = ?
+              AND company.company_type = 'SUPPLIER'
+              AND company.status = 'ACTIVE'
+              AND qualification.status IN ('ACTIVE', 'SUBMITTED', 'APPROVED')
+              AND file.status = 'ACTIVE'
+            LIMIT 1
+            """,
+            (rs, rowNum) -> new StoredFileResponse(
+                rs.getString("file_id"),
+                rs.getString("original_name"),
+                rs.getString("content_type"),
+                rs.getLong("file_size"),
+                rs.getString("storage_path"),
+                nullableLong(rs, "uploader_user_id"),
+                nullableLong(rs, "qualification_company_id")
+            ),
+            companyId,
+            qualificationId
         );
         return files.stream().findFirst();
     }

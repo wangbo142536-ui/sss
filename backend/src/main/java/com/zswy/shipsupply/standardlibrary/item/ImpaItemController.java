@@ -17,7 +17,7 @@ public class ImpaItemController {
         this.impaItemService = impaItemService;
     }
 
-    @GetMapping
+    @GetMapping(params = "!page")
     public List<ImpaItemResponse> listItems(
         @RequestParam(required = false) String categoryCode,
         @RequestParam(required = false) String segmentCode,
@@ -26,6 +26,18 @@ public class ImpaItemController {
         @RequestParam(defaultValue = "50") int limit
     ) {
         return impaItemService.listItems(categoryCode, segmentCode, chooseKeyword(keyword, q), limit);
+    }
+
+    @GetMapping(params = "page")
+    public ImpaItemPageResponse listItemPage(
+        @RequestParam(required = false) String categoryCode,
+        @RequestParam(required = false) String segmentCode,
+        @RequestParam(required = false) String keyword,
+        @RequestParam(name = "q", required = false) String q,
+        @RequestParam int page,
+        @RequestParam(defaultValue = "50") int pageSize
+    ) {
+        return impaItemService.listItemPage(categoryCode, segmentCode, chooseKeyword(keyword, q), page, pageSize);
     }
 
     private String chooseKeyword(String keyword, String q) {

@@ -1,0 +1,246 @@
+.material-strategy-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(16, 49, 76, 0.42);
+}
+
+.material-strategy-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(820px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #91c9f5;
+  border-radius: 14px;
+  background: #f8fcff;
+  color: #123955;
+}
+
+.material-strategy-dialog__header,
+.material-strategy-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  background: #fff;
+}
+
+.material-strategy-dialog__header { border-bottom: 1px solid #c7e1f5; }
+.material-strategy-dialog__footer { justify-content: flex-end; border-top: 1px solid #c7e1f5; }
+.material-strategy-dialog__header h2 { margin: 0; font-size: 18px; }
+.material-strategy-dialog__header p { margin: 4px 0 0; color: #58768d; font-size: 13px; }
+.material-strategy-dialog__body { overflow: auto; padding: 16px 18px; }
+
+.material-strategy-section + .material-strategy-section { margin-top: 14px; }
+.material-strategy-section { padding: 14px; border: 1px solid #c5e0f4; border-radius: 12px; background: #fff; }
+.material-strategy-section__heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.material-strategy-section__heading strong { font-size: 15px; }
+.material-strategy-section__heading span { color: #647f93; font-size: 12px; text-align: right; }
+
+.material-strategy-supplier-count { display: flex; align-items: center; gap: 10px; }
+.material-strategy-supplier-count > button,
+.material-strategy-supplier-count label,
+.material-strategy-secondary,
+.material-strategy-primary {
+  min-height: 36px;
+  border: 1px solid #9fcef1;
+  border-radius: 9px;
+  background: #f7fbff;
+  color: #075f9d;
+  font-weight: 700;
+}
+.material-strategy-supplier-count > button { min-width: 72px; }
+.material-strategy-supplier-count > button.active { border-color: #0877c8; background: #e5f4ff; }
+.material-strategy-supplier-count label { display: flex; align-items: center; gap: 7px; padding: 0 10px; color: #375c76; font-weight: 500; }
+.material-strategy-supplier-count input[type="number"] { width: 58px; border: 0; border-bottom: 1px solid #8fc3e8; background: transparent; text-align: center; }
+.material-strategy-supplier-count em { font-style: normal; }
+
+.material-strategy-objectives { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.material-strategy-objective { display: grid; grid-template-columns: minmax(100px, auto) 1fr 44px; align-items: center; gap: 12px; padding: 12px; border: 1px solid #b9daf1; border-radius: 10px; background: #f5fbff; }
+.material-strategy-objective.disabled { opacity: 0.58; }
+.material-strategy-objective__title { display: flex; align-items: center; gap: 8px; }
+.material-strategy-objective input[type="range"] { width: 100%; accent-color: #0877c8; }
+.material-strategy-level { color: #0877c8; font-weight: 800; text-align: right; }
+.material-strategy-error { margin: 10px 0 0; color: #b43b32; font-size: 13px; }
+
+.material-strategy-core-list { max-height: 250px; overflow: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.material-strategy-core-list label { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 10px; border: 1px solid #d0e4f3; border-radius: 9px; background: #fbfdff; }
+.material-strategy-core-list label.selected { border-color: #7bbceb; background: #ecf8ff; }
+.material-strategy-core-list label > span { min-width: 0; }
+.material-strategy-core-list strong,
+.material-strategy-core-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material-strategy-core-list small { margin-top: 3px; color: #688397; }
+
+.material-strategy-secondary,
+.material-strategy-primary { padding: 0 16px; }
+.material-strategy-primary { border-color: #0877c8; background: #0877c8; color: #fff; }
+.material-strategy-primary:disabled,
+.material-strategy-secondary:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.strategy-supplier-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 24px;
+}
+
+.strategy-supplier-identity > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-supplier-tags {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.material-strategy-icon {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.material-strategy-icon svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.material-strategy-icon.is-core {
+  color: var(--color-strategy-core-ink);
+  background: var(--color-strategy-core-surface);
+  border-color: var(--color-strategy-core-border);
+}
+
+.material-strategy-icon.is-price {
+  color: #147a3d;
+  background: #e3f8eb;
+  border-color: #8bd0a7;
+}
+
+.material-strategy-icon.is-quality {
+  color: #1264ac;
+  background: #e8f3ff;
+  border-color: #8bbce8;
+}
+
+.material-strategy-icon.is-unmatched {
+  color: #b42318;
+  background: #fff1f2;
+  border-color: #f4a6ad;
+}
+
+.material-strategy-icon__unmatched-face circle,
+.material-strategy-icon__unmatched-face > path:not(.material-strategy-icon__tear) {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.material-strategy-icon__unmatched-face > path:nth-of-type(1) {
+  stroke-width: 3;
+}
+
+.material-strategy-icon__tear {
+  fill: currentColor;
+  stroke: none;
+}
+
+.material-strategy-icon__price text {
+  fill: currentColor;
+  font: 800 13px/1 Arial, sans-serif;
+}
+
+.material-strategy-icon__down {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.material-strategy-icon.is-compact {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  border-radius: 4px;
+}
+
+.material-strategy-icon.is-compact svg {
+  width: 14px;
+  height: 14px;
+}
+
+.data-table-row.is-compare-core-product,
+.data-table-row.is-compare-core-product.is-odd,
+.data-table-row.is-compare-core-product.is-even,
+.data-table-row.is-compare-core-product.is-compare-deselected,
+.data-table-row.is-compare-core-product.is-compare-unmatched {
+  background: #fff0d2;
+  color: #7b4308;
+  box-shadow: inset 0 1px 0 #efbd6d, inset 0 -1px 0 #efbd6d;
+}
+
+.data-table-row.is-compare-core-product:hover,
+.data-table-row.is-compare-core-product.is-expanded {
+  background: #ffe3aa;
+}
+
+.data-table-row.is-compare-core-product .compare-quantity-cell input,
+.data-table-row.is-compare-core-product .compare-markup-field input,
+.data-table-row.is-compare-core-product .compare-actual-quote-field input,
+.data-table-row.is-compare-core-product .compare-unit-select {
+  background: #fffaf1;
+  border-color: #efbe74;
+}
+
+.data-table-row.is-compare-core-product.is-compare-unmatched,
+.data-table-row.is-compare-core-product.is-compare-deselected {
+  background: #fff1f2;
+  color: #b91c1c;
+  box-shadow: inset 0 1px 0 #f4a6ad, inset 0 -1px 0 #f4a6ad;
+}
+
+.data-table-row.is-compare-core-product.is-compare-unmatched:hover,
+.data-table-row.is-compare-core-product.is-compare-unmatched.is-expanded,
+.data-table-row.is-compare-core-product.is-compare-deselected:hover,
+.data-table-row.is-compare-core-product.is-compare-deselected.is-expanded {
+  background: #ffe4e6;
+}
+
+@media (max-width: 680px) {
+  .material-strategy-backdrop { padding: 8px; }
+  .material-strategy-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .material-strategy-section__heading { align-items: flex-start; flex-direction: column; }
+  .material-strategy-section__heading span { text-align: left; }
+  .material-strategy-objectives,
+  .material-strategy-core-list { grid-template-columns: 1fr; }
+  .material-strategy-supplier-count { flex-wrap: wrap; }
+  .strategy-supplier-identity { align-items: flex-start; flex-direction: column; }
+  .strategy-supplier-tags { justify-content: flex-start; margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .material-strategy-dialog, .material-strategy-backdrop { scroll-behavior: auto; }
+}

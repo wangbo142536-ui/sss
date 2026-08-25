@@ -218,7 +218,7 @@ class MaterialDemandComparisonServiceTest {
         MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
 
         assertThat(response.items().get(0).candidates()).extracting(MaterialSupplierCandidate::impaCode)
-            .containsExactly("611705");
+            .containsExactly("611705", "999999");
         assertThat(response.items().get(0).lowestCandidate().supplierName()).isEqualTo("Supplier A");
     }
 
@@ -235,8 +235,109 @@ class MaterialDemandComparisonServiceTest {
         MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
 
         assertThat(response.items().get(0).pricingQuantity()).isEqualByComparingTo(BigDecimal.ONE);
-        assertThat(response.items().get(0).pricingQuantityNote()).isEqualTo("计价数量按 1");
+        assertThat(response.items().get(0).pricingQuantityNote()).isEqualTo("\u8ba1\u4ef7\u6570\u91cf\u6309 1");
         assertThat(response.strategies().get(0).totalAmount()).isEqualByComparingTo("9.00");
+    }
+
+    @Test
+    void doesNotGiveExactCodePriorityToPendingExceptionSku() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "611705", "Flat Nose Plier", "160MM", "3")));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            skuWithEvidence(1L, 24L, "异常编码供应商", "Wrong hydraulic pump", "611705", "900MM", "1.00", "PENDING_EXCEPTION"),
+            skuWithEvidence(2L, 25L, "名称规格供应商", "Flat Nose Plier", "999999", "160MM", "9.00", "SPEC_MATCHED")
+        ));
+
+        MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
+
+        assertThat(response.items().get(0).candidates().get(0).supplierName()).isEqualTo("名称规格供应商");
+        assertThat(response.items().get(0).candidates().get(0).matchType()).isEqualTo("NAME_SPEC_MATCH");
+    }
+
+    @Test
+    void downgradesSameCodeCandidateWhenSpecificationConflicts() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "611705", "Flat Nose Plier", "160MM", "3")));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            skuWithEvidence(1L, 24L, "规格冲突供应商", "Flat Nose Plier", "611705", "900MM", "1.00", "CODE_MATCHED"),
+            skuWithEvidence(2L, 25L, "规格一致供应商", "Flat Nose Plier", "611705", "160MM", "9.00", "CODE_MATCHED")
+        ));
+
+        MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
+
+        assertThat(response.items().get(0).candidates().get(0).supplierName()).isEqualTo("规格一致供应商");
+        assertThat(response.items().get(0).candidates().get(1).matchType()).isEqualTo("CODE_SPEC_CONFLICT");
+        assertThat(response.aiProcessing().status()).isEqualTo("MODEL_CONFIGURATION_REQUIRED");
+        assertThat(response.aiProcessing().appliedItemCount()).isZero();
+    }
+
+    @Test
+    void matchesChineseProductNamesWithoutAnImpaCode() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "", "船用荧光笔", "橙色", "3")));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            skuWithEvidence(1L, 24L, "文具供应商", "船用荧光笔", "470672", "橙色", "5.00", "SPEC_MATCHED")
+        ));
+
+        MaterialDemandComparisonResponse response = service.comparison("Bearer token", 101L);
+
+        assertThat(response.items().get(0).candidates()).hasSize(1);
+        assertThat(response.items().get(0).candidates().get(0).supplierName()).isEqualTo("文具供应商");
+    }
+
+    @Test
+    void usesOnlyMerchantProductTagsForQualityAlternative() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "611705", "Flat Nose Plier", "160MM", "3")));
+        when(supplierCandidateProvider.findOnShelfCandidates()).thenReturn(List.of(
+            sku(1L, 24L, "低价供应商", "LOW-1", "Flat Nose Plier", "611705", "8.00", "99", "ON_SHELF"),
+            sku(2L, 25L, "商家质量标签供应商", "QUALITY-1", "Flat Nose Plier", "611705", "10.00", "99", "ON_SHELF")
+                .withProductTags(List.of("质量高"))
+        ));
+
+        MaterialDemandComparisonStrategy concentrated = service.comparison("Bearer token", 101L).strategies().get(1);
+
+        assertThat(concentrated.suppliers()).extracting(MaterialDemandComparisonSupplier::supplierName)
+            .containsExactly("低价供应商", "商家质量标签供应商");
+        assertThat(concentrated.suppliers().get(0).attributeTags()).containsExactly("价格最低");
+        assertThat(concentrated.suppliers().get(1).attributeTags()).containsExactly("质量最高");
+    }
+
+    @Test
+    void validatesComparisonStrategyWithoutCreatingSystemProductScores() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(materialDemandRepository.findSummaryById(22L, 101L)).thenReturn(Optional.of(summary()));
+        when(materialDemandRepository.items(22L, 101L)).thenReturn(List.of(item(201L, "611705", "Flat Nose Plier", "160MM", "3")));
+
+        assertThatThrownBy(() -> service.saveStrategySettings(
+            "Bearer token",
+            101L,
+            new MaterialComparisonStrategySettingsRequest(3, false, 5, false, 3, List.of(201L))
+        )).isInstanceOf(ResponseStatusException.class).hasMessageContaining("MATERIAL_COMPARISON_OBJECTIVE_REQUIRED");
+
+        MaterialComparisonStrategySettings settings = service.saveStrategySettings(
+            "Bearer token",
+            101L,
+            new MaterialComparisonStrategySettingsRequest(3, true, 4, true, 2, List.of(201L))
+        );
+        assertThat(settings.mixedSupplierCount()).isEqualTo(3);
+        assertThat(settings.coreDemandItemIds()).containsExactly(201L);
+        assertThat(settings.priceLevel()).isEqualTo(4);
+        assertThat(settings.qualityLevel()).isEqualTo(2);
+    }
+
+    @Test
+    void defaultsLowestMixedStrategyToThreeSuppliers() {
+        assertThat(MaterialComparisonStrategySettings.defaults().mixedSupplierCount()).isEqualTo(3);
     }
 
     private MaterialDemandSummaryResponse summary() {
@@ -335,6 +436,43 @@ class MaterialDemandComparisonServiceTest {
             "/files/" + skuId + "-thumb.png",
             shelfStatus,
             "SPEC_MATCHED",
+            null,
+            null
+        );
+    }
+
+    private MaterialSupplierCandidate skuWithEvidence(
+        Long skuId,
+        Long companyId,
+        String supplierName,
+        String productName,
+        String impaCode,
+        String specification,
+        String unitPrice,
+        String codeStatus
+    ) {
+        return new MaterialSupplierCandidate(
+            skuId,
+            companyId,
+            supplierName,
+            "SKU-" + skuId,
+            productName,
+            impaCode,
+            impaCode,
+            "61",
+            "General Tools",
+            List.of(new MaterialSupplierSkuAttribute("spec", "Specification", specification, null, 0, specification)),
+            specification,
+            new BigDecimal(unitPrice),
+            "CNY",
+            "\u00A5",
+            new BigDecimal("99"),
+            "PCS",
+            "BOX",
+            null,
+            null,
+            "ON_SHELF",
+            codeStatus,
             null,
             null
         );

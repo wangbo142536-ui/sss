@@ -3,7 +3,9 @@ import type {
   MaterialDocumentType,
   MaterialComparisonCandidate,
   MaterialComparisonItem,
+  MaterialComparisonAiProcessing,
   MaterialComparisonStrategy,
+  MaterialComparisonStrategySettingsPayload,
   MaterialDemandDetail,
   MaterialDemandComparisonResponse,
   MaterialComparisonQuoteImportResponse,
@@ -21,7 +23,14 @@ import type {
 } from "@/types/procurementMaterials";
 
 const MATERIAL_MATCH_PREVIEW_ENDPOINT = "/api/procurement/materials/match-preview";
+const MATERIAL_AI_CAPABILITIES_ENDPOINT = "/api/procurement/materials/ai-capabilities";
 const MATERIAL_DEMAND_ENDPOINT = "/api/procurement/material-demands";
+
+export type MaterialAiCapabilities = {
+  categoryAnalysisConfigured: boolean;
+  comparisonRerankConfigured: boolean;
+  status: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -76,6 +85,12 @@ function readBoolean(source: Record<string, unknown>, key: string): boolean | un
   return typeof value === "boolean" ? value : undefined;
 }
 
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+}
+
 function normalizeStringRecord(value: unknown): Record<string, string> {
   if (!isRecord(value)) return {};
   return Object.fromEntries(
@@ -126,7 +141,10 @@ function normalizeSupplierCandidate(value: unknown): MaterialSupplierCandidate |
     shelfStatus: readString(value, "shelfStatus"),
     codeStatus: readString(value, "codeStatus"),
     matchType: readString(value, "matchType"),
-    reason: readString(value, "reason")
+    reason: readString(value, "reason"),
+    productTags: readStringArray(value.productTags),
+    qualityScore: readNumber(value, "qualityScore"),
+    priceScore: readNumber(value, "priceScore")
   };
 }
 
@@ -172,7 +190,10 @@ function normalizeComparisonCandidate(value: unknown): MaterialComparisonCandida
     shelfStatus: readString(value, "shelfStatus"),
     codeStatus: readString(value, "codeStatus"),
     matchType: readString(value, "matchType"),
-    reason: readString(value, "reason")
+    reason: readString(value, "reason"),
+    productTags: readStringArray(value.productTags),
+    qualityScore: readNumber(value, "qualityScore"),
+    priceScore: readNumber(value, "priceScore")
   };
 }
 
@@ -421,7 +442,11 @@ function normalizeComparisonSupplierSummary(value: unknown) {
     totalAmount: readNumber(value, "totalAmount"),
     totalAmountUsd: readNumber(value, "totalAmountUsd"),
     amount: readNumber(value, "amount"),
-    currency: readString(value, "currency")
+    currency: readString(value, "currency"),
+    attributeTags: readStringArray(value.attributeTags),
+    coreItemCount: readNumber(value, "coreItemCount"),
+    qualityScore: readNumber(value, "qualityScore"),
+    priceScore: readNumber(value, "priceScore")
   };
 }
 
@@ -444,7 +469,8 @@ function normalizeComparisonStrategy(value: unknown): MaterialComparisonStrategy
     currency: readString(value, "currency"),
     suppliers,
     enabled: readBoolean(value, "enabled"),
-    disabledReason: readString(value, "disabledReason")
+    disabledReason: readString(value, "disabledReason"),
+    attributeTags: readStringArray(value.attributeTags)
   };
 }
 
@@ -483,6 +509,21 @@ function normalizeComparisonItem(value: unknown): MaterialComparisonItem | null 
   };
 }
 
+function normalizeComparisonStrategySettings(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  return {
+    mixedSupplierCount: readNumber(value, "mixedSupplierCount") ?? 3,
+    priceEnabled: readBoolean(value, "priceEnabled") !== false,
+    priceLevel: readNumber(value, "priceLevel") ?? 5,
+    qualityEnabled: readBoolean(value, "qualityEnabled") !== false,
+    qualityLevel: readNumber(value, "qualityLevel") ?? 3,
+    coreDemandItemIds: Array.isArray(value.coreDemandItemIds)
+      ? value.coreDemandItemIds.map(Number).filter((item) => Number.isFinite(item) && item > 0)
+      : [],
+    strategyVersion: readNumber(value, "strategyVersion") ?? 1
+  };
+}
+
 function normalizeMaterialDemandComparison(payload: unknown): MaterialDemandComparisonResponse {
   const unwrapped = unwrapPayload(payload);
   if (!isRecord(unwrapped)) {
@@ -491,6 +532,16 @@ function normalizeMaterialDemandComparison(payload: unknown): MaterialDemandComp
   const demand = normalizeDemandSummary(unwrapped.demand);
   const strategySource = Array.isArray(unwrapped.strategies) ? unwrapped.strategies : [];
   const itemSource = Array.isArray(unwrapped.items) ? unwrapped.items : [];
+  const aiSource = isRecord(unwrapped.aiProcessing) ? unwrapped.aiProcessing : null;
+  const aiStatus = aiSource ? readString(aiSource, "status") : undefined;
+  const supportedAiStatuses = ["DETERMINISTIC", "MODEL_APPLIED", "MODEL_FALLBACK", "MODEL_CONFIGURATION_REQUIRED"];
+  const aiProcessing: MaterialComparisonAiProcessing | undefined = aiSource && aiStatus && supportedAiStatuses.includes(aiStatus)
+    ? {
+        status: aiStatus as MaterialComparisonAiProcessing["status"],
+        appliedItemCount: readRequiredNumber(aiSource, "appliedItemCount"),
+        fallbackItemCount: readRequiredNumber(aiSource, "fallbackItemCount")
+      }
+    : undefined;
   return {
     demand: demand ?? undefined,
     supplyInfo: normalizeComparisonSupplyInfo(unwrapped.supplyInfo),
@@ -498,7 +549,9 @@ function normalizeMaterialDemandComparison(payload: unknown): MaterialDemandComp
     items: itemSource.map(normalizeComparisonItem).filter((item): item is MaterialComparisonItem => Boolean(item)),
     isOrdered: readBoolean(unwrapped, "isOrdered"),
     isDiscarded: readBoolean(unwrapped, "isDiscarded"),
-    existingPurchaseOrderId: readNumber(unwrapped, "existingPurchaseOrderId")
+    existingPurchaseOrderId: readNumber(unwrapped, "existingPurchaseOrderId"),
+    aiProcessing,
+    strategySettings: normalizeComparisonStrategySettings(unwrapped.strategySettings)
   };
 }
 
@@ -577,6 +630,18 @@ export async function uploadMaterialMatchPreview(file: File): Promise<MaterialMa
   return normalizeMatchPreview(payload);
 }
 
+export async function getMaterialAiCapabilities(): Promise<MaterialAiCapabilities> {
+  const payload = await requestJson(MATERIAL_AI_CAPABILITIES_ENDPOINT);
+  const source = isRecord(payload) ? payload : {};
+  const categoryAnalysisConfigured = readBoolean(source, "categoryAnalysisConfigured") === true;
+  const comparisonRerankConfigured = readBoolean(source, "comparisonRerankConfigured") === true;
+  return {
+    categoryAnalysisConfigured,
+    comparisonRerankConfigured,
+    status: readString(source, "status") || (categoryAnalysisConfigured || comparisonRerankConfigured ? "CONFIGURED" : "MODEL_CONFIGURATION_REQUIRED")
+  };
+}
+
 export async function listMaterialDemands(query: { keyword?: string; status?: string; dateFrom?: string; dateTo?: string; stage?: string; page?: number; size?: number } = {}): Promise<MaterialDemandListResponse> {
   const params = new URLSearchParams();
   if (query.keyword?.trim()) params.set("keyword", query.keyword.trim());
@@ -606,6 +671,16 @@ export async function saveMaterialDemand(payload: MaterialDemandSavePayload): Pr
 
 export async function getMaterialDemandComparison(demandId: number | string): Promise<MaterialDemandComparisonResponse> {
   return normalizeMaterialDemandComparison(await requestJson(`${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/comparison`));
+}
+
+export async function saveMaterialComparisonStrategy(
+  demandId: number | string,
+  payload: MaterialComparisonStrategySettingsPayload
+) {
+  return normalizeComparisonStrategySettings(await requestJson(
+    `${MATERIAL_DEMAND_ENDPOINT}/${encodeURIComponent(String(demandId))}/comparison-strategy`,
+    { method: "PUT", body: JSON.stringify(payload) }
+  ));
 }
 
 export async function discardMaterialDemand(demandId: number | string): Promise<unknown> {

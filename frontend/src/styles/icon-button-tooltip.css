@@ -1,0 +1,32 @@
+.ui-icon-button-tooltip {
+  position: fixed;
+  z-index: var(--z-icon-button-tooltip, 2147483000);
+  max-width: min(280px, calc(100vw - 16px));
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #092b43;
+  box-shadow: 0 4px 8px rgba(9, 43, 67, 0.18);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  white-space: normal;
+  transition: opacity 120ms ease;
+}
+
+.ui-icon-button-tooltip.is-ready {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-icon-button-tooltip {
+    transition: none;
+  }
+}

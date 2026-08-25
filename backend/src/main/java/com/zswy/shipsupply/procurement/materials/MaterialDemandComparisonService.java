@@ -13,6 +13,7 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,7 +28,7 @@ public class MaterialDemandComparisonService {
     private static final String CNY = "CNY";
     private static final BigDecimal USD_RATE = new BigDecimal("7");
     private static final BigDecimal MISSING_PRICE = new BigDecimal("999999999");
-    private static final Pattern TOKEN_SPLITTER = Pattern.compile("[^A-Za-z0-9]+");
+    private static final Pattern TOKEN_SPLITTER = Pattern.compile("[^\\p{L}\\p{N}]+");
     private static final Set<String> STOP_WORDS = Set.of(
         "AND", "THE", "FOR", "WITH", "WITHOUT", "OF", "IN", "ON", "A", "AN",
         "NO", "TYPE", "PCS", "PC", "SET", "BOX", "CTN", "INNER", "OUTER",
@@ -38,17 +39,42 @@ public class MaterialDemandComparisonService {
     private final MaterialDemandRepository materialDemandRepository;
     private final MaterialSupplierCandidateProvider supplierCandidateProvider;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final MaterialComparisonModelReranker modelReranker;
+    private final MaterialComparisonStrategyRepository strategyRepository;
 
-    public MaterialDemandComparisonService(
+    MaterialDemandComparisonService(
         CurrentUserService currentUserService,
         MaterialDemandRepository materialDemandRepository,
         MaterialSupplierCandidateProvider supplierCandidateProvider,
         PurchaseOrderRepository purchaseOrderRepository
     ) {
+        this(
+            currentUserService,
+            materialDemandRepository,
+            supplierCandidateProvider,
+            purchaseOrderRepository,
+            new MaterialComparisonModelReranker(
+                new com.fasterxml.jackson.databind.ObjectMapper(), false, "https://api.openai.com/v1", "", "gpt-5-mini"
+            ),
+            null
+        );
+    }
+
+    @Autowired
+    public MaterialDemandComparisonService(
+        CurrentUserService currentUserService,
+        MaterialDemandRepository materialDemandRepository,
+        MaterialSupplierCandidateProvider supplierCandidateProvider,
+        PurchaseOrderRepository purchaseOrderRepository,
+        MaterialComparisonModelReranker modelReranker,
+        MaterialComparisonStrategyRepository strategyRepository
+    ) {
         this.currentUserService = currentUserService;
         this.materialDemandRepository = materialDemandRepository;
         this.supplierCandidateProvider = supplierCandidateProvider;
         this.purchaseOrderRepository = purchaseOrderRepository;
+        this.modelReranker = modelReranker;
+        this.strategyRepository = strategyRepository;
     }
 
     public MaterialDemandComparisonResponse comparison(String authorizationHeader, Long demandId) {
@@ -59,18 +85,25 @@ public class MaterialDemandComparisonService {
         }
         materialDemandRepository.markComparingIfSaved(currentUser.companyId(), demandId);
         List<MaterialDemandItemResponse> demandItems = materialDemandRepository.items(currentUser.companyId(), demandId);
-        SupplierCandidateIndex supplierPool = SupplierCandidateIndex.from(onShelfSupplierPool());
+        MaterialComparisonStrategySettings settings = loadSettings(currentUser.companyId(), demandId);
+        SupplierCandidateIndex supplierPool = SupplierCandidateIndex.from(onShelfSupplierPool(demandItems));
         Long existingPurchaseOrderId = purchaseOrderRepository.findFirstActiveOrderIdByDemand(currentUser.companyId(), demandId);
         if (existingPurchaseOrderId != null && existingPurchaseOrderId <= 0) {
             existingPurchaseOrderId = null;
         }
 
         List<ComparisonItemDraft> drafts = demandItems.stream()
-            .map(item -> draftItem(item, supplierPool))
+            .map(item -> draftItem(item, supplierPool, settings))
             .toList();
-        SingleSupplierSelection singleSupplier = chooseSingleSupplier(drafts);
+        List<MaterialSupplierCandidate> enrichedPool = enrichShortlistedCandidates(drafts);
+        if (!enrichedPool.isEmpty()) drafts = enrichDrafts(drafts, enrichedPool, settings);
+        MixedSupplierSelection mixedSupplier = chooseMixedSuppliers(drafts, settings);
+        SingleSupplierSelection singleSupplier = chooseSingleSupplier(drafts, settings);
         List<MaterialDemandComparisonItem> items = drafts.stream()
-            .map(draft -> draft.toResponse(singleSupplier.candidateByItemId().get(draft.item().itemId())))
+            .map(draft -> draft.toResponse(
+                mixedSupplier.candidateByItemId().get(draft.item().itemId()),
+                singleSupplier.candidateByItemId().get(draft.item().itemId())
+            ))
             .toList();
 
         return new MaterialDemandComparisonResponse(
@@ -85,11 +118,77 @@ public class MaterialDemandComparisonService {
                 "天气待接入",
                 "STATIC_PLACEHOLDER"
             ),
-            List.of(lowestMixedStrategy(drafts), singleSupplier.strategy()),
+            List.of(mixedSupplier.strategy(), singleSupplier.strategy()),
             items,
             existingPurchaseOrderId != null || "ORDERED".equalsIgnoreCase(demand.status()),
             "DISCARDED".equalsIgnoreCase(demand.status()),
-            existingPurchaseOrderId
+            existingPurchaseOrderId,
+            aiSummary(drafts),
+            settings
+        );
+    }
+
+    public MaterialComparisonStrategySettings strategySettings(String authorizationHeader, Long demandId) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        requireDemand(currentUser.companyId(), demandId);
+        return loadSettings(currentUser.companyId(), demandId);
+    }
+
+    public MaterialComparisonStrategySettings saveStrategySettings(
+        String authorizationHeader,
+        Long demandId,
+        MaterialComparisonStrategySettingsRequest request
+    ) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        MaterialDemandSummaryResponse demand = requireDemand(currentUser.companyId(), demandId);
+        Long existingPurchaseOrderId = purchaseOrderRepository.findFirstActiveOrderIdByDemand(currentUser.companyId(), demandId);
+        if ("ORDERED".equalsIgnoreCase(demand.status()) || "DISCARDED".equalsIgnoreCase(demand.status())
+            || existingPurchaseOrderId != null && existingPurchaseOrderId > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "MATERIAL_COMPARISON_STRATEGY_READONLY");
+        }
+        MaterialComparisonStrategySettings normalized = normalizeSettings(request);
+        Set<Long> itemIds = materialDemandRepository.items(currentUser.companyId(), demandId).stream()
+            .map(MaterialDemandItemResponse::itemId)
+            .filter(java.util.Objects::nonNull)
+            .collect(Collectors.toSet());
+        if (!itemIds.containsAll(normalized.coreDemandItemIds())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_COMPARISON_CORE_ITEM_INVALID");
+        }
+        return strategyRepository == null
+            ? normalized
+            : strategyRepository.save(currentUser.companyId(), demandId, currentUser.userId(), normalized);
+    }
+
+    private MaterialComparisonStrategySettings loadSettings(Long companyId, Long demandId) {
+        return strategyRepository == null
+            ? MaterialComparisonStrategySettings.defaults()
+            : strategyRepository.find(companyId, demandId).orElse(MaterialComparisonStrategySettings.defaults());
+    }
+
+    private MaterialComparisonStrategySettings normalizeSettings(MaterialComparisonStrategySettingsRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_COMPARISON_STRATEGY_REQUIRED");
+        }
+        int supplierCount = request.mixedSupplierCount() == null ? 3 : request.mixedSupplierCount();
+        boolean priceEnabled = request.priceEnabled() == null || request.priceEnabled();
+        boolean qualityEnabled = request.qualityEnabled() == null || request.qualityEnabled();
+        int priceLevel = request.priceLevel() == null ? 5 : request.priceLevel();
+        int qualityLevel = request.qualityLevel() == null ? 3 : request.qualityLevel();
+        if (supplierCount < 2 || supplierCount > 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_COMPARISON_SUPPLIER_COUNT_INVALID");
+        }
+        if (!priceEnabled && !qualityEnabled) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_COMPARISON_OBJECTIVE_REQUIRED");
+        }
+        if (priceLevel < 1 || priceLevel > 5 || qualityLevel < 1 || qualityLevel > 5) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_COMPARISON_LEVEL_INVALID");
+        }
+        List<Long> coreItemIds = request.coreDemandItemIds() == null ? List.of() : request.coreDemandItemIds().stream()
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList();
+        return new MaterialComparisonStrategySettings(
+            supplierCount, priceEnabled, priceLevel, qualityEnabled, qualityLevel, coreItemIds, 1
         );
     }
 
@@ -103,13 +202,66 @@ public class MaterialDemandComparisonService {
             .filter(candidate -> itemId != null && itemId.equals(candidate.itemId()))
             .findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_DEMAND_ITEM_NOT_FOUND"));
-        return draftItem(item, SupplierCandidateIndex.from(onShelfSupplierPool())).candidates();
+        ComparisonItemDraft draft = draftItem(
+            item,
+            SupplierCandidateIndex.from(onShelfSupplierPool(List.of(item))),
+            MaterialComparisonStrategySettings.defaults()
+        );
+        List<MaterialSupplierCandidate> enriched = enrichShortlistedCandidates(List.of(draft));
+        return enriched.isEmpty()
+            ? draft.candidates()
+            : enrichDrafts(List.of(draft), enriched, MaterialComparisonStrategySettings.defaults()).get(0).candidates();
     }
 
-    private List<MaterialSupplierCandidate> onShelfSupplierPool() {
-        return supplierCandidateProvider.findOnShelfCandidates().stream()
+    private List<MaterialSupplierCandidate> onShelfSupplierPool(List<MaterialDemandItemResponse> items) {
+        List<MaterialSupplierCandidate> candidates = supplierCandidateProvider.supportsTargetedSearch()
+            ? supplierCandidateProvider.findCandidates(candidateQuery(items))
+            : supplierCandidateProvider.findOnShelfCandidates();
+        return (candidates == null ? List.<MaterialSupplierCandidate>of() : candidates).stream()
             .filter(candidate -> "ON_SHELF".equalsIgnoreCase(nullToEmpty(candidate.shelfStatus())))
             .toList();
+    }
+
+    private List<MaterialSupplierCandidate> enrichShortlistedCandidates(List<ComparisonItemDraft> drafts) {
+        if (!supplierCandidateProvider.supportsTargetedSearch()) {
+            return List.of();
+        }
+        Set<Long> skuIds = drafts.stream()
+            .flatMap(draft -> draft.candidates().stream())
+            .map(MaterialSupplierCandidate::skuId)
+            .filter(java.util.Objects::nonNull)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (skuIds.isEmpty()) {
+            return List.of();
+        }
+        List<MaterialSupplierCandidate> enriched = supplierCandidateProvider.enrichCandidates(skuIds);
+        return enriched == null ? List.of() : enriched;
+    }
+
+    private MaterialSupplierCandidateQuery candidateQuery(List<MaterialDemandItemResponse> items) {
+        Set<String> codes = new LinkedHashSet<>();
+        Set<String> supplierSkuCodes = new LinkedHashSet<>();
+        Set<String> categoryCodes = new LinkedHashSet<>();
+        List<String> keywords = new ArrayList<>();
+        for (MaterialDemandItemResponse item : items == null ? List.<MaterialDemandItemResponse>of() : items) {
+            addCode(codes, item.impaCode());
+            addCode(codes, item.selectedImpaCode());
+            addCode(codes, item.candidateImpaCode());
+            addCode(supplierSkuCodes, item.supplierItemNo());
+            String category = preferredCategory(item);
+            if (category != null && !category.isBlank()) {
+                categoryCodes.add(category);
+            }
+            keywords.addAll(searchTerms(item.description()));
+            keywords.addAll(searchTerms(item.rawNameSpec()));
+            keywords.addAll(searchTerms(item.candidateNameCn()));
+            keywords.addAll(searchTerms(item.candidateNameEn()));
+            keywords.addAll(searchTerms(item.sizeModel()));
+            keywords.addAll(searchTerms(item.candidateSpec()));
+            keywords.addAll(searchTerms(item.packing()));
+            keywords.addAll(searchTerms(item.unit()));
+        }
+        return new MaterialSupplierCandidateQuery(codes, supplierSkuCodes, categoryCodes, keywords);
     }
 
     private MaterialDemandSummaryResponse requireDemand(Long companyId, Long demandId) {
@@ -122,17 +274,17 @@ public class MaterialDemandComparisonService {
 
     private ComparisonItemDraft draftItem(
         MaterialDemandItemResponse item,
-        SupplierCandidateIndex supplierPool
+        SupplierCandidateIndex supplierPool,
+        MaterialComparisonStrategySettings settings
     ) {
         BigDecimal pricingQuantity = parsePositiveQuantity(item.quantity());
-        String pricingQuantityNote = pricingQuantity == null ? "璁′环鏁伴噺鎸?1" : null;
+        String pricingQuantityNote = pricingQuantity == null ? "\u8ba1\u4ef7\u6570\u91cf\u6309 1" : null;
         BigDecimal safePricingQuantity = pricingQuantity == null ? BigDecimal.ONE : pricingQuantity;
-        List<MaterialSupplierCandidate> candidates = supplierCandidates(item, supplierPool, safePricingQuantity);
+        MaterialComparisonModelReranker.RerankResult rerank = supplierCandidates(item, supplierPool, safePricingQuantity);
+        List<MaterialSupplierCandidate> candidates = rerank.candidates();
         MaterialSupplierCandidate lowest = candidates.stream()
             .filter(candidate -> candidate.unitPrice() != null)
-            .min(Comparator
-                .comparing(MaterialSupplierCandidate::unitPrice)
-                .thenComparing(MaterialSupplierCandidate::skuId, Comparator.nullsLast(Long::compareTo)))
+            .min(strategyCandidateComparator(settings))
             .orElse(null);
         String emptyReason = null;
         if (candidates.isEmpty()) {
@@ -140,10 +292,10 @@ public class MaterialDemandComparisonService {
         } else if (lowest == null) {
             emptyReason = "NO_PRICED_CANDIDATE";
         }
-        return new ComparisonItemDraft(item, safePricingQuantity, pricingQuantityNote, candidates, lowest, emptyReason);
+        return new ComparisonItemDraft(item, safePricingQuantity, pricingQuantityNote, candidates, lowest, emptyReason, rerank.status());
     }
 
-    private List<MaterialSupplierCandidate> supplierCandidates(
+    private MaterialComparisonModelReranker.RerankResult supplierCandidates(
         MaterialDemandItemResponse item,
         SupplierCandidateIndex supplierPool,
         BigDecimal requestedQty
@@ -160,16 +312,56 @@ public class MaterialDemandComparisonService {
         addCode(platformCodes, item.candidateImpaCode());
         String preferredCategory = preferredCategory(item);
 
-        List<IndexedSupplierCandidate> indexedCandidates = supplierPool.indexedCandidates(platformCodes, supplierSku);
-        List<IndexedSupplierCandidate> candidatesToScore = indexedCandidates.isEmpty() ? supplierPool.fallbackCandidates(nameTokens, preferredCategory) : indexedCandidates;
+        List<IndexedSupplierCandidate> candidatesToScore = supplierPool.candidatesForEvidence(
+            platformCodes,
+            supplierSku,
+            nameTokens,
+            preferredCategory
+        );
 
-        return candidatesToScore.stream()
+        List<MaterialSupplierCandidate> deterministicCandidates = candidatesToScore.stream()
             .map(candidate -> scoreCandidate(candidate, supplierSku, platformCodes, nameTokens, specTokens, preferredCategory, requestedQty))
             .filter(candidate -> candidate.rank() > 0)
             .sorted(candidateComparator())
             .limit(MAX_CANDIDATES_PER_ITEM)
             .map(candidate -> pricedCandidate(candidate.candidate(), requestedQty))
             .toList();
+        return modelReranker.rerankWithStatus(item, deterministicCandidates);
+    }
+
+    private List<ComparisonItemDraft> enrichDrafts(
+        List<ComparisonItemDraft> drafts,
+        List<MaterialSupplierCandidate> enrichedCandidates,
+        MaterialComparisonStrategySettings settings
+    ) {
+        Map<Long, MaterialSupplierCandidate> enrichedById = enrichedCandidates.stream()
+            .filter(candidate -> candidate.skuId() != null)
+            .collect(Collectors.toMap(MaterialSupplierCandidate::skuId, Function.identity(), (first, ignored) -> first));
+        return drafts.stream().map(draft -> {
+            List<MaterialSupplierCandidate> candidates = draft.candidates().stream().map(candidate -> {
+                MaterialSupplierCandidate enriched = enrichedById.get(candidate.skuId());
+                return pricedCandidate(enriched == null ? candidate : enriched.withMatch(candidate.matchType(), candidate.reason()), draft.pricingQuantity());
+            }).toList();
+            MaterialSupplierCandidate lowest = candidates.stream()
+                .filter(candidate -> candidate.unitPrice() != null)
+                .min(strategyCandidateComparator(settings))
+                .orElse(null);
+            String emptyReason = candidates.isEmpty() ? "NO_SUPPLIER_CANDIDATE" : lowest == null ? "NO_PRICED_CANDIDATE" : null;
+            return new ComparisonItemDraft(
+                draft.item(), draft.pricingQuantity(), draft.pricingQuantityNote(), candidates, lowest, emptyReason, draft.aiStatus()
+            );
+        }).toList();
+    }
+
+    private MaterialComparisonAiSummary aiSummary(List<ComparisonItemDraft> drafts) {
+        int applied = (int) drafts.stream().filter(draft -> "MODEL_APPLIED".equals(draft.aiStatus())).count();
+        int fallback = (int) drafts.stream().filter(draft -> "MODEL_FALLBACK".equals(draft.aiStatus())).count();
+        boolean configurationRequired = drafts.stream().anyMatch(draft -> "MODEL_CONFIGURATION_REQUIRED".equals(draft.aiStatus()));
+        String status = fallback > 0 ? "MODEL_FALLBACK"
+            : applied > 0 ? "MODEL_APPLIED"
+            : configurationRequired ? "MODEL_CONFIGURATION_REQUIRED"
+            : "DETERMINISTIC";
+        return new MaterialComparisonAiSummary(status, applied, fallback);
     }
 
     private ScoredSupplierCandidate scoreCandidate(
@@ -182,18 +374,26 @@ public class MaterialDemandComparisonService {
         BigDecimal requestedQty
     ) {
         MaterialSupplierCandidate candidate = indexedCandidate.candidate();
-        boolean codeMatch = platformCodes.stream()
+        boolean rawCodeMatch = platformCodes.stream()
             .anyMatch(code -> code.equals(normalizeCode(candidate.impaCode())) || code.equals(normalizeCode(candidate.platformCode())));
         boolean supplierSkuMatch = !supplierSku.isBlank() && supplierSku.equals(normalizeCode(candidate.supplierSkuCode()));
         double nameScore = coverage(nameTokens, indexedCandidate.nameTokens());
         double specScore = coverage(specTokens, indexedCandidate.specTokens());
         boolean nameSpecMatch = nameScore >= 0.6 || (!nameTokens.isEmpty() && nameScore > 0 && (specTokens.isEmpty() || specScore > 0));
         boolean categoryMatch = preferredCategory != null && preferredCategory.equals(candidate.categoryCode());
+        boolean trustedCode = trustedCodeStatus(candidate.codeStatus());
+        boolean specificationConflict = rawCodeMatch
+            && trustedCode
+            && !specTokens.isEmpty()
+            && !indexedCandidate.specTokens().isEmpty()
+            && hasComparableSpecification(specTokens)
+            && hasComparableSpecification(indexedCandidate.specTokens())
+            && specScore == 0;
 
         int rank = 0;
         String matchType = null;
         String reason = null;
-        if (codeMatch) {
+        if (rawCodeMatch && trustedCode && !specificationConflict) {
             rank = 4;
             matchType = "CODE_EXACT";
             reason = "IMPA_OR_PLATFORM_CODE_MATCH";
@@ -201,10 +401,18 @@ public class MaterialDemandComparisonService {
             rank = 3;
             matchType = "SUPPLIER_SKU_MATCH";
             reason = "SUPPLIER_SKU_MATCH";
+        } else if (specificationConflict) {
+            rank = 1;
+            matchType = "CODE_SPEC_CONFLICT";
+            reason = "CODE_MATCH_SPECIFICATION_CONFLICT";
         } else if (nameSpecMatch) {
             rank = 2;
             matchType = "NAME_SPEC_MATCH";
             reason = specTokens.isEmpty() || specScore > 0 ? "NAME_SPEC_MATCH" : "NAME_MATCH";
+        } else if (categoryMatch) {
+            rank = 1;
+            matchType = "CATEGORY_MATCH";
+            reason = "CATEGORY_MATCH";
         }
         return new ScoredSupplierCandidate(
             candidate.withMatch(matchType, reason),
@@ -222,44 +430,206 @@ public class MaterialDemandComparisonService {
             .thenComparing(candidate -> candidate.candidate().skuId(), Comparator.nullsLast(Long::compareTo));
     }
 
-    private MaterialDemandComparisonStrategy lowestMixedStrategy(List<ComparisonItemDraft> drafts) {
-        List<ComparisonItemDraft> priced = drafts.stream()
-            .filter(draft -> draft.lowestCandidate() != null)
+    private Comparator<MaterialSupplierCandidate> strategyCandidateComparator(MaterialComparisonStrategySettings settings) {
+        return Comparator
+            .comparingInt((MaterialSupplierCandidate candidate) -> matchPriority(candidate.matchType())).reversed()
+            .thenComparing(candidate -> stockSatisfied(candidate.stockQty(), BigDecimal.ONE), Comparator.reverseOrder())
+            .thenComparing(Comparator.comparingInt(
+                (MaterialSupplierCandidate candidate) -> weightedProductScore(candidate, settings)
+            ).reversed())
+            .thenComparing(candidate -> price(candidate.unitPrice()))
+            .thenComparing(MaterialSupplierCandidate::skuId, Comparator.nullsLast(Long::compareTo));
+    }
+
+    private int matchPriority(String matchType) {
+        return switch (nullToEmpty(matchType).toUpperCase(Locale.ROOT)) {
+            case "CODE_EXACT" -> 4;
+            case "SUPPLIER_SKU_MATCH" -> 3;
+            case "NAME_SPEC_MATCH" -> 2;
+            case "CATEGORY_MATCH", "CODE_SPEC_CONFLICT" -> 1;
+            default -> 0;
+        };
+    }
+
+    private int weightedProductScore(MaterialSupplierCandidate candidate, MaterialComparisonStrategySettings settings) {
+        if (candidate == null) {
+            return 0;
+        }
+        int weight = 0;
+        int score = 0;
+        if (settings.priceEnabled()) {
+            weight += settings.priceLevel();
+            score += settings.priceLevel() * clampScore(candidate.priceScore());
+        }
+        if (settings.qualityEnabled()) {
+            weight += settings.qualityLevel();
+            score += settings.qualityLevel() * clampScore(candidate.qualityScore());
+        }
+        return weight == 0 ? 0 : Math.round((float) score / weight * 20);
+    }
+
+    private int clampScore(int value) {
+        return Math.max(0, Math.min(5, value));
+    }
+
+    private MixedSupplierSelection chooseMixedSuppliers(
+        List<ComparisonItemDraft> drafts,
+        MaterialComparisonStrategySettings settings
+    ) {
+        List<SupplierKey> available = drafts.stream()
+            .flatMap(draft -> draft.candidates().stream())
+            .filter(candidate -> strategyCandidateEligible(candidate, settings))
+            .map(SupplierKey::from)
+            .distinct()
             .toList();
-        List<ComparisonItemDraft> unpriced = drafts.stream()
-            .filter(draft -> !draft.candidates().isEmpty() && draft.lowestCandidate() == null)
-            .toList();
-        Map<SupplierKey, List<ComparisonItemDraft>> bySupplier = priced.stream()
+        List<SupplierKey> selected = new ArrayList<>();
+        while (selected.size() < settings.mixedSupplierCount() && selected.size() < available.size()) {
+            SupplierKey next = available.stream()
+                .filter(candidate -> !selected.contains(candidate))
+                .max((left, right) -> comparePortfolio(
+                    portfolioScore(drafts, append(selected, left), settings),
+                    portfolioScore(drafts, append(selected, right), settings)
+                ))
+                .orElse(null);
+            if (next == null) break;
+            selected.add(next);
+        }
+        Map<Long, MaterialSupplierCandidate> assignments = portfolioAssignments(drafts, selected, settings);
+        ensureEachSelectedSupplierContributes(drafts, selected, assignments, settings);
+        Set<Long> coreIds = Set.copyOf(settings.coreDemandItemIds());
+        Map<SupplierKey, List<Map.Entry<Long, MaterialSupplierCandidate>>> bySupplier = assignments.entrySet().stream()
             .collect(Collectors.groupingBy(
-                draft -> SupplierKey.from(draft.lowestCandidate()),
+                entry -> SupplierKey.from(entry.getValue()),
                 java.util.LinkedHashMap::new,
                 Collectors.toList()
             ));
         List<MaterialDemandComparisonSupplier> suppliers = bySupplier.entrySet().stream()
-            .map(entry -> supplierSummary(entry.getKey(), entry.getValue(), drafts.size()))
+            .map(entry -> supplierSummary(entry.getKey(), entry.getValue(), drafts, coreIds))
             .sorted(Comparator
                 .comparing(MaterialDemandComparisonSupplier::totalAmount)
-                .thenComparing(MaterialDemandComparisonSupplier::supplierName, Comparator.nullsLast(String::compareTo))
-                .thenComparing(MaterialDemandComparisonSupplier::companyId, Comparator.nullsLast(Long::compareTo)))
+                .thenComparing(MaterialDemandComparisonSupplier::supplierName, Comparator.nullsLast(String::compareTo)))
             .toList();
-        boolean enabled = suppliers.size() > 1;
-        return new MaterialDemandComparisonStrategy(
-            "LOWEST_MIXED",
-            "最低混供",
-            priced.size(),
-            drafts.size(),
-            drafts.size() - priced.size(),
-            unpriced.size(),
-            amount(priced, ComparisonItemDraft::lowestCandidate),
-            amountUsd(priced, ComparisonItemDraft::lowestCandidate),
-            CNY,
-            suppliers,
-            enabled,
-            enabled ? null : "ONLY_ONE_SUPPLIER"
+        int coreCovered = (int) coreIds.stream().filter(assignments::containsKey).count();
+        boolean coreComplete = coreCovered == coreIds.size();
+        boolean enabled = suppliers.size() >= 2 && coreComplete;
+        String disabledReason = !coreComplete ? "CORE_ITEM_UNCOVERED" : suppliers.size() < 2 ? "ONLY_ONE_SUPPLIER" : null;
+        List<ComparisonItemDraft> priced = drafts.stream().filter(draft -> assignments.containsKey(draft.item().itemId())).toList();
+        BigDecimal total = assignments.entrySet().stream()
+            .map(entry -> lineAmount(entry.getValue(), draftByItemId(drafts, entry.getKey()).pricingQuantity()))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalUsd = assignments.entrySet().stream()
+            .map(entry -> lineAmountUsd(entry.getValue(), draftByItemId(drafts, entry.getKey()).pricingQuantity()))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new MixedSupplierSelection(
+            new MaterialDemandComparisonStrategy(
+                "LOWEST_MIXED", "最低混供", priced.size(), drafts.size(), drafts.size() - priced.size(),
+                0, total, totalUsd, CNY, suppliers, enabled, disabledReason, objectiveTags(settings)
+            ),
+            assignments
         );
     }
 
-    private SingleSupplierSelection chooseSingleSupplier(List<ComparisonItemDraft> drafts) {
+    private List<SupplierKey> append(List<SupplierKey> selected, SupplierKey candidate) {
+        List<SupplierKey> result = new ArrayList<>(selected);
+        result.add(candidate);
+        return result;
+    }
+
+    private PortfolioScore portfolioScore(
+        List<ComparisonItemDraft> drafts,
+        List<SupplierKey> suppliers,
+        MaterialComparisonStrategySettings settings
+    ) {
+        Map<Long, MaterialSupplierCandidate> assignments = portfolioAssignments(drafts, suppliers, settings);
+        Set<Long> coreIds = Set.copyOf(settings.coreDemandItemIds());
+        int coreCovered = (int) coreIds.stream().filter(assignments::containsKey).count();
+        int score = assignments.values().stream().mapToInt(candidate -> weightedProductScore(candidate, settings)).sum();
+        BigDecimal amount = assignments.entrySet().stream()
+            .map(entry -> lineAmount(entry.getValue(), draftByItemId(drafts, entry.getKey()).pricingQuantity()))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new PortfolioScore(coreCovered, assignments.size(), score, amount);
+    }
+
+    private int comparePortfolio(PortfolioScore left, PortfolioScore right) {
+        int core = Integer.compare(left.coreCovered(), right.coreCovered());
+        if (core != 0) return core;
+        int coverage = Integer.compare(left.covered(), right.covered());
+        if (coverage != 0) return coverage;
+        int score = Integer.compare(left.objectiveScore(), right.objectiveScore());
+        if (score != 0) return score;
+        return right.amount().compareTo(left.amount());
+    }
+
+    private Map<Long, MaterialSupplierCandidate> portfolioAssignments(
+        List<ComparisonItemDraft> drafts,
+        List<SupplierKey> suppliers,
+        MaterialComparisonStrategySettings settings
+    ) {
+        if (suppliers.isEmpty()) return new java.util.LinkedHashMap<>();
+        Set<SupplierKey> allowed = Set.copyOf(suppliers);
+        Map<Long, MaterialSupplierCandidate> result = new java.util.LinkedHashMap<>();
+        for (ComparisonItemDraft draft : drafts) {
+            draft.candidates().stream()
+                .filter(candidate -> strategyCandidateEligible(candidate, settings) && allowed.contains(SupplierKey.from(candidate)))
+                .min(strategyCandidateComparator(settings))
+                .ifPresent(candidate -> result.put(draft.item().itemId(), candidate));
+        }
+        return result;
+    }
+
+    private void ensureEachSelectedSupplierContributes(
+        List<ComparisonItemDraft> drafts,
+        List<SupplierKey> selected,
+        Map<Long, MaterialSupplierCandidate> assignments,
+        MaterialComparisonStrategySettings settings
+    ) {
+        for (SupplierKey supplier : selected) {
+            boolean used = assignments.values().stream().anyMatch(candidate -> supplier.equals(SupplierKey.from(candidate)));
+            if (used) continue;
+            ComparisonItemDraft bestDraft = drafts.stream()
+                .filter(draft -> draft.candidates().stream().anyMatch(candidate -> supplier.equals(SupplierKey.from(candidate))))
+                .min(Comparator.comparingInt(draft -> replacementLoss(draft, supplier, assignments, settings)))
+                .orElse(null);
+            if (bestDraft == null) continue;
+            bestDraft.candidates().stream()
+                .filter(candidate -> supplier.equals(SupplierKey.from(candidate)) && strategyCandidateEligible(candidate, settings))
+                .min(strategyCandidateComparator(settings))
+                .ifPresent(candidate -> assignments.put(bestDraft.item().itemId(), candidate));
+        }
+    }
+
+    private int replacementLoss(
+        ComparisonItemDraft draft,
+        SupplierKey supplier,
+        Map<Long, MaterialSupplierCandidate> assignments,
+        MaterialComparisonStrategySettings settings
+    ) {
+        int current = weightedProductScore(assignments.get(draft.item().itemId()), settings);
+        int replacement = draft.candidates().stream()
+            .filter(candidate -> supplier.equals(SupplierKey.from(candidate)))
+            .mapToInt(candidate -> weightedProductScore(candidate, settings))
+            .max().orElse(0);
+        return current - replacement;
+    }
+
+    private ComparisonItemDraft draftByItemId(List<ComparisonItemDraft> drafts, Long itemId) {
+        return drafts.stream().filter(draft -> java.util.Objects.equals(draft.item().itemId(), itemId)).findFirst().orElseThrow();
+    }
+
+    private boolean strategyCandidateEligible(
+        MaterialSupplierCandidate candidate,
+        MaterialComparisonStrategySettings settings
+    ) {
+        if (candidate == null || candidate.unitPrice() == null) {
+            return false;
+        }
+        return settings.priceEnabled() || candidate.qualityScore() > 0;
+    }
+
+    private SingleSupplierSelection chooseSingleSupplier(
+        List<ComparisonItemDraft> drafts,
+        MaterialComparisonStrategySettings settings
+    ) {
         Map<SupplierKey, List<SupplierItemPick>> picksBySupplier = drafts.stream()
             .flatMap(draft -> draft.candidates().stream()
                 .filter(candidate -> candidate.unitPrice() != null)
@@ -271,18 +641,38 @@ public class MaterialDemandComparisonService {
             ));
 
         List<SingleSupplierOption> options = picksBySupplier.entrySet().stream()
-            .map(entry -> singleSupplierOption(entry.getKey(), entry.getValue(), drafts.size()))
+            .map(entry -> singleSupplierOption(entry.getKey(), entry.getValue(), drafts.size(), settings))
             .filter(option -> option.matchedCount() > 0)
             .toList();
-        SingleSupplierOption best = options.stream()
-            .min(this::compareSingleSupplierOption)
-            .orElse(null);
+        SingleSupplierOption priceBest = settings.priceEnabled()
+            ? options.stream().min(this::compareSingleSupplierOption).orElse(null)
+            : null;
+        SingleSupplierOption qualityBest = settings.qualityEnabled()
+            ? options.stream().filter(option -> option.qualityScore() > 0)
+                .min(this::compareQualitySupplierOption).orElse(null)
+            : null;
+        SingleSupplierOption best = priceBest != null ? priceBest : qualityBest;
         if (best == null) {
             return new SingleSupplierSelection(
-                new MaterialDemandComparisonStrategy("SINGLE_SUPPLIER", "集中采购", 0, drafts.size(), drafts.size(), 0, BigDecimal.ZERO, BigDecimal.ZERO, CNY, List.of(), true, null),
+                new MaterialDemandComparisonStrategy("SINGLE_SUPPLIER", "集中采购", 0, drafts.size(), drafts.size(), 0, BigDecimal.ZERO, BigDecimal.ZERO, CNY, List.of(), true, null, objectiveTags(settings)),
                 Map.of()
             );
         }
+        Map<SupplierKey, MaterialDemandComparisonSupplier> alternatives = new java.util.LinkedHashMap<>();
+        if (priceBest != null) alternatives.put(priceBest.key(), withSupplierTags(priceBest, List.of("价格最低")));
+        if (qualityBest != null) alternatives.merge(
+            qualityBest.key(),
+            withSupplierTags(qualityBest, List.of("质量最高")),
+            (left, right) -> new MaterialDemandComparisonSupplier(
+                left.companyId(), left.supplierName(), left.matchedCount(), left.totalCount(), left.unmatchedCount(),
+                left.unpricedCount(), left.stockSatisfiedCount(), left.totalAmount(), left.totalAmountUsd(), left.currency(),
+                java.util.stream.Stream.concat(left.attributeTags().stream(), right.attributeTags().stream()).distinct().toList(),
+                Math.max(left.coreItemCount(), right.coreItemCount()), Math.max(left.qualityScore(), right.qualityScore()),
+                Math.max(left.priceScore(), right.priceScore())
+            )
+        );
+        int coreRequired = settings.coreDemandItemIds().size();
+        boolean coreComplete = best.coreItemCount() == coreRequired;
         return new SingleSupplierSelection(
             new MaterialDemandComparisonStrategy(
                 "SINGLE_SUPPLIER",
@@ -294,20 +684,26 @@ public class MaterialDemandComparisonService {
                 best.totalAmount(),
                 best.totalAmountUsd(),
                 CNY,
-                List.of(best.supplier()),
-                true,
-                null
+                List.copyOf(alternatives.values()),
+                coreComplete,
+                coreComplete ? null : "CORE_ITEM_UNCOVERED",
+                objectiveTags(settings)
             ),
             best.candidateByItemId()
         );
     }
 
-    private SingleSupplierOption singleSupplierOption(SupplierKey key, List<SupplierItemPick> picks, int totalCount) {
+    private SingleSupplierOption singleSupplierOption(
+        SupplierKey key,
+        List<SupplierItemPick> picks,
+        int totalCount,
+        MaterialComparisonStrategySettings settings
+    ) {
         Map<Long, SupplierItemPick> bestByItem = picks.stream()
             .collect(Collectors.toMap(
                 pick -> pick.draft().item().itemId(),
                 Function.identity(),
-                (left, right) -> left.candidate().unitPrice().compareTo(right.candidate().unitPrice()) <= 0 ? left : right
+                (left, right) -> strategyCandidateComparator(settings).compare(left.candidate(), right.candidate()) <= 0 ? left : right
             ));
         List<SupplierItemPick> bestPicks = new ArrayList<>(bestByItem.values());
         int stockSatisfied = (int) bestPicks.stream()
@@ -321,6 +717,10 @@ public class MaterialDemandComparisonService {
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         Map<Long, MaterialSupplierCandidate> candidateByItemId = bestPicks.stream()
             .collect(Collectors.toMap(pick -> pick.draft().item().itemId(), SupplierItemPick::candidate));
+        Set<Long> coreIds = Set.copyOf(settings.coreDemandItemIds());
+        int coreItemCount = (int) candidateByItemId.keySet().stream().filter(coreIds::contains).count();
+        int qualityScore = roundedAverage(bestPicks.stream().map(pick -> pick.candidate().qualityScore()).toList());
+        int priceScore = roundedAverage(bestPicks.stream().map(pick -> pick.candidate().priceScore()).toList());
         MaterialDemandComparisonSupplier supplier = new MaterialDemandComparisonSupplier(
             key.companyId(),
             key.supplierName(),
@@ -331,27 +731,65 @@ public class MaterialDemandComparisonService {
             stockSatisfied,
             totalAmount,
             totalAmountUsd,
-            CNY
+            CNY,
+            List.of(),
+            coreItemCount,
+            qualityScore,
+            priceScore
         );
-        return new SingleSupplierOption(key, supplier, bestPicks.size(), stockSatisfied, totalAmount, totalAmountUsd, candidateByItemId);
+        return new SingleSupplierOption(key, supplier, bestPicks.size(), stockSatisfied, totalAmount, totalAmountUsd, candidateByItemId, coreItemCount, qualityScore, priceScore);
     }
 
-    private MaterialDemandComparisonSupplier supplierSummary(SupplierKey key, List<ComparisonItemDraft> drafts, int totalCount) {
-        int stockSatisfied = (int) drafts.stream()
-            .filter(draft -> stockSatisfied(draft.lowestCandidate().stockQty(), draft.pricingQuantity()))
+    private MaterialDemandComparisonSupplier supplierSummary(
+        SupplierKey key,
+        List<Map.Entry<Long, MaterialSupplierCandidate>> entries,
+        List<ComparisonItemDraft> drafts,
+        Set<Long> coreIds
+    ) {
+        int stockSatisfied = (int) entries.stream()
+            .filter(entry -> stockSatisfied(entry.getValue().stockQty(), draftByItemId(drafts, entry.getKey()).pricingQuantity()))
             .count();
+        int coreCount = (int) entries.stream().filter(entry -> coreIds.contains(entry.getKey())).count();
+        List<MaterialSupplierCandidate> candidates = entries.stream().map(Map.Entry::getValue).toList();
         return new MaterialDemandComparisonSupplier(
             key.companyId(),
             key.supplierName(),
+            entries.size(),
             drafts.size(),
-            totalCount,
-            totalCount - drafts.size(),
+            drafts.size() - entries.size(),
             0,
             stockSatisfied,
-            amount(drafts, ComparisonItemDraft::lowestCandidate),
-            amountUsd(drafts, ComparisonItemDraft::lowestCandidate),
-            CNY
+            entries.stream().map(entry -> lineAmount(entry.getValue(), draftByItemId(drafts, entry.getKey()).pricingQuantity())).reduce(BigDecimal.ZERO, BigDecimal::add),
+            entries.stream().map(entry -> lineAmountUsd(entry.getValue(), draftByItemId(drafts, entry.getKey()).pricingQuantity())).reduce(BigDecimal.ZERO, BigDecimal::add),
+            CNY,
+            coreCount > 0 ? List.of("核心商品 × " + coreCount) : List.of(),
+            coreCount,
+            roundedAverage(candidates.stream().map(MaterialSupplierCandidate::qualityScore).toList()),
+            roundedAverage(candidates.stream().map(MaterialSupplierCandidate::priceScore).toList())
         );
+    }
+
+    private MaterialDemandComparisonSupplier withSupplierTags(SingleSupplierOption option, List<String> tags) {
+        MaterialDemandComparisonSupplier supplier = option.supplier();
+        List<String> combined = new ArrayList<>(tags);
+        if (option.coreItemCount() > 0) combined.add("核心商品 × " + option.coreItemCount());
+        return new MaterialDemandComparisonSupplier(
+            supplier.companyId(), supplier.supplierName(), supplier.matchedCount(), supplier.totalCount(),
+            supplier.unmatchedCount(), supplier.unpricedCount(), supplier.stockSatisfiedCount(), supplier.totalAmount(),
+            supplier.totalAmountUsd(), supplier.currency(), List.copyOf(combined), option.coreItemCount(),
+            option.qualityScore(), option.priceScore()
+        );
+    }
+
+    private List<String> objectiveTags(MaterialComparisonStrategySettings settings) {
+        List<String> result = new ArrayList<>();
+        if (settings.priceEnabled()) result.add("价格低 " + settings.priceLevel() + "档");
+        if (settings.qualityEnabled()) result.add("质量高 " + settings.qualityLevel() + "档");
+        return List.copyOf(result);
+    }
+
+    private int roundedAverage(List<Integer> values) {
+        return values.isEmpty() ? 0 : (int) Math.round(values.stream().mapToInt(Integer::intValue).average().orElse(0));
     }
 
     private BigDecimal amount(List<ComparisonItemDraft> drafts, Function<ComparisonItemDraft, MaterialSupplierCandidate> candidateAccessor) {
@@ -436,18 +874,40 @@ public class MaterialDemandComparisonService {
         return (double) overlap / sourceTokens.size();
     }
 
-    private List<String> tokenize(String value) {
+    private static List<String> tokenize(String value) {
         if (value == null || value.isBlank()) {
             return List.of();
         }
         List<String> tokens = new ArrayList<>();
         for (String token : TOKEN_SPLITTER.split(value.toUpperCase(Locale.ROOT))) {
-            if (token.length() < 3 || STOP_WORDS.contains(token) || token.chars().allMatch(Character::isDigit)) {
+            if (token.isBlank() || STOP_WORDS.contains(token) || token.chars().allMatch(Character::isDigit)) {
+                continue;
+            }
+            boolean containsHan = token.codePoints().anyMatch(codePoint -> Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN);
+            if (!containsHan && token.length() < 3) {
                 continue;
             }
             tokens.add(token);
+            if (containsHan && token.length() > 2) {
+                for (int index = 0; index < token.length() - 1; index++) {
+                    tokens.add(token.substring(index, index + 2));
+                }
+            }
         }
         return tokens.stream().distinct().toList();
+    }
+
+    private List<String> searchTerms(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        LinkedHashSet<String> terms = new LinkedHashSet<>();
+        String trimmed = value.trim();
+        if (trimmed.length() >= 2 && trimmed.length() <= 80) {
+            terms.add(trimmed);
+        }
+        terms.addAll(tokenize(trimmed));
+        return List.copyOf(terms);
     }
 
     private List<String> mergeTokens(List<String> first, List<String> second) {
@@ -495,6 +955,10 @@ public class MaterialDemandComparisonService {
     }
 
     private int compareSingleSupplierOption(SingleSupplierOption left, SingleSupplierOption right) {
+        int core = Integer.compare(right.coreItemCount(), left.coreItemCount());
+        if (core != 0) {
+            return core;
+        }
         int matched = Integer.compare(right.matchedCount(), left.matchedCount());
         if (matched != 0) {
             return matched;
@@ -517,15 +981,35 @@ public class MaterialDemandComparisonService {
         );
     }
 
+    private int compareQualitySupplierOption(SingleSupplierOption left, SingleSupplierOption right) {
+        int core = Integer.compare(right.coreItemCount(), left.coreItemCount());
+        if (core != 0) {
+            return core;
+        }
+        int matched = Integer.compare(right.matchedCount(), left.matchedCount());
+        if (matched != 0) {
+            return matched;
+        }
+        int quality = Integer.compare(right.qualityScore(), left.qualityScore());
+        if (quality != 0) {
+            return quality;
+        }
+        return compareSingleSupplierOption(left, right);
+    }
+
     private record ComparisonItemDraft(
         MaterialDemandItemResponse item,
         BigDecimal pricingQuantity,
         String pricingQuantityNote,
         List<MaterialSupplierCandidate> candidates,
         MaterialSupplierCandidate lowestCandidate,
-        String emptyReason
+        String emptyReason,
+        String aiStatus
     ) {
-        MaterialDemandComparisonItem toResponse(MaterialSupplierCandidate singleSupplierCandidate) {
+        MaterialDemandComparisonItem toResponse(
+            MaterialSupplierCandidate mixedSupplierCandidate,
+            MaterialSupplierCandidate singleSupplierCandidate
+        ) {
             return new MaterialDemandComparisonItem(
                 item.itemId(),
                 item.rowNo(),
@@ -541,7 +1025,7 @@ public class MaterialDemandComparisonService {
                 item.remarks(),
                 firstNonBlank(item.supplierItemNo(), item.impaCode(), item.platformCode()),
                 firstNonBlank(item.rawNameSpec(), item.description(), item.productName()),
-                lowestCandidate,
+                mixedSupplierCandidate == null ? lowestCandidate : mixedSupplierCandidate,
                 singleSupplierCandidate,
                 candidates,
                 emptyReason,
@@ -584,7 +1068,10 @@ public class MaterialDemandComparisonService {
         int stockSatisfiedCount,
         BigDecimal totalAmount,
         BigDecimal totalAmountUsd,
-        Map<Long, MaterialSupplierCandidate> candidateByItemId
+        Map<Long, MaterialSupplierCandidate> candidateByItemId,
+        int coreItemCount,
+        int qualityScore,
+        int priceScore
     ) {
     }
 
@@ -592,6 +1079,29 @@ public class MaterialDemandComparisonService {
         MaterialDemandComparisonStrategy strategy,
         Map<Long, MaterialSupplierCandidate> candidateByItemId
     ) {
+    }
+
+    private record MixedSupplierSelection(
+        MaterialDemandComparisonStrategy strategy,
+        Map<Long, MaterialSupplierCandidate> candidateByItemId
+    ) {
+    }
+
+    private record PortfolioScore(
+        int coreCovered,
+        int covered,
+        int objectiveScore,
+        BigDecimal amount
+    ) {
+    }
+
+    private boolean trustedCodeStatus(String codeStatus) {
+        String normalized = nullToEmpty(codeStatus).toUpperCase(Locale.ROOT);
+        return "CODE_MATCHED".equals(normalized) || "SPEC_MATCHED".equals(normalized) || "MATCHED".equals(normalized);
+    }
+
+    private boolean hasComparableSpecification(List<String> tokens) {
+        return tokens.stream().anyMatch(token -> token.chars().anyMatch(Character::isDigit));
     }
 
     private record IndexedSupplierCandidate(
@@ -638,6 +1148,20 @@ public class MaterialDemandComparisonService {
                 matches.addAll(bySupplierSku.getOrDefault(supplierSku, List.of()));
             }
             return List.copyOf(matches);
+        }
+
+        List<IndexedSupplierCandidate> candidatesForEvidence(
+            Set<String> platformCodes,
+            String supplierSku,
+            List<String> nameTokens,
+            String preferredCategory
+        ) {
+            LinkedHashSet<IndexedSupplierCandidate> matches = new LinkedHashSet<>(indexedCandidates(platformCodes, supplierSku));
+            nameTokens.forEach(token -> matches.addAll(byNameToken.getOrDefault(token, List.of())));
+            if (matches.isEmpty() && preferredCategory != null && !preferredCategory.isBlank()) {
+                matches.addAll(byCategory.getOrDefault(preferredCategory, List.of()));
+            }
+            return matches.isEmpty() ? all : List.copyOf(matches);
         }
 
         List<IndexedSupplierCandidate> fallbackCandidates(List<String> nameTokens, String preferredCategory) {
@@ -687,17 +1211,7 @@ public class MaterialDemandComparisonService {
         }
 
         private static List<String> tokenizeCandidate(String value) {
-            if (value == null || value.isBlank()) {
-                return List.of();
-            }
-            List<String> tokens = new ArrayList<>();
-            for (String token : TOKEN_SPLITTER.split(value.toUpperCase(Locale.ROOT))) {
-                if (token.length() < 3 || STOP_WORDS.contains(token) || token.chars().allMatch(Character::isDigit)) {
-                    continue;
-                }
-                tokens.add(token);
-            }
-            return tokens.stream().distinct().toList();
+            return tokenize(value);
         }
 
         private static List<String> mergeCandidateTokens(List<String> first, List<String> second) {

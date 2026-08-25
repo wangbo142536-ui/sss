@@ -5,6 +5,9 @@ import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,30 +30,55 @@ public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateP
 
     @Override
     public List<MaterialSupplierCandidate> findOnShelfCandidates() {
-        List<SupplierSkuRow> rows = jdbcTemplate.query(
-            """
-            SELECT s.*,
-                   COALESCE(NULLIF(st.shop_name, ''), c.company_name) AS supplier_name
-            FROM shop_sku s
-            JOIN company c ON c.id = s.company_id
-            LEFT JOIN shop_store st ON st.company_id = s.company_id
-            WHERE s.product_type = 'MATERIAL'
-              AND s.shelf_status = 'ON_SHELF'
-              AND c.status = 'ACTIVE'
-              AND EXISTS (
-                SELECT 1
-                FROM sys_user u
-                WHERE u.company_id = c.id
-                  AND u.status = 'ACTIVE'
-                  AND u.username IN ('supplier_a_e2e', 'supplier_e_demo', 'supplier_f_demo')
-              )
-            ORDER BY s.updated_at DESC, s.id DESC
-            LIMIT ?
-            """,
-            (rs, rowNum) -> supplierSkuRow(rs),
-            MAX_POOL_SIZE
-        );
-        List<Long> skuIds = rows.stream().map(SupplierSkuRow::skuId).toList();
+        return lightweightRows(baseSql() + " ORDER BY s.updated_at DESC, s.id DESC LIMIT ?", List.of(MAX_POOL_SIZE)).stream()
+            .map(row -> candidate(row, List.of(), null, List.of()))
+            .toList();
+    }
+
+    @Override
+    public boolean supportsTargetedSearch() {
+        return true;
+    }
+
+    @Override
+    public List<MaterialSupplierCandidate> findCandidates(MaterialSupplierCandidateQuery query) {
+        MaterialSupplierCandidateQuery safeQuery = query == null ? MaterialSupplierCandidateQuery.empty() : query;
+        StringBuilder sql = new StringBuilder(baseSql());
+        List<Object> args = new ArrayList<>();
+        if (safeQuery.hasEvidence()) {
+            List<String> evidenceClauses = new ArrayList<>();
+            appendIn(evidenceClauses, args, "s.impa_code", safeQuery.standardCodes());
+            appendIn(evidenceClauses, args, "s.platform_code", safeQuery.standardCodes());
+            appendIn(evidenceClauses, args, "s.supplier_sku_code", safeQuery.supplierSkuCodes());
+            appendIn(evidenceClauses, args, "s.category_code", safeQuery.categoryCodes());
+            for (String keyword : safeQuery.keywords()) {
+                evidenceClauses.add("(s.product_name LIKE ? ESCAPE '\\\\' OR s.specification_summary LIKE ? ESCAPE '\\\\' OR s.packing LIKE ? ESCAPE '\\\\')");
+                String like = "%" + escapeLike(keyword) + "%";
+                args.add(like);
+                args.add(like);
+                args.add(like);
+            }
+            if (!evidenceClauses.isEmpty()) {
+                sql.append(" AND (").append(String.join(" OR ", evidenceClauses)).append(")");
+            }
+        }
+        sql.append(" ORDER BY s.updated_at DESC, s.id DESC");
+        return lightweightRows(sql.toString(), args).stream()
+            .map(row -> candidate(row, List.of(), null, List.of()))
+            .toList();
+    }
+
+    @Override
+    public List<MaterialSupplierCandidate> enrichCandidates(java.util.Set<Long> requestedSkuIds) {
+        List<Long> skuIds = requestedSkuIds == null ? List.of() : requestedSkuIds.stream()
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList();
+        if (skuIds.isEmpty()) {
+            return List.of();
+        }
+        String sql = baseSql() + " AND s.id IN (" + placeholders(skuIds.size()) + ")";
+        List<SupplierSkuRow> rows = lightweightRows(sql, new ArrayList<>(skuIds));
         Map<Long, List<MaterialSupplierSkuAttribute>> attributesBySku = attributesBySkuIds(skuIds);
         Map<Long, SupplierImage> primaryImagesBySku = primaryImagesBySkuIds(skuIds);
         Map<Long, List<MaterialSupplierUnitPriceOption>> unitPricesBySku = unitPriceOptionsBySkuIds(skuIds);
@@ -62,6 +90,51 @@ public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateP
                 unitPricesBySku.getOrDefault(row.skuId(), List.of())
             ))
             .toList();
+    }
+
+    private String baseSql() {
+        return """
+            SELECT s.id, s.company_id, s.supplier_sku_code, s.product_name,
+                   s.impa_code, s.platform_code, s.category_code, s.category_name,
+                   s.specification_summary, s.unit_price, s.currency, s.stock_qty,
+                   s.stock_unit, s.packing, s.shelf_status, s.code_status, s.unit,
+                   s.product_tags,
+                   COALESCE(NULLIF(st.shop_name, ''), c.company_name) AS supplier_name
+            FROM shop_sku s
+            JOIN company c ON c.id = s.company_id
+            LEFT JOIN shop_store st ON st.company_id = s.company_id
+            WHERE s.product_type = 'MATERIAL'
+              AND s.shelf_status = 'ON_SHELF'
+              AND c.status = 'ACTIVE'
+            """;
+    }
+
+    private List<SupplierSkuRow> lightweightRows(String sql, Collection<?> args) {
+        return jdbcTemplate.query(sql, (rs, rowNum) -> supplierSkuRow(rs), args.toArray());
+    }
+
+    private void appendIn(List<String> clauses, List<Object> args, String column, Collection<String> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        List<String> normalized = values.stream().filter(value -> value != null && !value.isBlank()).distinct().toList();
+        if (normalized.isEmpty()) {
+            return;
+        }
+        clauses.add(column + " IN (" + placeholders(normalized.size()) + ")");
+        args.addAll(normalized);
+    }
+
+    private String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        List<String> tags = new ArrayList<>();
+        if (json.contains("质量高")) tags.add("质量高");
+        if (json.contains("价格低")) tags.add("价格低");
+        return List.copyOf(tags);
     }
 
     private MaterialSupplierCandidate candidate(
@@ -94,7 +167,8 @@ public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateP
             row.codeStatus(),
             null,
             null
-        ).withUnitPriceOptions(options.isEmpty()
+        ).withProductTags(row.productTags())
+         .withUnitPriceOptions(options.isEmpty()
             ? fallbackUnitPriceOptions(row.unit(), row.stockUnit(), row.unitPrice())
             : options);
     }
@@ -118,7 +192,8 @@ public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateP
             rs.getString("packing"),
             rs.getString("shelf_status"),
             rs.getString("code_status"),
-            rs.getString("unit")
+            rs.getString("unit"),
+            readStringList(rs.getString("product_tags"))
         );
     }
 
@@ -246,7 +321,8 @@ public class MaterialSupplierSkuRepository implements MaterialSupplierCandidateP
         String packing,
         String shelfStatus,
         String codeStatus,
-        String unit
+        String unit,
+        List<String> productTags
     ) {
     }
 }

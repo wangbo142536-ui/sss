@@ -4,8 +4,16 @@ import { useRoute, useRouter } from "vue-router";
 import StableDateTimeInput from "@/components/StableDateTimeInput.vue";
 import WorkbenchLayout from "@/components/WorkbenchLayout.vue";
 import { t, useI18n } from "@/i18n";
+import BackgroundTaskOverlay from "@/modules/backgroundProcessing/components/BackgroundTaskOverlay.vue";
+import type { BackgroundTaskCounter, BackgroundTaskStage, BackgroundTaskStatus } from "@/modules/backgroundProcessing/types/backgroundTask";
 import { listPublicDictionaryItems, type DictionaryItem } from "@/services/dataDictionaryService";
-import { getMaterialDemandDetail, saveMaterialDemand, uploadMaterialMatchPreview } from "@/services/procurementMaterialService";
+import {
+  getMaterialAiCapabilities,
+  getMaterialDemandDetail,
+  saveMaterialDemand,
+  uploadMaterialMatchPreview,
+  type MaterialAiCapabilities
+} from "@/services/procurementMaterialService";
 import type { MaterialDemandSaveResponse, MaterialMatchCandidate, MaterialMatchPreviewItem, MaterialMatchPreviewResponse, MaterialMatchResult } from "@/types/procurementMaterials";
 
 const route = useRoute();
@@ -59,12 +67,11 @@ const invalidMaterialField = ref<"quantity" | "unit" | "">("");
 const demandInputRefs = ref<Partial<Record<DemandFormKey, HTMLElement>>>({});
 const unitOptions = ref<DictionaryItem[]>([]);
 const progressOverlayVisible = ref(false);
-const progressPercent = ref(0);
-const progressStageIndex = ref(0);
 const progressState = ref<"running" | "success" | "failed">("running");
 const progressResult = ref<MaterialMatchPreviewResponse | null>(null);
 const progressElapsedSeconds = ref(0);
-let progressTimer: number | undefined;
+const materialAiCapabilities = ref<MaterialAiCapabilities | null>(null);
+let materialAiCapabilitiesRequest: Promise<MaterialAiCapabilities | null> | null = null;
 let progressElapsedTimer: number | undefined;
 let progressStartedAt = 0;
 const DEFAULT_MATERIAL_QUANTITY = "1";
@@ -99,20 +106,46 @@ const commonCategories = [
 ];
 
 const previewItems = computed(() => matchPreview.value?.items ?? []);
-const progressStages = computed(() => [
-  t("page.materials.progressUpload"),
-  t("page.materials.progressParse"),
-  t("page.materials.progressMatch"),
-  t("page.materials.progressPreview")
+const progressStages = computed<BackgroundTaskStage[]>(() => [
+  {
+    code: "MATCH_PREVIEW",
+    label: materialAiCapabilities.value === null
+      ? "标准库匹配与AI大类分析（能力状态未知）"
+      : materialAiCapabilities.value.categoryAnalysisConfigured
+        ? "标准库匹配与AI大类分析"
+        : "标准库匹配与AI大类分析（待配置）"
+  }
 ]);
-const progressStyle = computed(() => ({ "--progress": `${progressPercent.value}%` }));
-const progressRowsLabel = computed(() => (progressResult.value ? t("page.materials.progressCountValue", { count: progressResult.value.totalRows }) : t("page.materials.progressReading")));
-const progressMatchedLabel = computed(() =>
-  progressResult.value
-    ? t("page.materials.progressCountValue", { count: progressResult.value.exactCount + progressResult.value.similarCount })
-    : t("page.materials.progressReading")
-);
-const progressPendingLabel = computed(() => (progressResult.value ? t("page.materials.progressCountValue", { count: progressResult.value.unmatchedCount }) : t("page.materials.progressReading")));
+const progressTaskStatus = computed<BackgroundTaskStatus>(() => {
+  if (progressState.value === "failed") return "FAILED";
+  if (progressState.value === "success") return "COMPLETED";
+  return "RUNNING";
+});
+const progressTaskTitle = computed(() => progressState.value === "failed" ? t("page.materials.progressFailedTitle") : t("page.materials.progressTitle"));
+const progressTaskMessage = computed(() => {
+  if (progressState.value === "failed") return uploadError.value || t("page.materials.uploadFailed");
+  if (progressState.value === "success") return "文件分析完成，匹配预览已生成";
+  if (materialAiCapabilities.value?.categoryAnalysisConfigured) {
+    return "正在执行标准库匹配与AI大类分析；完成前无法计算准确百分比";
+  }
+  if (materialAiCapabilities.value === null) {
+    return "AI能力状态获取失败：本次继续执行标准库匹配，不展示AI已启用状态";
+  }
+  return "MODEL_CONFIGURATION_REQUIRED：AI大类分析待配置，本次继续执行标准库匹配";
+});
+const progressTaskCounters = computed<BackgroundTaskCounter[]>(() => {
+  if (!progressResult.value) {
+    return [
+      { label: "处理 / 总数", value: "-- / --" },
+      { label: "分析结果", value: "已匹配 -- / 待确认 -- / 失败 --" }
+    ];
+  }
+  const result = progressResult.value;
+  return [
+    { label: "处理 / 总数", value: `${result.totalRows} / ${result.totalRows}` },
+    { label: "分析结果", value: `已匹配 ${result.exactCount + result.similarCount} / 待确认 ${result.unmatchedCount} / 失败 0` }
+  ];
+});
 const demandStatusValue = computed(() => demandStatus.value.toUpperCase());
 const isDemandReadonly = computed(() => ["ORDERED", "DISCARDED", "SUPPLIED"].includes(demandStatusValue.value));
 const isDemandInComparisonStage = computed(() => !["", "SAVED"].includes(demandStatusValue.value));
@@ -775,14 +808,11 @@ async function loadDemandDetail(id: string): Promise<void> {
 }
 
 function openFilePicker(): void {
-  if (!isDemandActionBusy.value && !isDemandReadonly.value) fileInputRef.value?.click();
-}
-
-function clearProgressTimer(): void {
-  if (progressTimer !== undefined) {
-    window.clearTimeout(progressTimer);
-    progressTimer = undefined;
+  if (isUploading.value) {
+    progressOverlayVisible.value = true;
+    return;
   }
+  if (!isDemandActionBusy.value && !isDemandReadonly.value) fileInputRef.value?.click();
 }
 
 function stopProgressElapsedTimer(): void {
@@ -802,32 +832,26 @@ function startProgressElapsedTimer(): void {
 }
 
 function startProgressOverlay(): void {
-  clearProgressTimer();
   startProgressElapsedTimer();
   progressOverlayVisible.value = true;
-  progressPercent.value = 8;
-  progressStageIndex.value = 0;
   progressState.value = "running";
   progressResult.value = null;
+}
 
-  const steps = [
-    { delay: 450, percent: 24, stage: 0 },
-    { delay: 900, percent: 48, stage: 1 },
-    { delay: 1350, percent: 72, stage: 2 },
-    { delay: 1800, percent: 88, stage: 3 }
-  ];
-  let index = 0;
-
-  const runStep = () => {
-    const step = steps[index];
-    if (!step || progressState.value !== "running") return;
-    progressPercent.value = step.percent;
-    progressStageIndex.value = step.stage;
-    index += 1;
-    progressTimer = window.setTimeout(runStep, 520);
-  };
-
-  progressTimer = window.setTimeout(runStep, steps[0].delay);
+async function ensureMaterialAiCapabilities(): Promise<MaterialAiCapabilities | null> {
+  if (materialAiCapabilities.value) return materialAiCapabilities.value;
+  if (!materialAiCapabilitiesRequest) {
+    materialAiCapabilitiesRequest = getMaterialAiCapabilities()
+      .then((value) => {
+        materialAiCapabilities.value = value;
+        return value;
+      })
+      .catch(() => null)
+      .finally(() => {
+        materialAiCapabilitiesRequest = null;
+      });
+  }
+  return materialAiCapabilitiesRequest;
 }
 
 function delay(ms: number): Promise<void> {
@@ -844,6 +868,7 @@ async function handleFile(file?: File): Promise<void> {
   expandedRowKey.value = "";
   selectedCandidateIndexes.value = {};
   matchConfirmed.value = false;
+  await ensureMaterialAiCapabilities();
   startProgressOverlay();
 
   try {
@@ -853,16 +878,12 @@ async function handleFile(file?: File): Promise<void> {
     applyHeaderContextToDemandForm(preview);
     matchPreview.value = preview;
     progressResult.value = preview;
-    clearProgressTimer();
     stopProgressElapsedTimer();
-    progressStageIndex.value = 3;
-    progressPercent.value = 100;
     progressState.value = "success";
     statusFilter.value = "ALL";
     await delay(340);
   } catch (error) {
     matchPreview.value = null;
-    clearProgressTimer();
     stopProgressElapsedTimer();
     progressState.value = "failed";
     uploadError.value = error instanceof Error && error.message ? error.message : t("page.materials.uploadFailed");
@@ -892,6 +913,7 @@ function toggleRow(row: MaterialMatchPreviewItem, index: number): void {
 onMounted(() => {
   void loadProcurementDictionaries();
   void loadDemandDetail(routeDemandId());
+  void ensureMaterialAiCapabilities();
 });
 
 watch(
@@ -902,7 +924,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  clearProgressTimer();
   stopProgressElapsedTimer();
 });
 </script>
@@ -1232,62 +1253,23 @@ onBeforeUnmount(() => {
       </div>
     </Teleport>
 
-    <Teleport to="body">
-      <div v-if="progressOverlayVisible" class="match-progress-backdrop" role="status" aria-live="polite">
-        <section class="match-progress-panel" :class="`is-${progressState}`">
-          <div class="match-progress-timer" :aria-label="t('page.materials.progressElapsedLabel')">
-            <span>{{ t("page.materials.progressElapsedLabel") }}</span>
-            <strong>{{ progressElapsedSeconds }}</strong>
-            <small>{{ t("page.materials.progressSecondsUnit") }}</small>
-          </div>
-          <div class="match-progress-head">
-            <span>{{ t("page.materials.progressKicker") }}</span>
-            <h2>{{ progressState === "failed" ? t("page.materials.progressFailedTitle") : t("page.materials.progressTitle") }}</h2>
-            <p>{{ selectedFileName }}</p>
-          </div>
-
-          <ol class="match-progress-stages">
-            <li
-              v-for="(stage, index) in progressStages"
-              :key="stage"
-              :class="{ active: index === progressStageIndex, done: index < progressStageIndex || progressPercent === 100 }"
-            >
-              <i>{{ index + 1 }}</i>
-              <span>{{ stage }}</span>
-            </li>
-          </ol>
-
-          <div class="ship-progress" :style="progressStyle">
-            <div class="ship-progress-track">
-              <div class="ship-progress-fill"></div>
-              <div class="ship-runner" aria-hidden="true">
-                <svg viewBox="0 0 64 40">
-                  <path class="ship-flag" d="M35 5v13M36 7h15l-4 5 4 5H36" />
-                  <path class="ship-body" d="M8 21h45l-6 10H16L8 21Z" />
-                  <path class="ship-cabin" d="M23 13h18l5 8H18l5-8Z" />
-                  <path class="ship-wave" d="M6 34c5-3 9-3 14 0s9 3 14 0 9-3 14 0 8 3 12 0" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div class="match-progress-counters">
-            <div>
-              <span>{{ t("page.materials.progressRowsLabel") }}</span>
-              <strong>{{ progressRowsLabel }}</strong>
-            </div>
-            <div>
-              <span>{{ t("page.materials.progressMatchedLabel") }}</span>
-              <strong>{{ progressMatchedLabel }}</strong>
-            </div>
-            <div>
-              <span>{{ t("page.materials.progressPendingLabel") }}</span>
-              <strong>{{ progressPendingLabel }}</strong>
-            </div>
-          </div>
-        </section>
-      </div>
-    </Teleport>
+    <BackgroundTaskOverlay
+      :visible="progressOverlayVisible"
+      :kicker="t('page.materials.progressKicker')"
+      :title="progressTaskTitle"
+      :file-name="selectedFileName"
+      :status="progressTaskStatus"
+      :stages="progressStages"
+      :stage-index="0"
+      :progress-percent="null"
+      :elapsed-seconds="progressElapsedSeconds"
+      :message="progressTaskMessage"
+      :counters="progressTaskCounters"
+      :allow-background="progressState === 'running'"
+      close-label="关闭导入进度"
+      @background="progressOverlayVisible = false"
+      @close="progressOverlayVisible = false"
+    />
   </div>
   </WorkbenchLayout>
 </template>
@@ -2599,261 +2581,6 @@ onBeforeUnmount(() => {
   margin: 8px 0 0;
   color: #102f4f;
   font-size: 24px;
-}
-
-.match-progress-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(238, 248, 255, 0.68);
-  backdrop-filter: blur(12px) saturate(1.08);
-}
-
-.match-progress-panel {
-  position: relative;
-  width: min(680px, 100%);
-  padding: 24px;
-  border: 1px solid rgba(168, 207, 238, 0.9);
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at 14% 0%, rgba(29, 114, 210, 0.12), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 251, 255, 0.98));
-  box-shadow: 0 30px 90px rgba(39, 94, 143, 0.2);
-}
-
-.match-progress-timer {
-  position: absolute;
-  top: 18px;
-  right: 20px;
-  min-width: 86px;
-  height: 40px;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border-radius: 8px;
-  background: rgba(234, 246, 255, 0.92);
-  box-shadow: inset 0 0 0 1px rgba(132, 190, 232, 0.72);
-  color: #0f5f9d;
-  font-variant-numeric: tabular-nums;
-}
-
-.match-progress-timer span {
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.match-progress-timer strong {
-  color: #0f2c4c;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.match-progress-timer small {
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.match-progress-panel.is-failed {
-  border-color: rgba(242, 178, 178, 0.9);
-  background:
-    radial-gradient(circle at 14% 0%, rgba(220, 74, 74, 0.1), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 247, 247, 0.98));
-}
-
-.match-progress-head {
-  display: grid;
-  gap: 6px;
-  text-align: center;
-}
-
-.match-progress-head span {
-  color: #1d72d2;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-
-.match-progress-head h2 {
-  margin: 0;
-  color: #0f2c4c;
-  font-size: 24px;
-}
-
-.match-progress-head p {
-  min-height: 20px;
-  margin: 0;
-  overflow: hidden;
-  color: #5d7288;
-  font-size: 13px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.match-progress-stages {
-  margin: 22px 0 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  list-style: none;
-}
-
-.match-progress-stages li {
-  min-width: 0;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  color: #6d879d;
-  font-size: 12px;
-  font-weight: 900;
-  text-align: center;
-}
-
-.match-progress-stages i {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #c6dff3;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #5790bd;
-  font-style: normal;
-}
-
-.match-progress-stages li.active i,
-.match-progress-stages li.done i {
-  border-color: #1d72d2;
-  color: #ffffff;
-  background: #1d72d2;
-}
-
-.match-progress-stages li.active span,
-.match-progress-stages li.done span {
-  color: #0f2c4c;
-}
-
-.ship-progress {
-  margin-top: 28px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 52px;
-  gap: 14px;
-  align-items: center;
-}
-
-.ship-progress-track {
-  position: relative;
-  height: 16px;
-  border: 1px solid #b9d8f2;
-  border-radius: 999px;
-  background: #eaf6ff;
-  box-shadow: inset 0 1px 2px rgba(56, 107, 152, 0.08);
-}
-
-.ship-progress-fill {
-  width: var(--progress);
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #83d7ff 0%, #1d72d2 100%);
-  transition: width 420ms cubic-bezier(0.22, 0.8, 0.22, 1);
-}
-
-.ship-runner {
-  position: absolute;
-  left: var(--progress);
-  bottom: 5px;
-  width: 58px;
-  color: #1d72d2;
-  transform: translateX(-50%);
-  transition: left 420ms cubic-bezier(0.22, 0.8, 0.22, 1);
-  animation: ship-bob 1.2s ease-in-out infinite;
-}
-
-.ship-runner svg {
-  width: 100%;
-  height: auto;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 3;
-}
-
-.ship-body,
-.ship-cabin {
-  fill: #e7f4ff;
-}
-
-.ship-flag {
-  stroke: #0f80df;
-}
-
-.ship-wave {
-  stroke: #7fc8f5;
-  stroke-width: 2.4;
-}
-
-.match-progress-counters {
-  margin-top: 24px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.match-progress-counters div {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid #d6e9f8;
-  border-radius: 14px;
-  background: #ffffff;
-}
-
-.match-progress-counters span {
-  display: block;
-  color: #648198;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.match-progress-counters strong {
-  display: block;
-  margin-top: 6px;
-  color: #0f2c4c;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-@keyframes ship-bob {
-  0%,
-  100% {
-    transform: translate(-50%, 0);
-  }
-
-  50% {
-    transform: translate(-50%, -4px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ship-runner,
-  .ship-progress-fill {
-    animation: none;
-    transition-duration: 0ms;
-  }
-}
-
-@media (max-width: 560px) {
-  .match-progress-timer {
-    position: static;
-    width: fit-content;
-    margin: -4px 0 12px auto;
-  }
 }
 
 @media (max-width: 1180px) {

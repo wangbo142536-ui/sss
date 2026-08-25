@@ -7,10 +7,14 @@ import LoginView from "@/views/LoginView.vue";
 import MaterialProcurementEntry from "@/views/MaterialProcurementEntry.vue";
 import SupplierDataAnalysisPage from "@/modules/platformOperations/pages/SupplierDataAnalysisPage.vue";
 import RegisterView from "@/views/RegisterView.vue";
+import { registrationReviewRoute } from "@/router/registrationReviewRoute";
 import ServiceEntry from "@/views/ServiceEntry.vue";
 import WorkbenchPage from "@/views/WorkbenchPage.vue";
+import SupplierDirectoryPage from "@/modules/supplierDirectory/pages/SupplierDirectoryPage.vue";
+import SupplierEnterpriseViewPage from "@/modules/supplierDirectory/pages/SupplierEnterpriseViewPage.vue";
 import EnterpriseEntryPage from "@/modules/enterpriseEntry/pages/EnterpriseEntryPage.vue";
 import CustomsDeclarationPage from "@/modules/customsManagement/pages/CustomsDeclarationPage.vue";
+import ProvisionStandardLibraryPage from "@/modules/standardLibrary/pages/ProvisionStandardLibraryPage.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -20,6 +24,7 @@ export const router = createRouter({
     { path: "/主页", redirect: "/" },
     { path: "/login", name: "login", component: LoginView, meta: { title: "登录" } },
     { path: "/register", name: "register", component: RegisterView, meta: { title: "注册" } },
+    registrationReviewRoute,
     { path: "/enterprise-entry", name: "enterprise-entry", component: EnterpriseEntryPage, meta: { title: "企业入驻" } },
     {
       path: "/onboarding/company-profile",
@@ -35,18 +40,24 @@ export const router = createRouter({
       component: WorkbenchPage,
       meta: { title: "IMPA 标准库", pageKey: "impa" }
     },
-    { path: "/suppliers", name: "suppliers", component: WorkbenchPage, meta: { title: "供货商信息", pageKey: "suppliers" } },
+    {
+      path: "/standard-library/provision",
+      name: "provision-library",
+      component: ProvisionStandardLibraryPage,
+      meta: { title: "伙食标准库", pageKey: "provisionStandard" }
+    },
+    { path: "/suppliers", name: "suppliers", component: SupplierDirectoryPage, meta: { title: "服务商管理", pageKey: "suppliers" } },
     {
       path: "/suppliers/:supplierId/products",
       name: "supplier-products",
-      component: WorkbenchPage,
-      meta: { title: "企业管理", pageKey: "supplierProducts" }
+      component: SupplierEnterpriseViewPage,
+      meta: { title: "企业信息", pageKey: "supplierProducts" }
     },
     {
       path: "/shop/products",
       name: "shop-products",
       component: WorkbenchPage,
-      meta: { title: "企业管理", pageKey: "supplierProducts" }
+      meta: { title: "企业信息", pageKey: "supplierProducts" }
     },
     {
       path: "/procurement/requests",
@@ -146,7 +157,7 @@ export const router = createRouter({
     },
     { path: "/basic-services", name: "basic-services", component: WorkbenchPage, meta: { title: "基础服务", pageKey: "basicManagement" } },
     { path: "/admin/permissions", name: "admin-permissions", component: WorkbenchPage, meta: { title: "权限管理", pageKey: "permissions" } },
-    { path: "/admin/registrations", name: "admin-registrations", component: WorkbenchPage, meta: { title: "注册审核", pageKey: "registrations" } },
+    { path: "/admin/registrations", name: "admin-registrations", component: WorkbenchPage, meta: { title: "服务商审核", pageKey: "registrations" } },
     { path: "/admin/menus", name: "admin-menus", component: WorkbenchPage, meta: { title: "菜单管理", pageKey: "menuManagement" } },
     { path: "/admin/dictionaries", name: "admin-dictionaries", component: WorkbenchPage, meta: { title: "数据字典", pageKey: "dataDictionary" } },
     { path: "/admin/users", name: "admin-users", component: WorkbenchPage, meta: { title: "权限管理", pageKey: "permissions" } },

@@ -1,5 +1,6 @@
 package com.zswy.shipsupply.shop;
 
+import com.zswy.shipsupply.procurement.materials.XlsxMaterialQuoteParser;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -36,6 +37,7 @@ public class ShopController {
     @GetMapping("/suppliers")
     public SupplierListResponse suppliers(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestParam(value = "companyId", required = false) Long companyId,
         @RequestParam(value = "keyword", required = false) String keyword,
         @RequestParam(value = "port", required = false) String port,
         @RequestParam(value = "category", required = false) String category,
@@ -43,7 +45,24 @@ public class ShopController {
         @RequestParam(value = "page", defaultValue = "1") int page,
         @RequestParam(value = "size", defaultValue = "50") int size
     ) {
-        return shopService.listSuppliers(authorizationHeader, keyword, port, category, status, page, size);
+        return shopService.listSuppliers(authorizationHeader, companyId, keyword, port, category, status, page, size);
+    }
+
+    @PatchMapping("/suppliers/{companyId}/status")
+    public SupplierStatusUpdateResponse updateSupplierStatus(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long companyId,
+        @RequestBody SupplierStatusUpdateRequest request
+    ) {
+        return shopService.updateSupplierStatus(authorizationHeader, companyId, request);
+    }
+
+    @GetMapping("/suppliers/{companyId}/qualifications")
+    public SupplierQualificationListResponse supplierQualifications(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long companyId
+    ) {
+        return shopService.listSupplierQualifications(authorizationHeader, companyId);
     }
 
     @PutMapping("/profile")
@@ -57,14 +76,16 @@ public class ShopController {
     @GetMapping("/skus")
     public ShopSkuListResponse skus(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @RequestParam(value = "companyId", required = false) Long companyId,
         @RequestParam(value = "productType", required = false) String productType,
+        @RequestParam(value = "categoryName", required = false) String categoryName,
         @RequestParam(value = "codeStatus", required = false) String codeStatus,
         @RequestParam(value = "shelfStatus", required = false) String shelfStatus,
         @RequestParam(value = "keyword", required = false) String keyword,
         @RequestParam(value = "page", defaultValue = "1") int page,
         @RequestParam(value = "size", defaultValue = "20") int size
     ) {
-        return shopService.listSkus(authorizationHeader, productType, codeStatus, shelfStatus, keyword, page, size);
+        return shopService.listSkus(authorizationHeader, companyId, productType, categoryName, codeStatus, shelfStatus, keyword, page, size);
     }
 
     @PostMapping("/skus")
@@ -133,6 +154,8 @@ public class ShopController {
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=shop-products-template.xlsx")
+            .header("X-Shop-Template-Version", XlsxMaterialQuoteParser.OFFICIAL_SHOP_TEMPLATE_VERSION)
+            .eTag('"' + XlsxMaterialQuoteParser.OFFICIAL_SHOP_TEMPLATE_FINGERPRINT + '"')
             .body(shopService.importTemplate(authorizationHeader));
     }
 

@@ -37,7 +37,7 @@ public class CompanyProfileRepository {
     public Optional<EnterpriseProfileResponse> findProfile(long companyId) {
         return jdbcTemplate.query(
             """
-            SELECT id, company_name, unified_social_credit_code, logo_file_id, logo_url,
+            SELECT id, company_name, unified_social_credit_code, logo_file_id, logo_url, company_introduction,
                    contact_name, contact_phone, contact_email, company_type, status
             FROM company
             WHERE id = ?
@@ -56,6 +56,7 @@ public class CompanyProfileRepository {
                 unified_social_credit_code = ?,
                 logo_file_id = ?,
                 logo_url = ?,
+                company_introduction = ?,
                 contact_name = ?,
                 contact_phone = ?,
                 contact_email = ?
@@ -65,6 +66,7 @@ public class CompanyProfileRepository {
             value(request.unifiedSocialCreditCode(), current.unifiedSocialCreditCode()),
             value(request.logoFileId(), current.logoFileId()),
             value(request.logoUrl(), current.logoUrl()),
+            request.companyIntroduction() == null ? current.companyIntroduction() : request.companyIntroduction(),
             value(request.contactName(), current.contactName()),
             value(request.contactPhone(), current.contactPhone()),
             value(request.contactEmail(), current.contactEmail()),
@@ -393,6 +395,7 @@ public class CompanyProfileRepository {
             rs.getString("unified_social_credit_code"),
             rs.getString("logo_file_id"),
             rs.getString("logo_url"),
+            rs.getString("company_introduction"),
             rs.getString("contact_name"),
             rs.getString("contact_phone"),
             rs.getString("contact_email"),

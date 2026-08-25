@@ -1,4 +1,8 @@
 ship-supply:
+  shop:
+    intelligent-import:
+      model:
+        enabled: ${SHOP_IMPORT_MODEL_ENABLED:true}
   procurement:
     food:
       development-open-supplier-scope: true

@@ -81,7 +81,7 @@ import com.zswy.shipsupply.procurement.food.infrastructure.spreadsheet.FoodSprea
 @Service
 public class FoodProcurementApplicationService {
 
-    private static final int COMPARISON_SUPPLIER_LIMIT = 3;
+    private static final int MAX_COMPARISON_SUPPLIER_LIMIT = 10;
 
     private final CurrentUserService currentUserService;
     private final AuthRepository authRepository;
@@ -313,15 +313,18 @@ public class FoodProcurementApplicationService {
     public ComparisonResponse comparison(String authorizationHeader, long demandId) {
         CurrentUserContext user = currentUserService.requireActiveCompanyUser(authorizationHeader);
         DemandDetail demand = requireDemand(demandId, user.companyId());
+        ComparisonSettings comparisonSettings = normalizedComparisonSettings(
+            demandRepository.getComparisonSettings(demandId, user.companyId())
+        );
         List<ComparisonQuoteOption> allOptions = quoteRepository.comparisonOptions(demandId);
-        Set<Long> candidateSupplierIds = topComparisonSupplierIds(allOptions);
+        Set<Long> candidateSupplierIds = topComparisonSupplierIds(allOptions, comparisonSettings.mixedSupplierCount());
         Map<Long, List<ComparisonQuoteOption>> byItem = allOptions.stream()
             .filter(option -> candidateSupplierIds.contains(option.supplierCompanyId()))
             .collect(Collectors.groupingBy(ComparisonQuoteOption::demandItemId, LinkedHashMap::new, Collectors.toList()));
         List<ComparisonItem> items = demand.items().stream().map(item -> comparisonItem(item, byItem.getOrDefault(item.itemId(), List.of()))).toList();
         return new ComparisonResponse(
             demand.demand(), quoteRepository.submittedSupplierCount(demandId), comparisonStrategies(items), items,
-            normalizedComparisonSettings(demandRepository.getComparisonSettings(demandId, user.companyId()))
+            comparisonSettings
         );
     }
 
@@ -335,11 +338,14 @@ public class FoodProcurementApplicationService {
             throw conflict("FOOD_COMPARISON_LOCKED");
         }
         ComparisonSettings settings = normalizedComparisonSettings(request);
+        Set<Long> validDemandItemIds = demand.items().stream().map(DemandItem::itemId).collect(Collectors.toSet());
         if (settings.selectedDemandItemIds() != null) {
-            Set<Long> validDemandItemIds = demand.items().stream().map(DemandItem::itemId).collect(Collectors.toSet());
             if (!validDemandItemIds.containsAll(settings.selectedDemandItemIds())) {
                 throw badRequest("FOOD_COMPARISON_SELECTION_INVALID");
             }
+        }
+        if (!validDemandItemIds.containsAll(settings.coreDemandItemIds())) {
+            throw badRequest("FOOD_COMPARISON_CORE_ITEM_INVALID");
         }
         if (demandRepository.updateComparisonSettings(demandId, user.companyId(), user.userId(), settings) != 1) {
             throw notFound("FOOD_DEMAND_NOT_FOUND");
@@ -386,7 +392,7 @@ public class FoodProcurementApplicationService {
             .setScale(4, RoundingMode.HALF_UP);
         BigDecimal fixedFees = settings.fixedFreightFee().add(settings.fixedCustomsFee())
             .add(settings.fixedCraneFee()).add(settings.fixedOtherFee());
-        BigDecimal profit = quoted.subtract(cost).subtract(fixedFees).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal profit = quoted.subtract(cost).setScale(4, RoundingMode.HALF_UP);
         BigDecimal total = quoted.add(fixedFees).setScale(4, RoundingMode.HALF_UP);
         long orderId = orderRepository.insertOrder(
             demandId, user.companyId(), user.userId(), strategy, demand.demand().currency(),
@@ -658,7 +664,8 @@ public class FoodProcurementApplicationService {
         List<ComparisonQuoteOption> options = source.stream().map(option -> new ComparisonQuoteOption(
             option.demandItemId(), option.quoteItemId(), option.quoteId(), option.supplierCompanyId(), option.supplierName(),
             option.requestedQuantity(), option.quotedQuantity(), option.unitPrice(), option.amount(), option.availability(),
-            option.priceSource(), option.quantitySatisfied(), lowest != null && lowest.compareTo(option.unitPrice()) == 0
+            option.priceSource(), option.quantitySatisfied(), lowest != null && lowest.compareTo(option.unitPrice()) == 0,
+            option.productTags()
         )).toList();
         return new ComparisonItem(
             item.itemId(), item.sequenceNo(), item.nameEn(), item.nameZh(), item.specification(), item.unit(),
@@ -687,7 +694,7 @@ public class FoodProcurementApplicationService {
         );
     }
 
-    private Set<Long> topComparisonSupplierIds(List<ComparisonQuoteOption> options) {
+    private Set<Long> topComparisonSupplierIds(List<ComparisonQuoteOption> options, int limit) {
         return options.stream().filter(ComparisonQuoteOption::quantitySatisfied)
             .collect(Collectors.groupingBy(ComparisonQuoteOption::supplierCompanyId))
             .entrySet().stream()
@@ -704,7 +711,7 @@ public class FoodProcurementApplicationService {
             .sorted(Comparator.comparingInt(SupplierRank::coveredItemCount).reversed()
                 .thenComparing(SupplierRank::totalAmount)
                 .thenComparing(SupplierRank::supplierName))
-            .limit(COMPARISON_SUPPLIER_LIMIT)
+            .limit(Math.max(3, Math.min(MAX_COMPARISON_SUPPLIER_LIMIT, limit)))
             .map(SupplierRank::supplierCompanyId)
             .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
     }
@@ -727,7 +734,7 @@ public class FoodProcurementApplicationService {
             .sorted(Comparator.comparingInt(SupplierRank::coveredItemCount).reversed()
                 .thenComparing(SupplierRank::totalAmount)
                 .thenComparing(SupplierRank::supplierName))
-            .limit(COMPARISON_SUPPLIER_LIMIT)
+            .limit(MAX_COMPARISON_SUPPLIER_LIMIT)
             .map(SupplierRank::supplierCompanyId)
             .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
     }
@@ -845,13 +852,31 @@ public class FoodProcurementApplicationService {
             })
             .distinct()
             .toList();
+        int mixedSupplierCount = source.mixedSupplierCount() == null ? 3 : source.mixedSupplierCount();
+        if (mixedSupplierCount < 2 || mixedSupplierCount > 10) throw badRequest("FOOD_MIXED_SUPPLIER_COUNT_INVALID");
+        boolean priceEnabled = source.priceEnabled() == null || source.priceEnabled();
+        boolean qualityEnabled = source.qualityEnabled() == null || source.qualityEnabled();
+        if (!priceEnabled && !qualityEnabled) throw badRequest("FOOD_COMPARISON_STRATEGY_REQUIRED");
+        int priceLevel = source.priceLevel() == null ? 5 : source.priceLevel();
+        int qualityLevel = source.qualityLevel() == null ? 3 : source.qualityLevel();
+        if (priceLevel < 1 || priceLevel > 5 || qualityLevel < 1 || qualityLevel > 5) {
+            throw badRequest("FOOD_COMPARISON_STRATEGY_LEVEL_INVALID");
+        }
+        List<Long> coreDemandItemIds = source.coreDemandItemIds() == null ? List.of() : source.coreDemandItemIds().stream()
+            .map(itemId -> {
+                if (itemId == null || itemId <= 0) throw badRequest("FOOD_COMPARISON_CORE_ITEM_INVALID");
+                return itemId;
+            })
+            .distinct()
+            .toList();
         return new ComparisonSettings(
             markup, nonNegative(source.fixedFreightFee(), BigDecimal.ZERO),
             nonNegative(source.fixedCustomsFee(), BigDecimal.ZERO),
             nonNegative(source.fixedCraneFee(), BigDecimal.ZERO),
             nonNegative(source.fixedOtherFee(), BigDecimal.ZERO), mode, providerType,
             safe(source.fixedProviderId()), safe(source.fixedProviderName()), trafficServiceJson,
-            selectedDemandItemIds
+            selectedDemandItemIds, mixedSupplierCount, priceEnabled, priceLevel, qualityEnabled, qualityLevel,
+            coreDemandItemIds
         );
     }
 

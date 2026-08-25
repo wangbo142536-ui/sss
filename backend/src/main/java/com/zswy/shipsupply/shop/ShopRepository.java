@@ -4,6 +4,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -25,6 +26,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class ShopRepository {
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
     };
 
     private final JdbcTemplate jdbcTemplate;
@@ -151,7 +154,7 @@ public class ShopRepository {
             """
             UPDATE shop_sku
             SET product_type = ?, category_code = ?, category_name = ?, platform_code = ?, impa_code = ?,
-                supplier_sku_code = ?, product_name = ?, specification_summary = ?, normalized_name = ?,
+                supplier_sku_code = ?, product_name = ?, product_description = ?, product_tags = CAST(? AS JSON), specification_summary = ?, normalized_name = ?,
                 normalized_specification = ?, stock_qty = ?, stock_unit = ?, lead_time_days = ?,
                 delivery_area = ?, service_ports = ?, monthly_sales = ?, unit_price = ?, currency = ?,
                 brand = ?, unit = ?, packing = ?, barcode = ?, shelf_status = ?, code_status = ?,
@@ -166,6 +169,8 @@ public class ShopRepository {
             request.impaCode(),
             request.supplierSkuCode(),
             request.productName(),
+            request.productDescription(),
+            json(request.productTags()),
             specificationSummary(request.specifications()),
             normalize(request.productName()),
             normalize(specificationSummary(request.specifications())),
@@ -248,6 +253,7 @@ public class ShopRepository {
     public ShopSkuListResponse listSkus(
         long companyId,
         String productType,
+        String categoryName,
         String codeStatus,
         String shelfStatus,
         String keyword,
@@ -260,6 +266,11 @@ public class ShopRepository {
             FROM shop_sku
             WHERE company_id = ?
               AND (? IS NULL OR product_type = ?)
+              AND (
+                ? IS NULL
+                OR (? = '__UNCATEGORIZED__' AND (category_name IS NULL OR TRIM(category_name) = ''))
+                OR (? <> '__UNCATEGORIZED__' AND category_name = ?)
+              )
               AND (? IS NULL OR code_status = ?)
               AND (? IS NULL OR shelf_status = ?)
               AND (
@@ -273,6 +284,7 @@ public class ShopRepository {
             Long.class,
             companyId,
             productType, productType,
+            categoryName, categoryName, categoryName, categoryName,
             codeStatus, codeStatus,
             shelfStatus, shelfStatus,
             keyword, keyword, keyword, keyword, keyword
@@ -283,6 +295,11 @@ public class ShopRepository {
             FROM shop_sku
             WHERE company_id = ?
               AND (? IS NULL OR product_type = ?)
+              AND (
+                ? IS NULL
+                OR (? = '__UNCATEGORIZED__' AND (category_name IS NULL OR TRIM(category_name) = ''))
+                OR (? <> '__UNCATEGORIZED__' AND category_name = ?)
+              )
               AND (? IS NULL OR code_status = ?)
               AND (? IS NULL OR shelf_status = ?)
               AND (
@@ -302,6 +319,7 @@ public class ShopRepository {
             (rs, rowNum) -> sku(rs),
             companyId,
             productType, productType,
+            categoryName, categoryName, categoryName, categoryName,
             codeStatus, codeStatus,
             shelfStatus, shelfStatus,
             keyword, keyword, keyword, keyword, keyword,
@@ -311,13 +329,76 @@ public class ShopRepository {
         return new ShopSkuListResponse(items, total, page, size);
     }
 
-    public SupplierListResponse listSuppliers(String keyword, String port, String category, String status, int page, int size) {
+    public boolean isSupplierCompany(long companyId) {
+        Long count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM company WHERE id = ? AND company_type = 'SUPPLIER'",
+            Long.class,
+            companyId
+        );
+        return count != null && count > 0;
+    }
+
+    public boolean isActiveSupplierCompany(long companyId) {
+        Long count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM company WHERE id = ? AND company_type = 'SUPPLIER' AND status = 'ACTIVE'",
+            Long.class,
+            companyId
+        );
+        return count != null && count > 0;
+    }
+
+    public List<SupplierQualificationResponse> listSupplierQualifications(long companyId) {
+        return jdbcTemplate.query(
+            """
+            SELECT qualification.id, qualification.company_id,
+                   COALESCE(NULLIF(qualification.file_name, ''), file.original_name) AS file_name,
+                   qualification.file_type, qualification.title, qualification.description,
+                   file.content_type,
+                   DATE_FORMAT(qualification.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+            FROM company_qualification qualification
+            JOIN company c ON c.id = qualification.company_id
+            JOIN sys_file file ON file.file_id = qualification.file_id
+            WHERE qualification.company_id = ?
+              AND c.company_type = 'SUPPLIER'
+              AND c.status = 'ACTIVE'
+              AND qualification.status IN ('ACTIVE', 'SUBMITTED', 'APPROVED')
+              AND file.status = 'ACTIVE'
+            ORDER BY qualification.updated_at DESC, qualification.id DESC
+            """,
+            (resultSet, rowNum) -> {
+                long qualificationId = resultSet.getLong("id");
+                return new SupplierQualificationResponse(
+                    qualificationId,
+                    resultSet.getLong("company_id"),
+                    resultSet.getString("file_name"),
+                    "/api/shop/suppliers/" + companyId + "/qualifications/" + qualificationId + "/file",
+                    resultSet.getString("file_type"),
+                    resultSet.getString("title"),
+                    resultSet.getString("description"),
+                    resultSet.getString("content_type"),
+                    resultSet.getString("updated_at")
+                );
+            },
+            companyId
+        );
+    }
+
+    public SupplierListResponse listSuppliers(
+        Long companyId,
+        String keyword,
+        String port,
+        String category,
+        String status,
+        int page,
+        int size
+    ) {
         String baseSql = """
             FROM company c
             LEFT JOIN shop_store s ON s.company_id = c.id
             LEFT JOIN (
               SELECT company_id,
                      COUNT(*) AS sku_count,
+                     COUNT(DISTINCT NULLIF(TRIM(category_name), '')) AS category_count,
                      GROUP_CONCAT(DISTINCT NULLIF(service_ports, '') SEPARATOR ', ') AS sku_ports,
                      GROUP_CONCAT(DISTINCT NULLIF(category_name, '') SEPARATOR ', ') AS sku_categories
               FROM shop_sku
@@ -338,6 +419,24 @@ public class ShopRepository {
               WHERE status = 'ACTIVE'
               GROUP BY company_id
             ) active_user ON active_user.company_id = c.id
+            LEFT JOIN (
+              SELECT evaluation_source.company_id,
+                     COUNT(*) AS evaluation_count,
+                     ROUND(AVG(evaluation_source.rating_value), 1) AS average_rating,
+                     ROUND(100 * SUM(CASE WHEN evaluation_source.rating_value >= 4 THEN 1 ELSE 0 END) / COUNT(*), 0) AS positive_rate
+              FROM (
+                SELECT provider_company_id AS company_id,
+                       (COALESCE(rating, logistics_rating) + COALESCE(logistics_rating, rating)) / 2.0 AS rating_value
+                FROM service_evaluation
+                WHERE rating IS NOT NULL OR logistics_rating IS NOT NULL
+                UNION ALL
+                SELECT supplier_company_id AS company_id,
+                       (COALESCE(quality_rating, logistics_rating) + COALESCE(logistics_rating, quality_rating)) / 2.0 AS rating_value
+                FROM food_evaluation
+                WHERE quality_rating IS NOT NULL OR logistics_rating IS NOT NULL
+              ) evaluation_source
+              GROUP BY evaluation_source.company_id
+            ) evaluation ON evaluation.company_id = c.id
             WHERE c.company_type = 'SUPPLIER'
               AND (
                 COALESCE(active_user.user_count, 0) > 0
@@ -347,7 +446,11 @@ public class ShopRepository {
             """;
         List<Object> args = new ArrayList<>();
         StringBuilder filters = new StringBuilder();
-        appendLikeFilter(filters, args, keyword, "c.company_name", "s.shop_name", "c.contact_name", "c.contact_phone");
+        if (companyId != null) {
+            filters.append(" AND c.id = ?");
+            args.add(companyId);
+        }
+        appendLikeFilter(filters, args, keyword, "c.company_name", "s.shop_name", "c.unified_social_credit_code", "c.contact_name", "c.contact_phone", "c.contact_email");
         appendLikeFilter(filters, args, port, "s.service_ports", "sku.sku_ports", "legacy_sku.legacy_ports");
         appendLikeFilter(filters, args, category, "s.main_categories", "sku.sku_categories");
         String normalizedStatus = value(status, null);
@@ -367,17 +470,25 @@ public class ShopRepository {
             SELECT
               c.id AS company_id,
               c.company_name,
-              c.contact_name,
-              c.contact_phone,
+              c.unified_social_credit_code,
+              c.company_introduction,
+              COALESCE(s.logo_file_id, c.logo_file_id) AS logo_file_id,
+              COALESCE(s.logo_url, c.logo_url) AS logo_url,
+              COALESCE(s.contact_name, c.contact_name) AS contact_name,
+              COALESCE(s.contact_phone, c.contact_phone) AS contact_phone,
+              COALESCE(s.contact_email, c.contact_email) AS contact_email,
               c.status,
               COALESCE(s.service_ports, sku.sku_ports, legacy_sku.legacy_ports, '') AS port,
               COALESCE(s.main_categories, sku.sku_categories, '') AS category,
               COALESCE(sku.sku_count, 0) + COALESCE(legacy_sku.legacy_sku_count, 0) AS sku_count,
+              COALESCE(sku.category_count, 0) AS category_count,
+              evaluation.average_rating,
+              COALESCE(evaluation.evaluation_count, 0) AS evaluation_count,
+              evaluation.positive_rate,
               GREATEST(c.updated_at, COALESCE(s.updated_at, c.updated_at)) AS updated_at
-            """ + baseSql + filters + """
+            """ + baseSql + filters + "\n" + """
             ORDER BY
-              CASE WHEN c.status = 'ACTIVE' THEN 0 ELSE 1 END ASC,
-              COALESCE(sku.sku_count, 0) + COALESCE(legacy_sku.legacy_sku_count, 0) DESC,
+              c.created_at DESC,
               c.id DESC
             LIMIT ? OFFSET ?
             """,
@@ -385,6 +496,39 @@ public class ShopRepository {
             queryArgs.toArray()
         );
         return new SupplierListResponse(items, total == null ? 0 : total, page, size);
+    }
+
+    public SupplierListResponse listSuppliers(String keyword, String port, String category, String status, int page, int size) {
+        return listSuppliers(null, keyword, port, category, status, page, size);
+    }
+
+    public boolean updateSupplierStatus(long companyId, String status) {
+        int updated = jdbcTemplate.update(
+            "UPDATE company SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_type = 'SUPPLIER'",
+            status,
+            companyId
+        );
+        if (updated == 0) return false;
+        jdbcTemplate.update(
+            "UPDATE shop_store SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?",
+            status,
+            companyId
+        );
+        return true;
+    }
+
+    public void logSupplierStatusChange(long operatorUserId, long companyId, String status) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO operation_log
+              (operator_user_id, operation_type, target_type, target_id, request_path, detail)
+            VALUES (?, 'SUPPLIER_STATUS_UPDATE', 'COMPANY', ?, ?, ?)
+            """,
+            operatorUserId,
+            String.valueOf(companyId),
+            "/api/shop/suppliers/" + companyId + "/status",
+            "status=" + status
+        );
     }
 
     public boolean deleteSku(long companyId, long skuId) {
@@ -555,6 +699,8 @@ public class ShopRepository {
                 value(rs.getString("confirmed_impa_code"), rs.getString("impa_code")),
                 rs.getString("supplier_sku_code"),
                 value(rs.getString("product_name"), "未命名商品"),
+                null,
+                List.of(),
                 List.of(new ShopSkuAttributeRequest("specification", "规格", rs.getString("specification_summary"), null, 0, rs.getString("specification_summary"))),
                 rs.getBigDecimal("stock_qty"),
                 rs.getString("stock_unit"),
@@ -585,15 +731,7 @@ public class ShopRepository {
             productType
         );
         List<ShopSkuResponse> saved = requests.stream()
-            .map(request -> {
-                Long existingSkuId = findSkuIdBySupplierSkuCode(
-                    companyId,
-                    shopId,
-                    request.productType(),
-                    request.supplierSkuCode()
-                ).orElse(null);
-                return saveSku(companyId, shopId, userId, existingSkuId, request);
-            })
+            .map(request -> saveSku(companyId, shopId, userId, null, request))
             .toList();
         jdbcTemplate.update(
             "UPDATE shop_sku_import_preview_row SET confirmed_at = CURRENT_TIMESTAMP WHERE company_id = ? AND batch_id = ? AND (? IS NULL OR product_type = ?)",
@@ -731,12 +869,12 @@ public class ShopRepository {
                 """
                 INSERT INTO shop_sku
                   (company_id, shop_id, product_type, category_code, category_name, platform_code,
-                   impa_code, supplier_sku_code, product_name, specification_summary,
+                   impa_code, supplier_sku_code, product_name, product_description, product_tags, specification_summary,
                    normalized_name, normalized_specification, stock_qty, stock_unit, lead_time_days,
                    delivery_area, service_ports, monthly_sales, unit_price, currency, brand, unit,
                    packing, barcode, shelf_status, code_status, exception_reason,
                    import_batch_id, import_row_no, raw_row_json, created_by, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)
                 """,
                 Statement.RETURN_GENERATED_KEYS
             );
@@ -750,6 +888,8 @@ public class ShopRepository {
             statement.setString(index++, request.impaCode());
             statement.setString(index++, request.supplierSkuCode());
             statement.setString(index++, request.productName());
+            statement.setString(index++, request.productDescription());
+            statement.setString(index++, json(request.productTags()));
             statement.setString(index++, specificationSummary(request.specifications()));
             statement.setString(index++, normalize(request.productName()));
             statement.setString(index++, normalize(specificationSummary(request.specifications())));
@@ -871,6 +1011,8 @@ public class ShopRepository {
             rs.getString("impa_code"),
             rs.getString("supplier_sku_code"),
             rs.getString("product_name"),
+            rs.getString("product_description"),
+            readStringList(rs.getString("product_tags")),
             attributes,
             attributeSummary(attributes),
             rs.getBigDecimal("stock_qty"),
@@ -902,20 +1044,38 @@ public class ShopRepository {
     private SupplierSummaryResponse supplier(ResultSet rs) throws SQLException {
         long companyId = rs.getLong("company_id");
         long skuCount = rs.getLong("sku_count");
-        String status = "ACTIVE".equalsIgnoreCase(value(rs.getString("status"), "")) ? "active" : "warning";
-        int score = Math.min(99, 88 + (int) Math.min(9, skuCount / 80));
+        String status = "ACTIVE".equalsIgnoreCase(value(rs.getString("status"), "")) ? "ACTIVE" : "DISABLED";
+        BigDecimal averageRating = rs.getBigDecimal("average_rating");
+        long evaluationCount = rs.getLong("evaluation_count");
+        String reputationLevel = averageRating == null
+            ? "暂无评价"
+            : averageRating.compareTo(new BigDecimal("4.5")) >= 0
+                ? "优秀"
+                : averageRating.compareTo(new BigDecimal("4.0")) >= 0
+                    ? "良好"
+                    : averageRating.compareTo(new BigDecimal("3.0")) >= 0 ? "合格" : "待提升";
         return new SupplierSummaryResponse(
             companyId,
             "SUP-" + companyId,
             rs.getString("company_name"),
+            rs.getString("unified_social_credit_code"),
+            rs.getString("company_introduction"),
+            rs.getString("logo_file_id"),
+            rs.getString("logo_url"),
             value(rs.getString("port"), "--"),
             value(rs.getString("category"), "--"),
-            String.valueOf(score),
+            averageRating == null ? "--" : averageRating.toPlainString(),
             status,
             status,
             skuCount,
+            rs.getLong("category_count"),
             rs.getString("contact_name"),
             rs.getString("contact_phone"),
+            rs.getString("contact_email"),
+            averageRating,
+            evaluationCount,
+            rs.getBigDecimal("positive_rate"),
+            reputationLevel,
             string(rs.getTimestamp("updated_at"))
         );
     }
@@ -1017,6 +1177,17 @@ public class ShopRepository {
             return objectMapper.readValue(json, MAP_TYPE);
         } catch (JsonProcessingException ex) {
             return Map.of();
+        }
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST_TYPE);
+        } catch (JsonProcessingException ex) {
+            return List.of();
         }
     }
 

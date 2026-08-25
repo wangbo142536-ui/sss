@@ -57,4 +57,29 @@ class ImpaItemControllerTest {
             .andExpect(jsonPath("$[0].nameEn").value("WATERTIGHT PLUG"))
             .andExpect(jsonPath("$[0].specification").value("10A"));
     }
+
+    @Test
+    void returnsPagedItemsWhenPageIsRequested() throws Exception {
+        when(impaItemService.listItemPage("11", null, "独轮车", 2, 50)).thenReturn(
+            new ImpaItemPageResponse(
+                List.of(new ImpaItemResponse("110105", "11", "甲板物料", "1101", "独轮车", "WHEEL BARROW", null, "套")),
+                51,
+                2,
+                50,
+                2
+            )
+        );
+
+        mockMvc.perform(get("/api/standard-library/impa/items")
+                .param("categoryCode", "11")
+                .param("keyword", "独轮车")
+                .param("page", "2")
+                .param("pageSize", "50"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].impaCode").value("110105"))
+            .andExpect(jsonPath("$.total").value(51))
+            .andExpect(jsonPath("$.page").value(2))
+            .andExpect(jsonPath("$.pageSize").value(50))
+            .andExpect(jsonPath("$.totalPages").value(2));
+    }
 }

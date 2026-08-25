@@ -73,6 +73,25 @@ class RegistrationSubmissionServiceTest {
         verify(fileStorageService, never()).storeForUser(anyLong(), org.mockito.ArgumentMatchers.any());
     }
 
+    @Test
+    void rejectsFilePathContactNameBeforeCreatingAccount() {
+        RegistrationSubmissionRequest request = new RegistrationSubmissionRequest(
+            "supplier-atomic", "secret123", "secret123", "SUPPLIER", List.of("MATERIAL"), "舟山原子供货商",
+            "91330000TEST000001", "C:\\fakepath\\license.pdf", "13800138000", "test@example.com"
+        );
+        MockMultipartFile file = new MockMultipartFile("files", "license.pdf", "application/pdf", "pdf".getBytes());
+
+        assertThatThrownBy(() -> service().registerAndSubmit(request, List.of(file)))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("CONTACT_NAME_INVALID");
+        verify(authRepository, never()).insertCompany(
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()
+        );
+        verify(fileStorageService, never()).storeForUser(anyLong(), org.mockito.ArgumentMatchers.any());
+    }
+
     private RegistrationSubmissionService service() {
         return new RegistrationSubmissionService(authRepository, authService, passwordHasher, tokenService, fileStorageService);
     }

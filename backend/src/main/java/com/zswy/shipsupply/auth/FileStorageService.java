@@ -5,7 +5,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -90,19 +92,54 @@ public class FileStorageService {
         if (!canAccess(user, file)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "File access denied");
         }
+        return toDownloadResponse(file);
+    }
+
+    public FileDownloadResponse downloadPublicSupplierQualification(
+        String authorizationHeader,
+        long companyId,
+        long qualificationId
+    ) {
+        Long userId = tokenService.requireUserId(authorizationHeader);
+        AuthenticatedUser user = authRepository.getUserById(userId);
+        if (!"ACTIVE".equalsIgnoreCase(user.status())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Active account required");
+        }
+        StoredFileResponse file = authRepository.findPublicSupplierQualificationFile(companyId, qualificationId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Qualification file not found"));
+        return toDownloadResponse(file);
+    }
+
+    private FileDownloadResponse toDownloadResponse(StoredFileResponse file) {
+        if (file.storagePath().startsWith("classpath:")) {
+            String resourcePath = file.storagePath().substring("classpath:".length());
+            Resource resource = new ClassPathResource(resourcePath);
+            if (!resource.exists()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File content not found");
+            }
+            return new FileDownloadResponse(
+                resource,
+                file.fileName(),
+                contentTypeOrDefault(file.contentType()),
+                file.fileSize()
+            );
+        }
         Path path = Path.of(file.storagePath()).toAbsolutePath().normalize();
         if (!Files.exists(path) || !Files.isRegularFile(path)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File content not found");
         }
-        String contentType = file.contentType() == null || file.contentType().isBlank()
-            ? "application/octet-stream"
-            : file.contentType();
         return new FileDownloadResponse(
             new FileSystemResource(path),
             file.fileName(),
-            contentType,
+            contentTypeOrDefault(file.contentType()),
             file.fileSize()
         );
+    }
+
+    private String contentTypeOrDefault(String contentType) {
+        return contentType == null || contentType.isBlank()
+            ? "application/octet-stream"
+            : contentType;
     }
 
     private boolean canAccess(AuthenticatedUser user, StoredFileResponse file) {

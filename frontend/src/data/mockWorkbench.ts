@@ -113,9 +113,12 @@ export const menuItems: WorkbenchMenuItem[] = [
     labelKey: "nav.platformOperations",
     icon: "OP",
     sortOrder: 95,
-    roles: ["admin", "supplier"],
+    roles: ["admin", "purchaser", "supplier"],
     children: [
-      { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 0, roles: ["admin", "supplier"] }
+      { key: "supplierProducts", labelKey: "nav.supplierProducts", route: "/shop/products", icon: "SKU", sortOrder: 0, roles: ["admin", "purchaser", "supplier"] },
+      { key: "supplierDataAnalysis", labelKey: "nav.dataAnalysis", route: "/platform-operations/data-analysis", icon: "DA", sortOrder: 10, roles: ["admin", "supplier"] },
+      { key: "registrations", labelKey: "nav.registrations", route: "/admin/registrations", icon: "RG", sortOrder: 20, roles: ["admin"] },
+      { key: "suppliers", labelKey: "nav.suppliers", route: "/suppliers", icon: "SP", sortOrder: 30, roles: ["admin", "purchaser"] }
     ]
   },
   {
@@ -123,15 +126,14 @@ export const menuItems: WorkbenchMenuItem[] = [
     labelKey: "nav.basicManagement",
     icon: "BSV",
     sortOrder: 100,
-    roles: ["admin", "purchaser", "supplier"],
+    roles: ["admin", "purchaser", "supplier", "operator"],
     children: [
-      { key: "supplierProducts", labelKey: "nav.supplierProducts", route: "/shop/products", icon: "SKU", sortOrder: 0, roles: ["admin", "purchaser", "supplier"] },
       { key: "impa", labelKey: "nav.impa", route: "/standard-library/impa", icon: "IM", sortOrder: 10, roles: ["admin", "purchaser"] },
-      { key: "suppliers", labelKey: "nav.suppliers", route: "/suppliers", icon: "SP", sortOrder: 20, roles: ["admin", "purchaser"] },
-      { key: "registrations", labelKey: "nav.registrations", route: "/admin/registrations", icon: "RG", sortOrder: 30, roles: ["admin"] },
+      { key: "provisionStandard", labelKey: "nav.provisionStandard", route: "/standard-library/provision", icon: "FS", sortOrder: 15, roles: ["admin", "purchaser", "supplier", "operator"] },
       { key: "permissions", labelKey: "nav.permissions", route: "/admin/permissions", icon: "PM", sortOrder: 40, roles: ["admin"] },
       { key: "menuManagement", labelKey: "nav.menuManagement", route: "/admin/menus", icon: "MN", sortOrder: 50, roles: ["admin"] },
-      { key: "dataDictionary", labelKey: "nav.dataDictionary", route: "/admin/dictionaries", icon: "DD", sortOrder: 60, roles: ["admin"] }
+      { key: "dataDictionary", labelKey: "nav.dataDictionary", route: "/admin/dictionaries", icon: "DD", sortOrder: 60, roles: ["admin"] },
+      { key: "companyMembers", labelKey: "nav.companyMembers", route: "/company/members", icon: "CM", sortOrder: 70, roles: ["purchaser", "supplier", "operator"] }
     ]
   }
 ];

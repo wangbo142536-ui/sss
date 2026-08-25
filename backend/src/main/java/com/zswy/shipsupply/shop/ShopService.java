@@ -6,8 +6,8 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -93,7 +93,9 @@ public class ShopService {
 
     public ShopSkuListResponse listSkus(
         String authorizationHeader,
+        Long requestedCompanyId,
         String productType,
+        String categoryName,
         String codeStatus,
         String shelfStatus,
         String keyword,
@@ -101,14 +103,54 @@ public class ShopService {
         int size
     ) {
         CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        long targetCompanyId = requestedCompanyId == null ? currentUser.companyId() : requestedCompanyId;
+        if (targetCompanyId != currentUser.companyId() && !shopRepository.isSupplierCompany(targetCompanyId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND: supplier not found");
+        }
         return shopRepository.listSkus(
-            currentUser.companyId(),
+            targetCompanyId,
             optional(productType),
+            optional(categoryName),
             optional(codeStatus),
             optional(shelfStatus),
             optional(keyword),
             page <= 0 ? 1 : page,
             size <= 0 ? 20 : Math.min(size, 100)
+        );
+    }
+
+    public ShopSkuListResponse listSkus(
+        String authorizationHeader,
+        String productType,
+        String categoryName,
+        String codeStatus,
+        String shelfStatus,
+        String keyword,
+        int page,
+        int size
+    ) {
+        return listSkus(authorizationHeader, null, productType, categoryName, codeStatus, shelfStatus, keyword, page, size);
+    }
+
+    public SupplierListResponse listSuppliers(
+        String authorizationHeader,
+        Long companyId,
+        String keyword,
+        String port,
+        String category,
+        String status,
+        int page,
+        int size
+    ) {
+        currentUserService.requireActiveCompanyUser(authorizationHeader);
+        return shopRepository.listSuppliers(
+            companyId,
+            optional(keyword),
+            optional(port),
+            optional(category),
+            optional(status),
+            page <= 0 ? 1 : page,
+            size <= 0 ? 50 : Math.min(size, 200)
         );
     }
 
@@ -121,15 +163,40 @@ public class ShopService {
         int page,
         int size
     ) {
+        return listSuppliers(authorizationHeader, null, keyword, port, category, status, page, size);
+    }
+
+    public SupplierQualificationListResponse listSupplierQualifications(String authorizationHeader, Long companyId) {
         currentUserService.requireActiveCompanyUser(authorizationHeader);
-        return shopRepository.listSuppliers(
-            optional(keyword),
-            optional(port),
-            optional(category),
-            optional(status),
-            page <= 0 ? 1 : page,
-            size <= 0 ? 50 : Math.min(size, 200)
-        );
+        if (companyId == null || !shopRepository.isActiveSupplierCompany(companyId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND: supplier not found");
+        }
+        return new SupplierQualificationListResponse(shopRepository.listSupplierQualifications(companyId));
+    }
+
+    @Transactional
+    public SupplierStatusUpdateResponse updateSupplierStatus(
+        String authorizationHeader,
+        Long companyId,
+        SupplierStatusUpdateRequest request
+    ) {
+        CurrentUserContext currentUser = currentUserService.requireActiveCompanyUser(authorizationHeader);
+        if (!authRepository.hasRole(currentUser.userId(), "PLATFORM_ADMIN")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "PLATFORM_ADMIN_REQUIRED: platform admin role is required");
+        }
+        if (companyId == null || request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SUPPLIER_STATUS_REQUIRED: supplier and status are required");
+        }
+        String targetStatus = optional(request.status());
+        targetStatus = targetStatus == null ? "" : targetStatus.toUpperCase(Locale.ROOT);
+        if (!List.of("ACTIVE", "DISABLED").contains(targetStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SUPPLIER_STATUS_INVALID: status must be ACTIVE or DISABLED");
+        }
+        if (!shopRepository.updateSupplierStatus(companyId, targetStatus)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND: supplier not found");
+        }
+        shopRepository.logSupplierStatusChange(currentUser.userId(), companyId, targetStatus);
+        return new SupplierStatusUpdateResponse(companyId, targetStatus);
     }
 
     @Transactional
@@ -151,7 +218,6 @@ public class ShopService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SKU_ITEMS_REQUIRED: 商品保存列表不能为空");
         }
         long shopId = shopRepository.ensureShop(currentUser.companyId(), currentUser.userId());
-        ensureNoDuplicateSupplierSkuCodes(rows);
         List<ShopSkuResponse> saved = new ArrayList<>();
         List<ShopSkuBatchUpsertRowResult> rowResults = new ArrayList<>();
         int insertedCount = 0;
@@ -169,23 +235,8 @@ public class ShopService {
             }
             Long skuId = row.skuId();
             ShopSkuResponse existingSku = null;
-            String supplierSkuCode = optional(safeSku.supplierSkuCode());
-            if (supplierSkuCode == null) {
-                throw batchRowError(row, safeSku, "SUPPLIER_SKU_CODE_REQUIRED", "供货商SKU编码不能为空", null);
-            }
             if (skuId != null) {
                 existingSku = requireExistingSku(currentUser.companyId(), skuId);
-            } else {
-                existingSku = shopRepository.findSkuBySupplierSkuCode(
-                    currentUser.companyId(),
-                    shopId,
-                    safeSku.productType(),
-                    supplierSkuCode
-                )
-                    .orElse(null);
-                if (existingSku != null) {
-                    skuId = existingSku.skuId();
-                }
             }
             String status = skuId == null ? "INSERTED" : "UPDATED";
             safeSku = preservingExistingFieldsForUpdate(safeSku, existingSku);
@@ -313,6 +364,14 @@ public class ShopService {
     public byte[] importTemplate(String authorizationHeader) {
         currentUserService.requireActiveCompanyUser(authorizationHeader);
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            workbook.getProperties().getCustomProperties().addProperty(
+                "ShipSupplyTemplateVersion",
+                XlsxMaterialQuoteParser.OFFICIAL_SHOP_TEMPLATE_VERSION
+            );
+            workbook.getProperties().getCustomProperties().addProperty(
+                "ShipSupplyTemplateFingerprint",
+                XlsxMaterialQuoteParser.OFFICIAL_SHOP_TEMPLATE_FINGERPRINT
+            );
             CellStyle headerStyle = workbook.createCellStyle();
             Font headerFont = workbook.createFont();
             headerFont.setBold(true);
@@ -323,7 +382,11 @@ public class ShopService {
                 headerStyle,
                 List.of(
                     "Product Name", "Supplier SKU Code", "Qty", "Unit", "IMPA", "Specification",
-                    "Unit Price", "Stock", "Packing", "Barcode", "Category"
+                    "Unit Price", "Stock", "Packing", "Barcode", "Category", "图片（可粘贴）"
+                ),
+                List.of(
+                    "示例：船用工作手套", XlsxMaterialQuoteParser.OFFICIAL_TEMPLATE_EXAMPLE_PREFIX + "MATERIAL__",
+                    "100", "双", "", "耐油 / L码", "12.80", "500", "10双/包", "", "", ""
                 )
             );
             writeTemplateSheet(
@@ -332,7 +395,11 @@ public class ShopService {
                 headerStyle,
                 List.of(
                     "Product Name", "Supplier SKU Code", "Qty", "Unit", "Specification",
-                    "Unit Price", "Stock", "Packing", "Barcode", "Category"
+                    "Unit Price", "Stock", "Packing", "Barcode", "Category", "图片（可粘贴）"
+                ),
+                List.of(
+                    "示例：东北大米", XlsxMaterialQuoteParser.OFFICIAL_TEMPLATE_EXAMPLE_PREFIX + "FOOD__",
+                    "20", "袋", "25kg/袋", "138.00", "100", "编织袋", "", "粮油米面", ""
                 )
             );
             workbook.write(output);
@@ -346,7 +413,8 @@ public class ShopService {
         XSSFWorkbook workbook,
         String sheetName,
         CellStyle headerStyle,
-        List<String> headers
+        List<String> headers,
+        List<String> example
     ) {
         Sheet sheet = workbook.createSheet(sheetName);
         var headerRow = sheet.createRow(0);
@@ -355,7 +423,21 @@ public class ShopService {
             cell.setCellValue(headers.get(index));
             cell.setCellStyle(headerStyle);
             sheet.setColumnWidth(index, Math.min(50, Math.max(14, headers.get(index).length() + 4)) * 256);
+            if (headers.get(index).contains("图片")) {
+                var helper = workbook.getCreationHelper();
+                var anchor = helper.createClientAnchor();
+                anchor.setCol1(index);
+                anchor.setCol2(index + 3);
+                anchor.setRow1(0);
+                anchor.setRow2(4);
+                var comment = sheet.createDrawingPatriarch().createCellComment(anchor);
+                comment.setAuthor("CS");
+                comment.setString(helper.createRichTextString("可直接粘贴或插入商品图片；每个商品一行，图片锚定到该商品所在行。示例行仅作说明，系统不会导入。"));
+                cell.setCellComment(comment);
+            }
         }
+        var exampleRow = sheet.createRow(1);
+        for (int index = 0; index < example.size(); index++) exampleRow.createCell(index).setCellValue(example.get(index));
         sheet.createFreezePane(0, 1);
     }
 
@@ -456,6 +538,8 @@ public class ShopService {
             optional(request.impaCode()),
             optional(request.supplierSkuCode()),
             productName,
+            truncate(optional(request.productDescription()), 4000),
+            normalizedProductTags(request.productTags()),
             list(request.specifications()),
             request.stockQty(),
             optional(request.stockUnit()),
@@ -502,6 +586,8 @@ public class ShopService {
             sku.impaCode(),
             supplierSkuCode,
             sku.productName(),
+            sku.productDescription(),
+            sku.productTags(),
             sku.specifications(),
             sku.stockQty(),
             sku.stockUnit(),
@@ -528,21 +614,6 @@ public class ShopService {
         );
     }
 
-    private void ensureNoDuplicateSupplierSkuCodes(List<ShopSkuUpsertItem> rows) {
-        Map<String, ShopSkuUpsertItem> seen = new HashMap<>();
-        for (ShopSkuUpsertItem row : rows) {
-            String supplierSkuCode = supplierSkuCode(row);
-            if (supplierSkuCode == null) {
-                continue;
-            }
-            String key = productTypeKey(row) + ":" + supplierKey(supplierSkuCode);
-            ShopSkuUpsertItem first = seen.putIfAbsent(key, row);
-            if (first != null) {
-                throw batchRowError(row, row.sku(), "DUPLICATE_SUPPLIER_SKU_CODE", "同一批次存在重复供货商SKU编码", null);
-            }
-        }
-    }
-
     private String supplierSkuCode(ShopSkuUpsertItem row) {
         if (row == null) {
             return null;
@@ -552,15 +623,6 @@ public class ShopService {
             return outer;
         }
         return row.sku() == null ? null : optional(row.sku().supplierSkuCode());
-    }
-
-    private String productTypeKey(ShopSkuUpsertItem row) {
-        String productType = row == null || row.sku() == null ? null : optional(row.sku().productType());
-        return productType == null ? MATERIAL : productType.toUpperCase(Locale.ROOT);
-    }
-
-    private String supplierKey(String supplierSkuCode) {
-        return supplierSkuCode == null ? null : supplierSkuCode.trim().toUpperCase(Locale.ROOT);
     }
 
     private String validatedProductType(String productType) {
@@ -586,6 +648,8 @@ public class ShopService {
             request.impaCode(),
             request.supplierSkuCode(),
             request.productName(),
+            request.productDescription(),
+            request.productTags(),
             request.specifications(),
             request.stockQty(),
             request.stockUnit(),
@@ -622,6 +686,24 @@ public class ShopService {
                 image.sortOrder()
             ))
             .toList();
+    }
+
+    private List<String> normalizedProductTags(List<String> productTags) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String value : list(productTags)) {
+            String tag = optional(value);
+            if (tag == null) {
+                continue;
+            }
+            if (tag.length() > 12) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PRODUCT_TAG_TOO_LONG: 单个商品标签最多12个字符");
+            }
+            normalized.add(tag);
+            if (normalized.size() > 6) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "TOO_MANY_PRODUCT_TAGS: 每个商品最多6个标签");
+            }
+        }
+        return List.copyOf(normalized);
     }
 
     private List<ShopSkuImageRequest> normalizedImages(ShopSkuRequest request) {
@@ -736,9 +818,11 @@ public class ShopService {
             long excelDoneAt = System.nanoTime();
             List<ShopImportPreviewItem> items = new ArrayList<>();
             for (MaterialQuoteRow row : materialDocument.rows()) {
+                if (isTemplateExample(row)) continue;
                 items.add(previewItem(row, batchId, companyId, shopId, userId, temp, MATERIAL));
             }
             for (MaterialQuoteRow row : foodDocument.rows()) {
+                if (isTemplateExample(row)) continue;
                 items.add(previewItem(row, batchId, companyId, shopId, userId, temp, FOOD));
             }
             items = withPreviewActions(items, companyId, shopId);
@@ -764,6 +848,11 @@ public class ShopService {
                 }
             }
         }
+    }
+
+    private boolean isTemplateExample(MaterialQuoteRow row) {
+        return row != null && row.supplierItemNo() != null
+            && row.supplierItemNo().startsWith(XlsxMaterialQuoteParser.OFFICIAL_TEMPLATE_EXAMPLE_PREFIX);
     }
 
     private void validateSheetHeader(Path sourceFile, String sheetName, MaterialParsedDocument document) throws IOException {
@@ -802,11 +891,16 @@ public class ShopService {
         ShopRecognitionResult recognition = material ? recognition(rawName, spec, packageSpec) : null;
         String cleanName = recognition == null ? rawName : recognition.cleanName();
         String productName = truncate(first(optional(cleanName), rawName), 500);
-        ShopImportRecommendation selected = recognition == null ? null : selectedRecommendation(recognition);
+        ShopImportRecommendation exactCode = material && recognitionService != null
+            ? recognitionService.resolveStandardCode(rawCode)
+            : null;
+        ShopImportRecommendation selected = exactCode != null
+            ? exactCode
+            : recognition == null ? null : selectedRecommendation(recognition);
         String impaCode = selected == null ? null : selected.impaCode();
         String categoryCode = selected == null ? optional(row.rawColumns().get("Category Code")) : selected.categoryCode();
         String categoryName = selected == null ? optional(row.rawColumns().get("Category")) : selected.categoryName();
-        String codeStatus = material ? codeStatus(recognition, rawCode) : "CONFIRMED";
+        String codeStatus = material ? codeStatus(recognition, exactCode) : "CONFIRMED";
         String exceptionReason = material && PENDING_EXCEPTION.equals(codeStatus) ? exceptionReason(recognition) : null;
         List<ShopParsedAttribute> parsedAttributes = recognition == null ? List.of() : recognition.parsedAttributes();
         List<ShopSkuAttributeResponse> specifications = previewAttributes(parsedAttributes, spec, packageSpec, barcode, row.rawColumns());
@@ -862,51 +956,13 @@ public class ShopService {
     }
 
     private List<ShopImportPreviewItem> withPreviewActions(List<ShopImportPreviewItem> items, long companyId, long shopId) {
-        Map<String, Integer> counts = new HashMap<>();
-        for (ShopImportPreviewItem item : items) {
-            String supplierSkuCode = optional(item.supplierSkuCode());
-            if (supplierSkuCode == null) {
-                continue;
-            }
-            counts.merge(item.productType() + ":" + supplierKey(supplierSkuCode), 1, Integer::sum);
-        }
         List<ShopImportPreviewItem> marked = new ArrayList<>();
         for (ShopImportPreviewItem item : items) {
-            String supplierSkuCode = optional(item.supplierSkuCode());
-            if (supplierSkuCode == null) {
-                marked.add(withPreviewAction(item, null, "BLOCKED", null, PENDING_EXCEPTION, "SUPPLIER_SKU_CODE_REQUIRED"));
-                continue;
-            }
-            String productType = validatedProductType(item.productType());
-            String duplicateKey = productType + ":" + supplierKey(supplierSkuCode);
-            if (counts.getOrDefault(duplicateKey, 0) > 1) {
-                ShopSkuResponse existing = shopRepository.findSkuBySupplierSkuCode(
-                    companyId,
-                    shopId,
-                    productType,
-                    supplierSkuCode
-                ).orElse(null);
-                marked.add(withPreviewAction(
-                    item,
-                    existing == null ? null : existing.skuId(),
-                    "DUPLICATE",
-                    existing,
-                    PENDING_EXCEPTION,
-                    "DUPLICATE_SUPPLIER_SKU_CODE"
-                ));
-                continue;
-            }
-            ShopSkuResponse existing = shopRepository.findSkuBySupplierSkuCode(
-                companyId,
-                shopId,
-                productType,
-                supplierSkuCode
-            ).orElse(null);
             marked.add(withPreviewAction(
                 item,
-                existing == null ? null : existing.skuId(),
-                existing == null ? "INSERT" : "UPDATE",
-                existing,
+                null,
+                "INSERT",
+                null,
                 item.codeStatus(),
                 item.exceptionReason()
             ));
@@ -991,8 +1047,8 @@ public class ShopService {
         return null;
     }
 
-    private String codeStatus(ShopRecognitionResult recognition, String rawCode) {
-        if (isStandardImpa(rawCode)) {
+    private String codeStatus(ShopRecognitionResult recognition, ShopImportRecommendation exactCode) {
+        if (exactCode != null && hasRecommendedCode(exactCode)) {
             return CODE_MATCHED;
         }
         if (hasRecommendedCode(recognition.logicRecommendation())) {

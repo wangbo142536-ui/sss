@@ -185,8 +185,9 @@ export default {
     materialProcurement: "Material Procurement Services",
     foodProcurement: "Food Procurement Services",
     impa: "IMPA Library",
-    suppliers: "Suppliers",
-    supplierProducts: "Company Management",
+    provisionStandard: "Provision Standard Library",
+    suppliers: "Service Provider Management",
+    supplierProducts: "Company Information",
     requests: "Material Entry",
     inquiries: "Inquiry Management",
     quotes: "Quote Management",
@@ -218,7 +219,7 @@ export default {
     dataAnalysis: "Data Analytics",
     settlements: "Settlement Management",
     companyMembers: "Company Members",
-    registrations: "Registration Review",
+    registrations: "Service Provider Review",
     permissions: "Permissions",
     menuManagement: "Menu Management",
     dataDictionary: "Data Dictionary",
@@ -241,10 +242,14 @@ export default {
     },
     impa: {
       title: "IMPA Standard Library",
-      subtitle: "Maintain standard code, code segments and material mappings."
+      subtitle: "Maintain standard code, code segments and material mappings.",
+      paginationSummary: "{total} items",
+      pageIndicator: "Page {page} / {total}",
+      prevPage: "Previous page",
+      nextPage: "Next page"
     },
     suppliers: {
-      title: "Suppliers",
+      title: "Service Provider Management",
       subtitle: "Manage qualification, port coverage, quote performance and status."
     },
     supplyChainFinance: {
@@ -303,14 +308,15 @@ export default {
       }
     },
     supplierProducts: {
-      title: "Company Management",
+      title: "Company Information",
       subtitle: "Maintain company products, SKU images, attributes, stock, barcode and daily price.",
       staticPreview: "Company data is connected to real APIs.",
-      pendingApi: "Use the connected company management actions.",
+      pendingApi: "Use the connected company information actions.",
       logoUpload: "Upload company LOGO",
       logoAlt: "Company LOGO",
       logoLocalPreview: "Company LOGO is previewed locally. Real upload and save APIs are pending.",
       logoUploadReady: "Company LOGO has been uploaded and saved. It will be loaded from the company profile after refresh.",
+      logoUploadPendingSave: "Company LOGO uploaded. Save the company profile to apply it.",
       logoUploadFailed: "Failed to upload company LOGO.",
       importButton: "Import",
       enterSectionFullscreen: "Expand product management",
@@ -326,8 +332,12 @@ export default {
       importStagePreview: "Build preview",
       importStageImpa: "IMPA check",
       importStageException: "Manual exceptions",
-      requestFailed: "Company management request failed.",
+      requestFailed: "Company information request failed.",
+      profileEdit: "Edit company profile",
+      profileSave: "Save company profile",
+      profileCancel: "Cancel editing",
       profileSaved: "Company profile saved.",
+      profileEmailInvalid: "Enter a valid contact email.",
       actionNeedsForm: "Use the connected import, shelf, delete or exception actions first. Add/edit forms will be connected after product confirmation.",
       profileSaveFailed: "Failed to save company profile.",
       importFailed: "Import preview failed.",
@@ -363,6 +373,7 @@ export default {
       imageUploadFailed: "Failed to upload product image.",
       specCount: "{count} specs",
       addSpec: "Add spec",
+      productDescriptionPlaceholder: "Enter the product use, material, features, or applicable scenarios",
       removeSpec: "Remove spec",
       specName: "Spec name",
       specValue: "Spec value",
@@ -396,7 +407,7 @@ export default {
       actionEditStore: "Edit company profile",
       actionAllOnShelf: "List all",
       actionAllOffShelf: "Unlist all",
-      actionCandidate: "Choose candidate",
+      actionCandidate: "Confirm current code candidate",
       actionManualCode: "Manual platform code",
       actionDefer: "Mark pending",
       flowUpload: "Upload",
@@ -500,7 +511,7 @@ export default {
       waitingCode: "Pending code",
       waitingManual: "Manual review required",
       searchPlaceholder: "Search product name, SKU, platform code, barcode or brand",
-      filterType: "Product type",
+      filterType: "Product category",
       filterCodeStatus: "Code status",
       typeMaterial: "Material",
       typeFood: "Food",
@@ -516,6 +527,7 @@ export default {
       field: {
         image: "Image",
         shopName: "Company name",
+        creditCode: "Unified social credit code",
         contactName: "Contact",
         contactPhone: "Phone",
         contactEmail: "Email",
@@ -524,6 +536,7 @@ export default {
         platformCode: "Platform code",
         supplierSkuCode: "Supplier SKU",
         productName: "Product name",
+        productDescription: "Product introduction",
         specs: "Specs",
         stock: "Stock",
         leadTime: "Lead time",
@@ -887,6 +900,7 @@ export default {
       companyNameRequired: "Enter the company name.",
       creditCodeRequired: "Enter the unified social credit code.",
       contactNameRequired: "Enter the contact person.",
+      contactNamePathInvalid: "The contact person cannot be a file path.",
       contactPhoneRequired: "Enter the contact phone.",
       contactEmailRequired: "Enter the contact email.",
       fileRequired: "Upload at least one qualification file.",
@@ -904,6 +918,10 @@ export default {
         uploaded: "Uploaded",
         failed: "Failed"
       },
+      reviewShellLabel: "Registration review status",
+      registrationSuccessTitle: "Registration successful",
+      platformReviewTitle: "Platform review in progress",
+      platformReviewDescription: "The review will be completed within one business day. Please watch for email or SMS notifications.",
       pendingTitle: "Pending platform review",
       pendingDescription: "Your company profile has been submitted. You can use the system after approval.",
       rejectedTitle: "Profile rejected",
@@ -1013,7 +1031,6 @@ export default {
       createRole: "Create role",
       edit: "Edit member",
       editRole: "Edit role",
-      configureRole: "Configure role permissions",
       disableRole: "Disable role",
       assignRoles: "Assign roles",
       enable: "Enable",
@@ -1048,6 +1065,7 @@ export default {
       roles: "Role management"
     },
     filter: {
+      searchLabel: "Search",
       keywordPlaceholder: "Account, name, phone or email"
     },
     placeholder: {
@@ -1162,6 +1180,13 @@ export default {
     supplierC: "Supplier C",
     skuSearch: "SKU search",
     skuSearchPlaceholder: "Search IMPA code, item name, SKU or supplier",
+    quickFilters: "Quick product filters",
+    coreOnly: "Core product",
+    unmatchedOnly: "U",
+    unmatchedOnlyLabel: "Filter unmatched or unselected products",
+    noCoreItems: "No core products in the current list",
+    noCoreIssueItems: "No issue rows among core products in the current list",
+    noUnmatchedItems: "No unmatched or unselected items in the current list",
     preferenceFilter: "Preference filter",
     priceLow: "Lower price",
     qualityFirst: "Better quality",
@@ -1224,7 +1249,7 @@ export default {
       weatherValue: "NE wind force 4-5, visibility 8-12 km, 13:30-17:00 suitable for transfer"
     },
     supplierAmount: {
-      title: "Supplier info",
+      title: "Service Provider Management",
       skuCount: "SKU {count}"
     },
     weather: {

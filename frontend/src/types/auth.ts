@@ -19,6 +19,7 @@ export interface AuthUser {
   phone?: string;
   email?: string;
   status?: string;
+  userType?: string;
 }
 
 export interface AuthMenu {

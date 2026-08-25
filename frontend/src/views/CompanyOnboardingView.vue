@@ -5,6 +5,7 @@ import heroPortImage from "@/assets/home-port-command.png";
 import LanguageSwitch from "@/components/LanguageSwitch.vue";
 import LoadingOverlay from "@/components/LoadingOverlay.vue";
 import { t } from "@/i18n";
+import { isSuspiciousContactPath } from "@/services/contactNamePolicy";
 import {
   clearAuthSession,
   getCompanyProfile,
@@ -221,6 +222,7 @@ const validate = () => {
   if (!companyName.value.trim()) errors.companyName = "page.onboarding.companyNameRequired";
   if (!unifiedSocialCreditCode.value.trim()) errors.creditCode = "page.onboarding.creditCodeRequired";
   if (!contactName.value.trim()) errors.contactName = "page.onboarding.contactNameRequired";
+  else if (isSuspiciousContactPath(contactName.value)) errors.contactName = "page.onboarding.contactNamePathInvalid";
   if (!contactPhone.value.trim()) errors.contactPhone = "page.onboarding.contactPhoneRequired";
   if (!contactEmail.value.trim()) errors.contactEmail = "page.onboarding.contactEmailRequired";
   if (!files.value.length) errors.files = "page.onboarding.fileRequired";
@@ -256,7 +258,7 @@ const submit = async () => {
       }, files.value.flatMap((file) => file.sourceFile ? [file.sourceFile] : []));
       saveAuthSession(session);
       statusMessageKey.value = "page.onboarding.submitSuccess";
-      await router.push("/onboarding/review-status");
+      await router.push(resolveAuthRoute(session));
       return;
     }
     const submittedProfile = await submitCompanyProfile({
@@ -375,11 +377,71 @@ const enterWorkbench = async () => {
             </fieldset>
 
             <template v-if="props.registrationMode">
-              <label class="form-field" :class="{ 'has-error': fieldErrors.account }">
-                <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.register.account") }}</span>
-                <input v-model="account" type="text" autocomplete="username" required :placeholder="t('page.register.accountPlaceholder')" />
-                <small v-if="fieldErrors.account">{{ t(fieldErrors.account) }}</small>
-              </label>
+              <div class="form-grid">
+                <label class="form-field" :class="{ 'has-error': fieldErrors.companyName }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.companyName") }}</span>
+                  <input
+                    v-model="companyName"
+                    :disabled="activeStatuses.has(profileStatus) || reauthRequired"
+                    type="text"
+                    autocomplete="organization"
+                    required
+                    :placeholder="t('page.onboarding.companyNamePlaceholder')"
+                    :aria-invalid="Boolean(fieldErrors.companyName)"
+                    :aria-describedby="fieldErrors.companyName ? 'onboarding-company-name-error' : undefined"
+                  />
+                  <small v-if="fieldErrors.companyName" id="onboarding-company-name-error">{{ t(fieldErrors.companyName) }}</small>
+                </label>
+
+                <label class="form-field" :class="{ 'has-error': fieldErrors.creditCode }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.creditCode") }}</span>
+                  <input
+                    v-model="unifiedSocialCreditCode"
+                    :disabled="activeStatuses.has(profileStatus) || reauthRequired"
+                    type="text"
+                    required
+                    :placeholder="t('page.onboarding.creditCodePlaceholder')"
+                    :aria-invalid="Boolean(fieldErrors.creditCode)"
+                    :aria-describedby="fieldErrors.creditCode ? 'onboarding-credit-code-error' : undefined"
+                  />
+                  <small v-if="fieldErrors.creditCode" id="onboarding-credit-code-error">{{ t(fieldErrors.creditCode) }}</small>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label class="form-field" :class="{ 'has-error': fieldErrors.contactName }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactName") }}</span>
+                  <input v-model="contactName" :disabled="activeStatuses.has(profileStatus) || reauthRequired" type="text" autocomplete="name" required :placeholder="t('page.onboarding.contactNamePlaceholder')" :aria-invalid="Boolean(fieldErrors.contactName)" :aria-describedby="fieldErrors.contactName ? 'onboarding-contact-name-error' : undefined" />
+                  <small v-if="fieldErrors.contactName" id="onboarding-contact-name-error">{{ t(fieldErrors.contactName) }}</small>
+                </label>
+
+                <label class="form-field" :class="{ 'has-error': fieldErrors.contactPhone }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactPhone") }}</span>
+                  <input v-model="contactPhone" :disabled="activeStatuses.has(profileStatus) || reauthRequired" type="tel" autocomplete="tel" required :placeholder="t('page.onboarding.contactPhonePlaceholder')" />
+                  <small v-if="fieldErrors.contactPhone">{{ t(fieldErrors.contactPhone) }}</small>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label class="form-field" :class="{ 'has-error': fieldErrors.contactEmail }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactEmail") }}</span>
+                  <input
+                    v-model="contactEmail"
+                    :disabled="activeStatuses.has(profileStatus) || reauthRequired"
+                    type="email"
+                    autocomplete="email"
+                    required
+                    :placeholder="t('page.onboarding.contactEmailPlaceholder')"
+                  />
+                  <small v-if="fieldErrors.contactEmail">{{ t(fieldErrors.contactEmail) }}</small>
+                </label>
+
+                <label class="form-field" :class="{ 'has-error': fieldErrors.account }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.register.account") }}</span>
+                  <input v-model="account" type="text" autocomplete="username" required :placeholder="t('page.register.accountPlaceholder')" />
+                  <small v-if="fieldErrors.account">{{ t(fieldErrors.account) }}</small>
+                </label>
+              </div>
 
               <div class="form-grid">
                 <label class="form-field" :class="{ 'has-error': fieldErrors.password }">
@@ -395,61 +457,63 @@ const enterWorkbench = async () => {
               </div>
             </template>
 
-            <label class="form-field" :class="{ 'has-error': fieldErrors.companyName }">
-              <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.companyName") }}</span>
-              <input
-                v-model="companyName"
-                :disabled="activeStatuses.has(profileStatus) || reauthRequired"
-                type="text"
-                autocomplete="organization"
-                required
-                :placeholder="t('page.onboarding.companyNamePlaceholder')"
-                :aria-invalid="Boolean(fieldErrors.companyName)"
-                :aria-describedby="fieldErrors.companyName ? 'onboarding-company-name-error' : undefined"
-              />
-              <small v-if="fieldErrors.companyName" id="onboarding-company-name-error">{{ t(fieldErrors.companyName) }}</small>
-            </label>
-
-            <label class="form-field" :class="{ 'has-error': fieldErrors.creditCode }">
-              <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.creditCode") }}</span>
-              <input
-                v-model="unifiedSocialCreditCode"
-                :disabled="activeStatuses.has(profileStatus) || reauthRequired"
-                type="text"
-                required
-                :placeholder="t('page.onboarding.creditCodePlaceholder')"
-                :aria-invalid="Boolean(fieldErrors.creditCode)"
-                :aria-describedby="fieldErrors.creditCode ? 'onboarding-credit-code-error' : undefined"
-              />
-              <small v-if="fieldErrors.creditCode" id="onboarding-credit-code-error">{{ t(fieldErrors.creditCode) }}</small>
-            </label>
-
-            <div class="form-grid">
-              <label class="form-field" :class="{ 'has-error': fieldErrors.contactName }">
-                <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactName") }}</span>
-                <input v-model="contactName" :disabled="activeStatuses.has(profileStatus) || reauthRequired" type="text" autocomplete="name" required :placeholder="t('page.onboarding.contactNamePlaceholder')" />
-                <small v-if="fieldErrors.contactName">{{ t(fieldErrors.contactName) }}</small>
+            <template v-else>
+              <label class="form-field" :class="{ 'has-error': fieldErrors.companyName }">
+                <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.companyName") }}</span>
+                <input
+                  v-model="companyName"
+                  :disabled="activeStatuses.has(profileStatus) || reauthRequired"
+                  type="text"
+                  autocomplete="organization"
+                  required
+                  :placeholder="t('page.onboarding.companyNamePlaceholder')"
+                  :aria-invalid="Boolean(fieldErrors.companyName)"
+                  :aria-describedby="fieldErrors.companyName ? 'onboarding-company-name-error' : undefined"
+                />
+                <small v-if="fieldErrors.companyName" id="onboarding-company-name-error">{{ t(fieldErrors.companyName) }}</small>
               </label>
 
-              <label class="form-field" :class="{ 'has-error': fieldErrors.contactPhone }">
-                <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactPhone") }}</span>
-                <input v-model="contactPhone" :disabled="activeStatuses.has(profileStatus) || reauthRequired" type="tel" autocomplete="tel" required :placeholder="t('page.onboarding.contactPhonePlaceholder')" />
-                <small v-if="fieldErrors.contactPhone">{{ t(fieldErrors.contactPhone) }}</small>
+              <label class="form-field" :class="{ 'has-error': fieldErrors.creditCode }">
+                <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.creditCode") }}</span>
+                <input
+                  v-model="unifiedSocialCreditCode"
+                  :disabled="activeStatuses.has(profileStatus) || reauthRequired"
+                  type="text"
+                  required
+                  :placeholder="t('page.onboarding.creditCodePlaceholder')"
+                  :aria-invalid="Boolean(fieldErrors.creditCode)"
+                  :aria-describedby="fieldErrors.creditCode ? 'onboarding-credit-code-error' : undefined"
+                />
+                <small v-if="fieldErrors.creditCode" id="onboarding-credit-code-error">{{ t(fieldErrors.creditCode) }}</small>
               </label>
-            </div>
 
-            <label class="form-field" :class="{ 'has-error': fieldErrors.contactEmail }">
-              <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactEmail") }}</span>
-              <input
-                v-model="contactEmail"
-                :disabled="activeStatuses.has(profileStatus) || reauthRequired"
-                type="email"
-                autocomplete="email"
-                required
-                :placeholder="t('page.onboarding.contactEmailPlaceholder')"
-              />
-              <small v-if="fieldErrors.contactEmail">{{ t(fieldErrors.contactEmail) }}</small>
-            </label>
+              <div class="form-grid">
+                <label class="form-field" :class="{ 'has-error': fieldErrors.contactName }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactName") }}</span>
+                  <input v-model="contactName" :disabled="activeStatuses.has(profileStatus) || reauthRequired" type="text" autocomplete="name" required :placeholder="t('page.onboarding.contactNamePlaceholder')" :aria-invalid="Boolean(fieldErrors.contactName)" :aria-describedby="fieldErrors.contactName ? 'onboarding-contact-name-error' : undefined" />
+                  <small v-if="fieldErrors.contactName" id="onboarding-contact-name-error">{{ t(fieldErrors.contactName) }}</small>
+                </label>
+
+                <label class="form-field" :class="{ 'has-error': fieldErrors.contactPhone }">
+                  <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactPhone") }}</span>
+                  <input v-model="contactPhone" :disabled="activeStatuses.has(profileStatus) || reauthRequired" type="tel" autocomplete="tel" required :placeholder="t('page.onboarding.contactPhonePlaceholder')" />
+                  <small v-if="fieldErrors.contactPhone">{{ t(fieldErrors.contactPhone) }}</small>
+                </label>
+              </div>
+
+              <label class="form-field" :class="{ 'has-error': fieldErrors.contactEmail }">
+                <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.contactEmail") }}</span>
+                <input
+                  v-model="contactEmail"
+                  :disabled="activeStatuses.has(profileStatus) || reauthRequired"
+                  type="email"
+                  autocomplete="email"
+                  required
+                  :placeholder="t('page.onboarding.contactEmailPlaceholder')"
+                />
+                <small v-if="fieldErrors.contactEmail">{{ t(fieldErrors.contactEmail) }}</small>
+              </label>
+            </template>
 
             <div class="upload-field" :class="{ 'has-error': fieldErrors.files }">
               <span class="required-label"><i aria-hidden="true">*</i>{{ t("page.onboarding.qualificationFiles") }}</span>

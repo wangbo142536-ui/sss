@@ -105,6 +105,7 @@ class CompanyProfileControllerTest {
             "91330000TEST",
             "LOGO-1",
             "/api/files/LOGO-1",
+            "Professional marine supply enterprise.",
             "Wang Bo",
             "13800000000",
             "wb@example.com",

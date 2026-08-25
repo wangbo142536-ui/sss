@@ -58,7 +58,8 @@ describe("food procurement material style contract", () => {
     expect(inquirySource).not.toContain("food-inquiry-table");
     expect(comparisonSource).toContain("procurement-query-card is-comparison");
     expect(comparisonSource).toContain("procurement-query-card-list");
-    expect(comparisonSource).toContain(".slice(0, 3)");
+    expect(comparisonSource).toContain("mixedSupplierCount: 3");
+    expect(comparisonSource).toContain("slice(0, targetMixedSupplierCount.value)");
   });
 
   it("keeps inquiry and deadline times together in one inquiry-card row", () => {
@@ -120,6 +121,13 @@ describe("food procurement material style contract", () => {
     expect(comparisonSource).toContain("requestedQuantity * unitPrice");
     expect(comparisonSource).toContain("food-comparison-workspace");
     expect(comparisonSource).not.toContain("MANUAL");
+    expect(comparisonSource).toContain('class="compare-quick-filters"');
+    expect(comparisonSource).toContain('class="compare-core-filter"');
+    expect(comparisonSource).toContain('class="compare-unmatched-filter"');
+    expect(comparisonSource).toContain('type="unmatched"');
+    expect(comparisonSource).toContain('v-if="isComparisonQualityProduct(row)" type="quality"');
+    expect(comparisonSource.indexOf('label="保存比价设置"')).toBeLessThan(comparisonSource.indexOf('label="导出比价报价表"'));
+    expect(comparisonSource.indexOf('label="比价策略引擎"')).toBeLessThan(comparisonSource.indexOf('label="导出比价报价表"'));
   });
 
   it("reuses the material order card and timeline contract", () => {

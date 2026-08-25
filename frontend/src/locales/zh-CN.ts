@@ -185,8 +185,9 @@ export default {
     materialProcurement: "物料采购服务",
     foodProcurement: "伙食采购服务",
     impa: "IMPA 标准库",
-    suppliers: "供货商信息",
-    supplierProducts: "企业管理",
+    provisionStandard: "伙食标准库",
+    suppliers: "服务商管理",
+    supplierProducts: "企业信息",
     requests: "物料采购入口",
     inquiries: "询价管理",
     quotes: "报价管理",
@@ -218,7 +219,7 @@ export default {
     dataAnalysis: "数据分析",
     settlements: "结算管理",
     companyMembers: "企业成员",
-    registrations: "注册审核",
+    registrations: "服务商审核",
     permissions: "权限管理",
     menuManagement: "菜单管理",
     dataDictionary: "数据字典",
@@ -241,10 +242,14 @@ export default {
     },
     impa: {
       title: "IMPA 标准库",
-      subtitle: "按标准编码、二级码段和条目维护物料标准映射。"
+      subtitle: "按标准编码、二级码段和条目维护物料标准映射。",
+      paginationSummary: "共 {total} 条",
+      pageIndicator: "第 {page} / {total} 页",
+      prevPage: "上一页",
+      nextPage: "下一页"
     },
     suppliers: {
-      title: "供货商信息",
+      title: "服务商管理",
       subtitle: "维护供货商资质、港口覆盖、报价表现和协作状态。"
     },
     supplyChainFinance: {
@@ -303,14 +308,15 @@ export default {
       }
     },
     supplierProducts: {
-      title: "企业管理",
+      title: "企业信息",
       subtitle: "维护供货商商品、SKU 图片、属性组合、库存、条码和日价。",
       staticPreview: "企业数据已接入真实接口。",
-      pendingApi: "请使用当前已接入的企业管理操作。",
+      pendingApi: "请使用当前已接入的企业信息操作。",
       logoUpload: "上传企业 LOGO",
       logoAlt: "企业 LOGO",
       logoLocalPreview: "企业 LOGO 已在本地预览，真实上传保存接口待接入。",
       logoUploadReady: "企业 LOGO 已上传并保存，刷新后将显示后端返回的 LOGO。",
+      logoUploadPendingSave: "企业 LOGO 已上传，请保存企业资料后生效。",
       logoUploadFailed: "企业 LOGO 上传失败。",
       importButton: "导入",
       enterSectionFullscreen: "放大商品管理",
@@ -326,8 +332,12 @@ export default {
       importStagePreview: "生成预览",
       importStageImpa: "IMPA 编码核对",
       importStageException: "异常待人工",
-      requestFailed: "企业管理接口请求失败。",
+      requestFailed: "企业信息接口请求失败。",
+      profileEdit: "编辑企业资料",
+      profileSave: "保存企业资料",
+      profileCancel: "取消编辑",
       profileSaved: "企业资料已保存。",
+      profileEmailInvalid: "请输入正确的联系邮箱。",
       actionNeedsForm: "请先使用导入、上下架、删除或异常处理等已接入操作；新增/编辑表单待产品确认后接入。",
       profileSaveFailed: "企业资料保存失败。",
       importFailed: "导入预览失败。",
@@ -363,6 +373,7 @@ export default {
       imageUploadFailed: "商品图片上传失败。",
       specCount: "{count} 项规格",
       addSpec: "添加规格",
+      productDescriptionPlaceholder: "请输入产品用途、材质、特点或适用场景",
       removeSpec: "删除规格",
       specName: "规格名",
       specValue: "规格值",
@@ -396,7 +407,7 @@ export default {
       actionEditStore: "编辑企业资料",
       actionAllOnShelf: "全体上架",
       actionAllOffShelf: "全体下架",
-      actionCandidate: "选择候选",
+      actionCandidate: "确认当前编码候选",
       actionManualCode: "手动录入平台编码",
       actionDefer: "标记暂不处理",
       flowUpload: "上传",
@@ -500,7 +511,7 @@ export default {
       waitingCode: "待编码",
       waitingManual: "待人工确认",
       searchPlaceholder: "搜索商品名称、SKU、平台编码、条码或品牌",
-      filterType: "商品类型",
+      filterType: "商品分类",
       filterCodeStatus: "编码状态",
       typeMaterial: "物料",
       typeFood: "伙食",
@@ -516,6 +527,7 @@ export default {
       field: {
         image: "图片",
         shopName: "企业名称",
+        creditCode: "统一社会信用代码",
         contactName: "联系人",
         contactPhone: "联系电话",
         contactEmail: "联系邮箱",
@@ -524,6 +536,7 @@ export default {
         platformCode: "平台编码",
         supplierSkuCode: "供应商 SKU 编码",
         productName: "商品名称",
+        productDescription: "产品介绍",
         specs: "规格",
         stock: "库存",
         leadTime: "备货时长",
@@ -880,6 +893,7 @@ export default {
       companyNameRequired: "请输入企业名称。",
       creditCodeRequired: "请输入社会信用代码。",
       contactNameRequired: "请输入联系人。",
+      contactNamePathInvalid: "联系人不能是文件路径，请重新输入。",
       contactPhoneRequired: "请输入联系电话。",
       contactEmailRequired: "请输入联系邮箱。",
       fileRequired: "请至少上传一个资质文件。",
@@ -897,6 +911,10 @@ export default {
         uploaded: "已上传",
         failed: "上传失败"
       },
+      reviewShellLabel: "注册审核状态",
+      registrationSuccessTitle: "已注册成功",
+      platformReviewTitle: "平台审核中",
+      platformReviewDescription: "一个工作日完成审核，请注意邮箱/短信消息提醒。",
       pendingTitle: "等待平台审核",
       pendingDescription: "企业入驻资料已提交，审核通过后才能使用系统。",
       rejectedTitle: "资料被驳回",
@@ -1006,7 +1024,6 @@ export default {
       create: "新增成员",
       edit: "编辑成员",
       editRole: "编辑角色",
-      configureRole: "配置角色权限",
       disableRole: "停用角色",
       assignRoles: "分配角色",
       enable: "启用",
@@ -1041,6 +1058,7 @@ export default {
       roles: "角色管理"
     },
     filter: {
+      searchLabel: "检索",
       keywordPlaceholder: "账号、姓名、手机号或邮箱"
     },
     placeholder: {
@@ -1155,6 +1173,13 @@ export default {
     supplierC: "供C",
     skuSearch: "SKU 搜索",
     skuSearchPlaceholder: "搜索 IMPA 编码、品名、SKU 或供货商",
+    quickFilters: "商品快速筛选",
+    coreOnly: "核心商品",
+    unmatchedOnly: "未",
+    unmatchedOnlyLabel: "筛选未匹配或未勾选商品",
+    noCoreItems: "当前列表没有核心商品",
+    noCoreIssueItems: "当前列表没有同时属于核心商品的问题明细",
+    noUnmatchedItems: "当前列表没有未匹配或未勾选的明细",
     preferenceFilter: "偏好筛选",
     priceLow: "价格低",
     qualityFirst: "质量优",
@@ -1227,7 +1252,7 @@ export default {
       weatherValue: "东北风 4-5 级，能见度 8-12 km，13:30-17:00 适合转运"
     },
     supplierAmount: {
-      title: "供货商信息",
+      title: "服务商管理",
       skuCount: "SKU {count}"
     },
     weather: {

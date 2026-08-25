@@ -7,6 +7,8 @@ import IconButton from "@/components/IconButton.vue";
 import LoadingOverlay from "@/components/LoadingOverlay.vue";
 import StableDateTimeInput from "@/components/StableDateTimeInput.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
+import ComparisonStrategyDialog from "@/modules/procurement/shared/components/ComparisonStrategyDialog.vue";
+import ComparisonStrategyIcon from "@/modules/procurement/shared/components/ComparisonStrategyIcon.vue";
 import { listCompanyContacts } from "@/services/companyService";
 import type { TableColumn } from "@/types/workbench";
 import FoodTrafficShuttleSelector, { type FoodTrafficShuttleSelection } from "../components/FoodTrafficShuttleSelector.vue";
@@ -29,6 +31,9 @@ type SupplierSummary = {
   coveredItemCount: number;
   totalAmount: number;
   enabled: boolean;
+  priceTaggedCount: number;
+  qualityTaggedCount: number;
+  coreCoveredCount: number;
 };
 type ComparisonRow = Record<string, unknown> & {
   id: string;
@@ -48,6 +53,7 @@ type ComparisonRow = Record<string, unknown> & {
   costSubtotal: number;
   quantitySatisfied: boolean;
   priceSource: string;
+  productTags: string[];
 };
 
 type FoodOrderTrafficService = {
@@ -85,6 +91,9 @@ const demands = ref<FoodDemandSummary[]>([]);
 const comparison = ref<FoodComparison>();
 const strategy = ref<StrategyKey>("LOWEST_ITEM");
 const selectedSupplierCompanyId = ref<number>();
+const strategyDialogOpen = ref(false);
+const compareCoreOnly = ref(false);
+const compareUnmatchedOnly = ref(false);
 const expandedRowId = ref("");
 const settings = ref<FoodComparisonSettings>({
   markupPercent: 10,
@@ -96,7 +105,13 @@ const settings = ref<FoodComparisonSettings>({
   fixedProviderType: "BARGE",
   fixedProviderId: "",
   fixedProviderName: "",
-  trafficServiceJson: ""
+  trafficServiceJson: "",
+  mixedSupplierCount: 3,
+  priceEnabled: true,
+  priceLevel: 5,
+  qualityEnabled: true,
+  qualityLevel: 3,
+  coreDemandItemIds: []
 });
 const settingsSaving = ref(false);
 const comparisonExporting = ref(false);
@@ -131,7 +146,7 @@ const orderForm = ref({
 const orderFormErrors = ref({ requiredDeliveryTime: "", deliveryAddress: "", deliveryContactName: "", deliveryContactPhone: "" });
 
 const comparisonColumns: TableColumn[] = [
-  { key: "selection", label: "序号", width: "72px", align: "center" },
+  { key: "selection", label: "序号", width: "92px", align: "center" },
   { key: "name", label: "伙食名称", width: "22%" },
   { key: "specification", label: "规格", width: "22%" },
   { key: "requestedQuantity", label: "需求数量", width: "12%", align: "right" },
@@ -145,6 +160,12 @@ const visibleDemands = computed(() => demands.value.filter((row) => {
   return (!dateFrom.value || rowDate >= dateFrom.value) && (!dateTo.value || rowDate <= dateTo.value);
 }));
 const selectedDemandItemIdSet = computed(() => new Set(selectedDemandItemIds.value));
+const coreDemandItemIdSet = computed(() => new Set(settings.value.coreDemandItemIds || []));
+const targetMixedSupplierCount = computed(() => Math.max(2, Math.min(10, Number(settings.value.mixedSupplierCount || 3))));
+
+function hasProductTag(option: FoodComparisonOption, tag: string) {
+  return (option.productTags || []).includes(tag);
+}
 
 const supplierSummaries = computed<SupplierSummary[]>(() => {
   if (!comparison.value) return [];
@@ -163,19 +184,70 @@ const supplierSummaries = computed<SupplierSummary[]>(() => {
       supplierName: entry.name,
       coveredItemCount: selectedValid.length,
       totalAmount: selectedValid.reduce((sum, option) => sum + option.requestedQuantity * option.unitPrice, 0),
-      enabled: allValid.length === comparison.value!.items.length
+      enabled: allValid.length === comparison.value!.items.length,
+      priceTaggedCount: selectedValid.filter((option) => hasProductTag(option, "价格低")).length,
+      qualityTaggedCount: selectedValid.filter((option) => hasProductTag(option, "质量高")).length,
+      coreCoveredCount: selectedValid.filter((option) => coreDemandItemIdSet.value.has(option.demandItemId)).length
     };
-  }).sort((left, right) => left.totalAmount - right.totalAmount || left.supplierName.localeCompare(right.supplierName)).slice(0, 3);
+  }).sort((left, right) => {
+    const qualityWeight = settings.value.qualityEnabled ? Number(settings.value.qualityLevel || 3) : 0;
+    const priceWeight = settings.value.priceEnabled ? Number(settings.value.priceLevel || 5) : 0;
+    const leftScore = left.coveredItemCount * 100 + left.qualityTaggedCount * qualityWeight * 5 + left.priceTaggedCount * priceWeight * 2;
+    const rightScore = right.coveredItemCount * 100 + right.qualityTaggedCount * qualityWeight * 5 + right.priceTaggedCount * priceWeight * 2;
+    return rightScore - leftScore || left.totalAmount - right.totalAmount || left.supplierName.localeCompare(right.supplierName);
+  }).slice(0, 10);
 });
 
-const singleSupplierStrategy = computed(() => comparison.value?.strategies.find((item) => item.strategyType === "SINGLE_SUPPLIER"));
-const selectedSingleSupplier = computed(() => {
-  const supplierCompanyId = singleSupplierStrategy.value?.supplierCompanyId;
-  return supplierSummaries.value.find((item) => item.supplierCompanyId === supplierCompanyId)
-    || supplierSummaries.value.find((item) => item.enabled);
+const completeSuppliers = computed(() => supplierSummaries.value.filter((item) => item.enabled));
+const lowestCompleteSupplier = computed(() => completeSuppliers.value.slice().sort((a, b) => a.totalAmount - b.totalAmount)[0]);
+const qualityCompleteSupplier = computed(() => settings.value.qualityEnabled
+  ? completeSuppliers.value.slice().sort((a, b) => b.qualityTaggedCount - a.qualityTaggedCount || a.totalAmount - b.totalAmount)[0]
+  : undefined);
+const concentratedSupplierCards = computed(() => {
+  const unique = new Map<number, SupplierSummary>();
+  [lowestCompleteSupplier.value, qualityCompleteSupplier.value].forEach((item) => { if (item) unique.set(item.supplierCompanyId, item); });
+  return Array.from(unique.values());
 });
-const concentratedSupplierCards = computed(() => selectedSingleSupplier.value ? [selectedSingleSupplier.value] : []);
-const concentratedStrategyEnabled = computed(() => singleSupplierStrategy.value?.enabled !== false && Boolean(selectedSingleSupplier.value?.enabled));
+const selectedSingleSupplier = computed(() => concentratedSupplierCards.value.find((item) => item.supplierCompanyId === selectedSupplierCompanyId.value)
+  || concentratedSupplierCards.value[0]);
+const concentratedStrategyEnabled = computed(() => concentratedSupplierCards.value.length > 0);
+
+function optionStrategyScore(option: FoodComparisonOption, options: FoodComparisonOption[]) {
+  const valid = options.filter((item) => item.quantitySatisfied);
+  const comparable = valid.length ? valid : options;
+  const min = Math.min(...comparable.map((item) => Number(item.unitPrice || 0)));
+  const max = Math.max(...comparable.map((item) => Number(item.unitPrice || 0)));
+  const priceScore = max === min ? 1 : (max - Number(option.unitPrice || 0)) / (max - min);
+  const priceWeight = settings.value.priceEnabled ? Number(settings.value.priceLevel || 5) : 0;
+  const qualityWeight = settings.value.qualityEnabled ? Number(settings.value.qualityLevel || 3) : 0;
+  return (option.quantitySatisfied ? 50 : 0) + priceScore * priceWeight
+    + (hasProductTag(option, "价格低") ? priceWeight * 0.35 : 0)
+    + (hasProductTag(option, "质量高") ? qualityWeight : 0);
+}
+
+const mixedSupplierCards = computed(() => supplierSummaries.value.slice(0, targetMixedSupplierCount.value));
+const mixedAssignments = computed(() => {
+  const result = new Map<number, FoodComparisonOption>();
+  const supplierIds = new Set(mixedSupplierCards.value.map((item) => item.supplierCompanyId));
+  const usedItems = new Set<number>();
+  mixedSupplierCards.value.forEach((supplier) => {
+    const candidate = (comparison.value?.items || []).flatMap((item) => item.quotes
+      .filter((option) => option.supplierCompanyId === supplier.supplierCompanyId && !usedItems.has(item.demandItemId))
+      .map((option) => ({ itemId: item.demandItemId, option, score: optionStrategyScore(option, item.quotes) + (coreDemandItemIdSet.value.has(item.demandItemId) ? 100 : 0) })))
+      .sort((a, b) => b.score - a.score)[0];
+    if (candidate) {
+      result.set(candidate.itemId, candidate.option);
+      usedItems.add(candidate.itemId);
+    }
+  });
+  (comparison.value?.items || []).forEach((item) => {
+    if (result.has(item.demandItemId)) return;
+    const option = item.quotes.filter((candidate) => supplierIds.has(candidate.supplierCompanyId))
+      .sort((a, b) => optionStrategyScore(b, item.quotes) - optionStrategyScore(a, item.quotes) || a.unitPrice - b.unitPrice)[0];
+    if (option) result.set(item.demandItemId, option);
+  });
+  return result;
+});
 
 const markupRate = computed(() => Math.max(0, Number(settings.value.markupPercent || 0)) / 100);
 
@@ -185,10 +257,7 @@ function optionForItem(item: FoodComparison["items"][number]): FoodComparisonOpt
       .filter((option) => option.supplierCompanyId === selectedSingleSupplier.value?.supplierCompanyId)
       .sort((left, right) => left.unitPrice - right.unitPrice)[0];
   }
-  const ranked = item.quotes
-      .filter((option) => option.lowestPrice)
-      .sort((left, right) => left.unitPrice - right.unitPrice)[0];
-  return ranked || item.quotes.slice().sort((left, right) => left.unitPrice - right.unitPrice)[0];
+  return mixedAssignments.value.get(item.demandItemId);
 }
 
 const comparisonRows = computed<ComparisonRow[]>(() => (comparison.value?.items || []).map((item) => {
@@ -213,21 +282,26 @@ const comparisonRows = computed<ComparisonRow[]>(() => (comparison.value?.items 
     subtotal: option ? roundFoodQuoteMoney(requestedQuantity * unitPrice) : 0,
     costSubtotal: option ? roundFoodQuoteMoney(requestedQuantity * unitPrice) : 0,
     quantitySatisfied: Boolean(option && quotedQuantity >= requestedQuantity),
-    priceSource: option?.priceSource || "-"
+    priceSource: option?.priceSource || "-",
+    productTags: option?.productTags || []
   };
-}).filter((row) => selectedSupplierCompanyId.value == null || row.supplierCompanyId === selectedSupplierCompanyId.value));
+}));
 
 const filteredRows = computed(() => {
   const query = skuKeyword.value.trim().toLowerCase();
-  return query
-    ? comparisonRows.value.filter((row) => `${row.name} ${row.nameEn} ${row.specification} ${row.unit}`.toLowerCase().includes(query))
-    : comparisonRows.value;
+  return comparisonRows.value.filter((row) => {
+    if (selectedSupplierCompanyId.value != null && row.supplierCompanyId !== selectedSupplierCompanyId.value) return false;
+    if (query && !`${row.name} ${row.nameEn} ${row.specification} ${row.unit}`.toLowerCase().includes(query)) return false;
+    if (compareCoreOnly.value && !coreDemandItemIdSet.value.has(row.demandItemId)) return false;
+    if (compareUnmatchedOnly.value && isComparisonRowSelected(row) && isComparisonRowSelectable(row)) return false;
+    return true;
+  });
 });
 
 const lowestSupplierTotals = computed(() => {
   const totals = new Map<number, { supplierName: string; amount: number }>();
   comparison.value?.items.forEach((item) => {
-    const option = item.quotes.filter((row) => row.lowestPrice && row.quantitySatisfied).sort((a, b) => a.unitPrice - b.unitPrice)[0];
+    const option = mixedAssignments.value.get(item.demandItemId);
     if (!option) return;
     const current = totals.get(option.supplierCompanyId) || { supplierName: option.supplierName, amount: 0 };
     if (selectedDemandItemIdSet.value.has(item.demandItemId)) {
@@ -237,10 +311,14 @@ const lowestSupplierTotals = computed(() => {
   });
   return Array.from(totals.entries()).map(([supplierCompanyId, value]) => ({ supplierCompanyId, ...value }));
 });
+const mixedSupplierDisplayCards = computed(() => mixedSupplierCards.value.map((supplier) => ({
+  ...supplier,
+  amount: lowestSupplierTotals.value.find((item) => item.supplierCompanyId === supplier.supplierCompanyId)?.amount || 0
+})).filter((supplier) => supplier.amount > 0));
 
 const lowestCoveredCount = computed(() => comparison.value?.items.filter((item) =>
   selectedDemandItemIdSet.value.has(item.demandItemId)
-    && item.quotes.some((option) => option.lowestPrice && option.quantitySatisfied)
+    && Boolean(mixedAssignments.value.get(item.demandItemId)?.quantitySatisfied)
 ).length || 0);
 const lowestTotal = computed(() => lowestSupplierTotals.value.reduce((sum, supplier) => sum + supplier.amount, 0));
 const fixedFeeTotal = computed(() => Number(settings.value.fixedFreightFee || 0)
@@ -248,7 +326,7 @@ const fixedFeeTotal = computed(() => Number(settings.value.fixedFreightFee || 0)
   + Number(settings.value.fixedCraneFee || 0)
   + Number(settings.value.fixedOtherFee || 0));
 const quoteTotal = (cost: number) => roundFoodQuoteMoney(cost * (1 + markupRate.value));
-const profitTotal = (cost: number) => quoteTotal(cost) - cost - fixedFeeTotal.value;
+const profitTotal = (cost: number) => quoteTotal(cost) - cost;
 const selectedCost = computed(() => strategy.value === "LOWEST_ITEM" ? lowestTotal.value : Number(selectedSingleSupplier.value?.totalAmount || 0));
 const providerLabel = computed(() => settings.value.supplyMode === "SEA" ? "驳船" : "供货商");
 const selectedRows = computed(() => comparisonRows.value.filter(isComparisonRowSelected));
@@ -256,8 +334,13 @@ const coveredCount = computed(() => selectedRows.value.filter((row) => row.quant
 const selectedItemCount = computed(() => selectedRows.value.length);
 const totalItemCount = computed(() => comparison.value?.items.length || 0);
 const comparisonLocked = computed(() => comparison.value?.demand.status === "ORDERED");
+const hasMissingCoreProduct = computed(() => Array.from(coreDemandItemIdSet.value).some((demandItemId) => {
+  const row = comparisonRows.value.find((item) => item.demandItemId === demandItemId);
+  return !row || !isComparisonRowSelectable(row) || !isComparisonRowSelected(row);
+}));
 const canCreateOrder = computed(() => comparison.value?.demand.status !== "ORDERED"
   && selectedItemCount.value > 0 && coveredCount.value === selectedItemCount.value
+  && !hasMissingCoreProduct.value
   && (strategy.value !== "SINGLE_SUPPLIER" || Boolean(selectedSingleSupplier.value?.enabled)));
 const orderStrategyLabel = computed(() => orderDraft.value?.strategy === "SINGLE_SUPPLIER"
   ? `集中采购 · ${selectedSingleSupplier.value?.supplierName || "-"}`
@@ -320,12 +403,21 @@ function isComparisonRowSelected(row: ComparisonRow) {
   return isComparisonRowSelectable(row) && selectedDemandItemIds.value.includes(row.demandItemId);
 }
 
+function isComparisonQualityProduct(row: ComparisonRow) {
+  return row.productTags.some((tag) => tag === "质量高" || tag === "质量好");
+}
+
 function comparisonRowClass(row: ComparisonRow) {
-  return { "is-compare-deselected": isComparisonRowSelectable(row) && !isComparisonRowSelected(row) };
+  return {
+    "is-compare-core-product": coreDemandItemIdSet.value.has(row.demandItemId),
+    "is-compare-unmatched": !isComparisonRowSelectable(row),
+    "is-compare-deselected": isComparisonRowSelectable(row) && !isComparisonRowSelected(row)
+  };
 }
 
 function toggleComparisonRow(row: ComparisonRow, selected: boolean) {
   if (!isComparisonRowSelectable(row)) return;
+  if (!selected && coreDemandItemIdSet.value.has(row.demandItemId)) return;
   const next = new Set(selectedDemandItemIds.value);
   if (selected) next.add(row.demandItemId); else next.delete(row.demandItemId);
   selectedDemandItemIds.value = Array.from(next);
@@ -349,7 +441,6 @@ function selectStrategySupplier(strategyKey: StrategyKey, supplierCompanyId: num
   strategy.value = strategyKey;
   selectedSupplierCompanyId.value = shouldClear ? undefined : supplierCompanyId;
   expandedRowId.value = "";
-  syncComparisonSelectedRows();
 }
 
 async function loadList() {
@@ -378,6 +469,10 @@ async function loadComparison(id: number) {
     selectedDemandItemIds.value = Array.isArray(savedDemandItemIds)
       ? selectableDemandItemIds.filter((demandItemId) => savedDemandItemIds.includes(demandItemId))
       : selectableDemandItemIds;
+    selectedDemandItemIds.value = Array.from(new Set([
+      ...selectedDemandItemIds.value,
+      ...(settings.value.coreDemandItemIds || []).filter((itemId) => selectableDemandItemIds.includes(itemId))
+    ]));
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "比价结果读取失败";
   } finally {
@@ -401,6 +496,22 @@ async function persistComparisonSettings() {
   } finally {
     settingsSaving.value = false;
   }
+}
+
+async function applyComparisonStrategy(payload: {
+  mixedSupplierCount: number;
+  priceEnabled: boolean;
+  priceLevel: number;
+  qualityEnabled: boolean;
+  qualityLevel: number;
+  coreDemandItemIds: number[];
+}) {
+  if (!comparison.value || comparisonLocked.value) return;
+  settings.value = { ...settings.value, ...payload };
+  selectedDemandItemIds.value = Array.from(new Set([...selectedDemandItemIds.value, ...payload.coreDemandItemIds]));
+  await persistComparisonSettings();
+  strategyDialogOpen.value = false;
+  await loadComparison(comparison.value.demand.demandId);
 }
 
 async function persistComparisonItems() {
@@ -738,12 +849,12 @@ onMounted(() => {
             <div class="strategy-choice-group compare-strategy-board" role="group" aria-label="比价策略选择">
               <article :class="['strategy-choice', 'is-green', { active: strategy === 'LOWEST_ITEM' }]">
                 <button type="button" class="strategy-choice-main" @click="selectStrategy('LOWEST_ITEM')"><span class="strategy-title-stack"><strong>最低混供</strong></span><div class="strategy-count-stack"><strong>{{ lowestCoveredCount }}/{{ totalItemCount }}</strong></div><div class="strategy-total-stack"><em>成本金额 {{ lowestTotal.toFixed(2) }}</em><em>补给费用 {{ fixedFeeTotal.toFixed(2) }}</em><em>报价总额 {{ quoteTotal(lowestTotal).toFixed(2) }}</em><em>预计利润 {{ profitTotal(lowestTotal).toFixed(2) }}</em></div></button>
-                <ul class="strategy-supplier-list"><li v-for="supplier in lowestSupplierTotals" :key="supplier.supplierCompanyId"><button type="button" :class="{ active: strategy === 'LOWEST_ITEM' && selectedSupplierCompanyId === supplier.supplierCompanyId }" @click="selectStrategySupplier('LOWEST_ITEM', supplier.supplierCompanyId)"><span>{{ supplier.supplierName }}</span><span class="strategy-supplier-meta"><strong>{{ supplier.amount.toFixed(2) }}</strong></span></button></li></ul>
+                <ul class="strategy-supplier-list"><li v-for="supplier in mixedSupplierDisplayCards" :key="supplier.supplierCompanyId"><button type="button" :class="{ active: strategy === 'LOWEST_ITEM' && selectedSupplierCompanyId === supplier.supplierCompanyId }" @click="selectStrategySupplier('LOWEST_ITEM', supplier.supplierCompanyId)"><span class="strategy-supplier-identity"><span>{{ supplier.supplierName }}</span><span class="strategy-supplier-tags"><ComparisonStrategyIcon v-if="supplier.coreCoveredCount" type="core" label="包含核心商品" compact /><ComparisonStrategyIcon v-if="supplier.priceTaggedCount" type="price" label="包含价格低商品" compact /><ComparisonStrategyIcon v-if="supplier.qualityTaggedCount" type="quality" label="包含质量高商品" compact /></span></span><span class="strategy-supplier-meta"><strong>{{ supplier.amount.toFixed(2) }}</strong></span></button></li></ul>
               </article>
               <span class="strategy-vs">VS</span>
               <article :class="['strategy-choice', 'is-blue', { active: strategy === 'SINGLE_SUPPLIER', 'is-disabled': !concentratedStrategyEnabled }]">
                 <button type="button" class="strategy-choice-main" :disabled="!concentratedStrategyEnabled" @click="selectStrategy('SINGLE_SUPPLIER')"><span class="strategy-title-stack"><strong>集中采购</strong></span><div class="strategy-count-stack"><strong>{{ selectedSingleSupplier?.coveredItemCount || 0 }}/{{ totalItemCount }}</strong></div><div class="strategy-total-stack"><em>成本金额 {{ (selectedSingleSupplier?.totalAmount || 0).toFixed(2) }}</em><em>补给费用 {{ fixedFeeTotal.toFixed(2) }}</em><em>报价总额 {{ quoteTotal(selectedSingleSupplier?.totalAmount || 0).toFixed(2) }}</em><em>预计利润 {{ profitTotal(selectedSingleSupplier?.totalAmount || 0).toFixed(2) }}</em></div></button>
-                <ul class="strategy-supplier-list"><li v-for="supplier in concentratedSupplierCards" :key="supplier.supplierCompanyId"><button type="button" :class="{ active: strategy === 'SINGLE_SUPPLIER' && selectedSupplierCompanyId === supplier.supplierCompanyId }" :disabled="!concentratedStrategyEnabled" @click="selectStrategySupplier('SINGLE_SUPPLIER', supplier.supplierCompanyId)"><span>{{ supplier.supplierName }}</span><span class="strategy-supplier-meta"><strong>{{ supplier.totalAmount.toFixed(2) }}</strong></span></button></li></ul>
+                <ul class="strategy-supplier-list"><li v-for="supplier in concentratedSupplierCards" :key="supplier.supplierCompanyId"><button type="button" :class="{ active: strategy === 'SINGLE_SUPPLIER' && selectedSupplierCompanyId === supplier.supplierCompanyId }" :disabled="!concentratedStrategyEnabled" @click="selectStrategySupplier('SINGLE_SUPPLIER', supplier.supplierCompanyId)"><span class="strategy-supplier-identity"><span>{{ supplier.supplierName }}</span><span class="strategy-supplier-tags"><ComparisonStrategyIcon v-if="supplier.supplierCompanyId === lowestCompleteSupplier?.supplierCompanyId" type="price" label="价格最低" compact /><ComparisonStrategyIcon v-if="supplier.supplierCompanyId === qualityCompleteSupplier?.supplierCompanyId && supplier.qualityTaggedCount" type="quality" label="质量标签最多" compact /><ComparisonStrategyIcon v-if="supplier.coreCoveredCount" type="core" label="包含核心商品" compact /></span></span><span class="strategy-supplier-meta"><strong>{{ supplier.totalAmount.toFixed(2) }}</strong></span></button></li></ul>
               </article>
             </div>
           </div>
@@ -759,22 +870,26 @@ onMounted(() => {
 
           <div class="compare-list-toolbar list-search-toolbar">
             <label class="list-search-field"><span>伙食搜索</span><span class="list-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg></span><input v-model="skuKeyword" type="search" placeholder="搜索名称、规格、单位" /></label>
-            <div class="compare-preference-filters" role="group" aria-label="比价偏好"><button type="button" class="active">价格优先</button><button type="button" disabled>质量优先</button></div>
+            <div class="compare-quick-filters" role="group" aria-label="商品快速筛选">
+              <button type="button" class="compare-core-filter" :class="{ 'is-active': compareCoreOnly }" :aria-pressed="compareCoreOnly" aria-label="筛选核心商品" @click="compareCoreOnly = !compareCoreOnly"><ComparisonStrategyIcon type="core" label="核心商品" compact /></button>
+              <button type="button" class="compare-unmatched-filter" :class="{ 'is-active': compareUnmatchedOnly }" :aria-pressed="compareUnmatchedOnly" aria-label="筛选未匹配商品" @click="compareUnmatchedOnly = !compareUnmatchedOnly"><ComparisonStrategyIcon type="unmatched" label="未匹配或未勾选商品" compact /></button>
+            </div>
             <label class="compare-markup-field"><span>利润%</span><input v-model.number="settings.markupPercent" type="number" min="0" max="1000" step="0.1" :disabled="comparisonLocked" /></label>
             <div class="toolbar-icon-actions">
               <IconButton icon="RefreshCw" label="刷新" :disabled="loading" @click="loadComparison(comparison.demand.demandId)" />
+              <IconButton icon="Save" label="保存比价设置" :loading="settingsSaving" :disabled="comparisonLocked" @click="persistComparisonSettings()" />
+              <IconButton icon="Settings" label="比价策略引擎" variant="strategy" :disabled="comparisonLocked" @click="strategyDialogOpen = true" />
               <IconButton icon="Download" label="导出比价报价表" :loading="comparisonExporting" :disabled="loading || !currentQuoteItemIds.length" @click="exportComparisonSheet" />
               <IconButton icon="Upload" label="导入比价报价表" :loading="comparisonImporting" :disabled="loading || comparisonLocked" @click="openComparisonImport" />
-              <IconButton icon="Save" label="保存比价设置" :loading="settingsSaving" :disabled="comparisonLocked" @click="persistComparisonSettings()" />
               <IconButton icon="Send" label="确认下单" variant="primary" :disabled="!canCreateOrder || loading" @click="openOrderDialog" />
               <input ref="comparisonImportInput" class="visually-hidden-input" type="file" accept=".xlsx" @change="handleComparisonImport" />
             </div>
           </div>
           <p v-if="notice" class="inline-success">{{ notice }}</p><p v-if="error" class="inline-error">{{ error }}</p>
 
-          <DataTable :columns="comparisonColumns" :rows="filteredRows" :show-index="false" row-key="id" row-interactive :row-class="comparisonRowClass" :expanded-row-key="expandedRowId" empty-label="暂无有效报价" @row-click="(row) => expandedRowId = expandedRowId === String(row.id) ? '' : String(row.id)">
+          <DataTable :columns="comparisonColumns" :rows="filteredRows" :show-index="false" row-key="id" row-interactive :row-class="comparisonRowClass" :expanded-row-key="expandedRowId" empty-label="暂无符合筛选条件的商品" @row-click="(row) => expandedRowId = expandedRowId === String(row.id) ? '' : String(row.id)">
             <template #head-selection><span>序号</span></template>
-            <template #cell-selection="{ row }"><label class="compare-row-select" @click.stop><input type="checkbox" :checked="isComparisonRowSelected(row)" :disabled="!isComparisonRowSelectable(row)" @change="toggleComparisonRow(row, ($event.target as HTMLInputElement).checked)" /><span>{{ row.sequenceNo }}</span></label></template>
+            <template #cell-selection="{ row }"><label class="compare-row-select" @click.stop><input type="checkbox" :checked="isComparisonRowSelected(row)" :disabled="!isComparisonRowSelectable(row) || coreDemandItemIdSet.has(row.demandItemId)" @change="toggleComparisonRow(row, ($event.target as HTMLInputElement).checked)" /><ComparisonStrategyIcon v-if="coreDemandItemIdSet.has(row.demandItemId)" type="core" label="核心商品" compact /><ComparisonStrategyIcon v-if="isComparisonQualityProduct(row)" type="quality" label="质量高" compact /><span>{{ row.sequenceNo }}</span></label></template>
             <template #cell-name="{ row }"><span class="compare-two-line-cell"><strong>{{ row.name }}</strong><small>{{ row.nameEn || '-' }}</small></span></template>
             <template #cell-specification="{ row }"><strong>{{ row.specification }}</strong></template>
             <template #cell-requestedQuantity="{ row }"><span class="compare-two-line-cell compare-two-line-cell--right"><input class="comparison-edit-input comparison-requested-quantity" type="number" min="0.01" step="0.01" :value="row.requestedQuantity" :disabled="comparisonLocked" @click.stop @input="updateComparisonValue(row, 'requestedQuantity', ($event.target as HTMLInputElement).value)" /><small>{{ row.unit }}</small></span></template>
@@ -789,6 +904,28 @@ onMounted(() => {
         <IconButton v-if="showBackTop" class="compare-back-top-button" icon="ArrowUp" label="回到顶部" @click="scrollComparisonToTop" />
       </Teleport>
     </section>
+
+    <ComparisonStrategyDialog
+      :open="strategyDialogOpen"
+      :settings="{
+        mixedSupplierCount: targetMixedSupplierCount,
+        priceEnabled: settings.priceEnabled !== false,
+        priceLevel: Number(settings.priceLevel || 5),
+        qualityEnabled: settings.qualityEnabled !== false,
+        qualityLevel: Number(settings.qualityLevel || 3),
+        coreDemandItemIds: settings.coreDemandItemIds || []
+      }"
+      :items="(comparison?.items || []).map((item) => ({
+        demandItemId: item.demandItemId,
+        name: item.nameZh || item.nameEn || '未命名商品',
+        code: item.nameEn || '',
+        specification: item.specification || item.unit
+      }))"
+      :saving="settingsSaving"
+      :readonly="comparisonLocked"
+      @close="strategyDialogOpen = false"
+      @apply="applyComparisonStrategy"
+    />
 
     <FoodTrafficShuttleSelector
       v-if="settings.supplyMode === 'SEA'"

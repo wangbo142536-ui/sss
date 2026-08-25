@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -131,14 +132,107 @@ class ShopServiceTest {
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(null), any())).thenReturn(sku(100L));
-        when(shopRepository.listSkus(22L, "MATERIAL", "PENDING_EXCEPTION", "OFF_SHELF", "rag", 1, 20))
+        when(shopRepository.listSkus(22L, "MATERIAL", null, "PENDING_EXCEPTION", "OFF_SHELF", "rag", 1, 20))
             .thenReturn(new ShopSkuListResponse(List.of(sku(100L)), 1L, 1, 20));
 
         ShopSkuResponse created = service.createSku("Bearer token", skuRequest());
-        ShopSkuListResponse list = service.listSkus("Bearer token", "MATERIAL", "PENDING_EXCEPTION", "OFF_SHELF", "rag", 1, 20);
+        ShopSkuListResponse list = service.listSkus("Bearer token", "MATERIAL", null, "PENDING_EXCEPTION", "OFF_SHELF", "rag", 1, 20);
 
         assertThat(created.skuId()).isEqualTo(100L);
         assertThat(list.total()).isEqualTo(1L);
+    }
+
+    @Test
+    void listsASelectedSupplierCatalogReadOnlyAcrossCompanyScope() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(shopRepository.isSupplierCompany(35L)).thenReturn(true);
+        when(shopRepository.listSkus(35L, null, null, null, null, null, 1, 100))
+            .thenReturn(new ShopSkuListResponse(List.of(sku(100L)), 1L, 1, 100));
+
+        ShopSkuListResponse response = service.listSkus(
+            "Bearer token", 35L, null, null, null, null, null, 1, 200
+        );
+
+        assertThat(response.total()).isEqualTo(1L);
+        verify(shopRepository).listSkus(35L, null, null, null, null, null, 1, 100);
+    }
+
+    @Test
+    void rejectsCrossCompanyCatalogWhenTargetIsNotASupplier() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(shopRepository.isSupplierCompany(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listSkus(
+            "Bearer token", 99L, null, null, null, null, null, 1, 200
+        )).isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("SUPPLIER_NOT_FOUND");
+    }
+
+    @Test
+    void platformAdminCanDisableSupplierAndOperationIsLogged() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 1L, "ACTIVE", "ACTIVE"));
+        when(authRepository.hasRole(10L, "PLATFORM_ADMIN")).thenReturn(true);
+        when(shopRepository.updateSupplierStatus(35L, "DISABLED")).thenReturn(true);
+
+        SupplierStatusUpdateResponse response = service.updateSupplierStatus(
+            "Bearer token", 35L, new SupplierStatusUpdateRequest("disabled")
+        );
+
+        assertThat(response.status()).isEqualTo("DISABLED");
+        verify(shopRepository).logSupplierStatusChange(10L, 35L, "DISABLED");
+    }
+
+    @Test
+    void normalCompanyCannotChangeSupplierStatus() {
+        when(currentUserService.requireActiveCompanyUser("Bearer token"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(authRepository.hasRole(10L, "PLATFORM_ADMIN")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.updateSupplierStatus(
+            "Bearer token", 35L, new SupplierStatusUpdateRequest("DISABLED")
+        )).isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("PLATFORM_ADMIN_REQUIRED");
+        verify(shopRepository, never()).updateSupplierStatus(eq(35L), any());
+    }
+
+    @Test
+    void listsOnlyAnActiveSupplierPublicQualifications() {
+        when(currentUserService.requireActiveCompanyUser("Bearer active"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(shopRepository.isActiveSupplierCompany(35L)).thenReturn(true);
+        when(shopRepository.listSupplierQualifications(35L)).thenReturn(List.of(
+            new SupplierQualificationResponse(
+                17L,
+                35L,
+                "license.jpg",
+                "/api/shop/suppliers/35/qualifications/17/file",
+                "BUSINESS_LICENSE",
+                "营业执照",
+                null,
+                "image/jpeg",
+                "2026-08-20 08:00:00"
+            )
+        ));
+
+        SupplierQualificationListResponse response = service.listSupplierQualifications("Bearer active", 35L);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).companyId()).isEqualTo(35L);
+    }
+
+    @Test
+    void hidesQualificationsWhenTargetIsNotAnActiveSupplier() {
+        when(currentUserService.requireActiveCompanyUser("Bearer active"))
+            .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
+        when(shopRepository.isActiveSupplierCompany(35L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listSupplierQualifications("Bearer active", 35L))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("SUPPLIER_NOT_FOUND");
+        verify(shopRepository, never()).listSupplierQualifications(35L);
     }
 
     @Test
@@ -147,7 +241,6 @@ class ShopServiceTest {
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
         when(shopRepository.findSku(22L, 100L)).thenReturn(Optional.of(sku(100L)));
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-001")).thenReturn(Optional.empty());
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(null), any())).thenReturn(sku(101L));
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(100L), any())).thenReturn(sku(100L));
 
@@ -168,12 +261,11 @@ class ShopServiceTest {
     }
 
     @Test
-    void batchUpsertUpdatesExistingSupplierSkuWhenSkuIdIsMissing() {
+    void batchUpsertCreatesIndependentSkuWhenSupplierCodeAlreadyExistsButSkuIdIsMissing() {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-001")).thenReturn(Optional.of(sku(100L, "ON_SHELF")));
-        when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(100L), any())).thenReturn(sku(100L));
+        when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(null), any())).thenReturn(sku(101L));
 
         ShopSkuBatchUpsertResponse response = service.batchUpsertSkus("Bearer token", new ShopSkuBatchUpsertRequest(
             48L,
@@ -190,17 +282,15 @@ class ShopServiceTest {
         ));
 
         assertThat(response.totalCount()).isEqualTo(1);
-        assertThat(response.insertedCount()).isZero();
-        assertThat(response.updatedCount()).isEqualTo(1);
-        assertThat(response.rowResults().get(0).status()).isEqualTo("UPDATED");
+        assertThat(response.insertedCount()).isEqualTo(1);
+        assertThat(response.updatedCount()).isZero();
+        assertThat(response.rowResults().get(0).status()).isEqualTo("INSERTED");
         assertThat(response.rowResults().get(0).importRowNumber()).isEqualTo(7);
         assertThat(response.rowResults().get(0).supplierSkuCode()).isEqualTo("SKU-001");
         ArgumentCaptor<ShopSkuRequest> requestCaptor = ArgumentCaptor.forClass(ShopSkuRequest.class);
-        verify(shopRepository).saveSku(eq(22L), eq(5L), eq(10L), eq(100L), requestCaptor.capture());
+        verify(shopRepository).saveSku(eq(22L), eq(5L), eq(10L), eq(null), requestCaptor.capture());
         ShopSkuRequest savedRequest = requestCaptor.getValue();
-        assertThat(savedRequest.shelfStatus()).isEqualTo("ON_SHELF");
-        assertThat(savedRequest.images()).hasSize(1);
-        assertThat(savedRequest.images().get(0).fileId()).isEqualTo("FILE-1");
+        assertThat(savedRequest.shelfStatus()).isEqualTo("OFF_SHELF");
     }
 
     @Test
@@ -208,7 +298,6 @@ class ShopServiceTest {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-TOP-IMG")).thenReturn(Optional.empty());
         when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(null), any())).thenReturn(sku(101L));
 
         ShopSkuRequest request = skuRequest(
@@ -267,24 +356,25 @@ class ShopServiceTest {
     }
 
     @Test
-    void batchUpsertRejectsDuplicateSupplierSkuCodesInSameRequest() {
+    void batchUpsertKeepsDuplicateSupplierSkuCodesAsIndependentRows() {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
 
-        assertThatThrownBy(() -> service.batchUpsertSkus("Bearer token", new ShopSkuBatchUpsertRequest(
+        when(shopRepository.saveSku(eq(22L), eq(5L), eq(10L), eq(null), any()))
+            .thenReturn(sku(101L), sku(102L));
+
+        ShopSkuBatchUpsertResponse response = service.batchUpsertSkus("Bearer token", new ShopSkuBatchUpsertRequest(
             88L,
             List.of(
                 new ShopSkuUpsertItem(null, null, 3, "SKU-DUP", skuRequest("SKU-DUP", "Cotton Rag", List.of(), null, null, null, null, null)),
                 new ShopSkuUpsertItem(null, null, 4, "SKU-DUP", skuRequest("SKU-DUP", "Cotton Rag", List.of(), null, null, null, null, null))
             )
-        )))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("DUPLICATE_SUPPLIER_SKU_CODE")
-            .hasMessageContaining("row=4")
-            .hasMessageContaining("supplierSkuCode=SKU-DUP");
+        ));
 
-        verify(shopRepository, never()).saveSku(any(Long.class), any(Long.class), any(Long.class), any(), any());
+        assertThat(response.insertedCount()).isEqualTo(2);
+        assertThat(response.rowResults()).extracting(ShopSkuBatchUpsertRowResult::status).containsOnly("INSERTED");
+        verify(shopRepository, times(2)).saveSku(eq(22L), eq(5L), eq(10L), eq(null), any());
     }
 
     @Test
@@ -374,12 +464,11 @@ class ShopServiceTest {
     }
 
     @Test
-    void importPreviewMarksExistingSupplierSkuAsUpdateAndReturnsSnapshot() throws Exception {
+    void importPreviewKeepsExistingSupplierCodeAsIndependentInsert() throws Exception {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
         when(shopRepository.createBatch(22L, 5L, 10L, "quote.xlsx")).thenReturn(12L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-PLIER-001")).thenReturn(Optional.of(sku(100L, "ON_SHELF")));
         when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000)))
             .thenReturn(List.of(new ImpaItemResponse("613001", "61", "Tools", "6130", "Flat Nose Plier", "FLAT NOSE PLIER", "160MM", "PCS")));
         when(xlsxParser.parse(any(Path.class))).thenReturn(new MaterialParsedDocument(
@@ -395,15 +484,14 @@ class ShopServiceTest {
         );
 
         ShopImportPreviewItem item = response.items().get(0);
-        assertThat(item.previewAction()).isEqualTo("UPDATE");
-        assertThat(item.existingSkuId()).isEqualTo(100L);
-        assertThat(item.existingSnapshot()).isNotNull();
-        assertThat(item.existingSnapshot().shelfStatus()).isEqualTo("ON_SHELF");
+        assertThat(item.previewAction()).isEqualTo("INSERT");
+        assertThat(item.existingSkuId()).isNull();
+        assertThat(item.existingSnapshot()).isNull();
         assertThat(item.productName()).isEqualTo("Flat Nose Plier");
     }
 
     @Test
-    void importPreviewMarksMissingSupplierSkuAsBlocked() throws Exception {
+    void importPreviewAllowsMissingSupplierSkuAndKeepsImpaReviewState() throws Exception {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
@@ -423,21 +511,20 @@ class ShopServiceTest {
         );
 
         ShopImportPreviewItem item = response.items().get(0);
-        assertThat(item.previewAction()).isEqualTo("BLOCKED");
+        assertThat(item.previewAction()).isEqualTo("INSERT");
         assertThat(item.existingSkuId()).isNull();
         assertThat(item.codeStatus()).isEqualTo("PENDING_EXCEPTION");
-        assertThat(item.exceptionReason()).isEqualTo("SUPPLIER_SKU_CODE_REQUIRED");
+        assertThat(item.exceptionReason()).isEqualTo("LOGIC_UNMATCHED");
         assertThat(response.successCount()).isZero();
         assertThat(response.exceptionCount()).isEqualTo(1);
     }
 
     @Test
-    void importPreviewMarksDuplicateSupplierSkuCodesInSameFile() throws Exception {
+    void importPreviewKeepsDuplicateSupplierSkuCodesAsIndependentItems() throws Exception {
         when(currentUserService.requireActiveCompanyUser("Bearer token"))
             .thenReturn(new CurrentUserContext(10L, 22L, "ACTIVE", "ACTIVE"));
         when(shopRepository.ensureShop(22L, 10L)).thenReturn(5L);
         when(shopRepository.createBatch(22L, 5L, 10L, "quote.xlsx")).thenReturn(14L);
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-DUP")).thenReturn(Optional.empty());
         when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000)))
             .thenReturn(List.of());
         when(xlsxParser.parse(any(Path.class))).thenReturn(new MaterialParsedDocument(
@@ -455,8 +542,8 @@ class ShopServiceTest {
             new MockMultipartFile("file", "quote.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[] {1, 2, 3})
         );
 
-        assertThat(response.items()).extracting(ShopImportPreviewItem::previewAction).containsExactly("DUPLICATE", "DUPLICATE");
-        assertThat(response.items()).extracting(ShopImportPreviewItem::exceptionReason).containsOnly("DUPLICATE_SUPPLIER_SKU_CODE");
+        assertThat(response.items()).extracting(ShopImportPreviewItem::previewAction).containsExactly("INSERT", "INSERT");
+        assertThat(response.items()).extracting(ShopImportPreviewItem::exceptionReason).containsOnly("LOGIC_UNMATCHED");
         assertThat(response.successCount()).isZero();
         assertThat(response.exceptionCount()).isEqualTo(2);
     }
@@ -480,10 +567,6 @@ class ShopServiceTest {
             1,
             List.of(materialQuoteRow("SKU-SAME", "Fresh Apple"))
         ));
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "MATERIAL", "SKU-SAME"))
-            .thenReturn(Optional.empty());
-        when(shopRepository.findSkuBySupplierSkuCode(22L, 5L, "FOOD", "SKU-SAME"))
-            .thenReturn(Optional.empty());
         when(impaItemRepository.findItems(isNull(), isNull(), isNull(), eq(60000))).thenReturn(List.of());
 
         ShopImportPreviewResponse response = service.importPreview(
@@ -662,6 +745,8 @@ class ShopServiceTest {
             "110101",
             supplierSkuCode,
             productName,
+            "Suitable for routine deck maintenance and cleaning.",
+            List.of("上新"),
             List.of(new ShopSkuAttributeRequest("specification", "Specification", "white", null, 0, "white")),
             new BigDecimal("20.0000"),
             "PCS",
@@ -704,6 +789,8 @@ class ShopServiceTest {
             "110101",
             "SKU-001",
             "Cotton Rag",
+            "Suitable for routine deck maintenance and cleaning.",
+            List.of("上新"),
             List.of(new ShopSkuAttributeResponse(1L, "specification", "Specification", "white", null, 0, "white")),
             "Specification: white",
             new BigDecimal("20.0000"),

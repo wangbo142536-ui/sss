@@ -32,7 +32,7 @@ class ShopRepositoryTest {
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(List.of());
 
         ShopRepository repository = new ShopRepository(jdbcTemplate, new ObjectMapper());
-        repository.listSkus(22L, null, null, null, null, 1, 20);
+        repository.listSkus(22L, null, null, null, null, null, 1, 20);
 
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
         verify(jdbcTemplate).query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
@@ -42,5 +42,33 @@ class ShopRepositoryTest {
             "import_batch_id DESC",
             "id ASC"
         );
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void supplierDetailFilterKeepsSqlBoundaryBeforeOrderBy() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(0L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(List.of());
+
+        ShopRepository repository = new ShopRepository(jdbcTemplate, new ObjectMapper());
+        repository.listSuppliers(24L, null, null, null, null, 1, 1);
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
+        assertThat(sqlCaptor.getValue()).contains("AND c.id = ?\nORDER BY");
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void supplierDirectoryOrdersCompaniesByCreationTimeDescending() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(0L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(List.of());
+
+        ShopRepository repository = new ShopRepository(jdbcTemplate, new ObjectMapper());
+        repository.listSuppliers(null, null, null, null, null, 1, 50);
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
+        assertThat(sqlCaptor.getValue()).contains("ORDER BY\n  c.created_at DESC,\n  c.id DESC");
     }
 }

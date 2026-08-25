@@ -60,6 +60,8 @@ public class MaterialMatchPreviewService {
     private final XlsxMaterialQuoteParser parser;
     private final MaterialSupplierCandidateProvider supplierCandidateProvider;
     private final MaterialNameNormalizer normalizer;
+    private final MaterialImpaSearchIndex impaSearchIndex;
+    private final MaterialCategoryModelAnalyzer categoryModelAnalyzer;
 
     @Autowired
     public MaterialMatchPreviewService(
@@ -67,9 +69,11 @@ public class MaterialMatchPreviewService {
         AuthRepository authRepository,
         ImpaItemRepository impaItemRepository,
         XlsxMaterialQuoteParser parser,
-        MaterialSupplierCandidateProvider supplierCandidateProvider
+        MaterialSupplierCandidateProvider supplierCandidateProvider,
+        MaterialImpaSearchIndex impaSearchIndex,
+        MaterialCategoryModelAnalyzer categoryModelAnalyzer
     ) {
-        this(tokenService, authRepository, impaItemRepository, parser, supplierCandidateProvider, new MaterialNameNormalizer());
+        this(tokenService, authRepository, impaItemRepository, parser, supplierCandidateProvider, new MaterialNameNormalizer(), impaSearchIndex, categoryModelAnalyzer);
     }
 
     MaterialMatchPreviewService(
@@ -78,7 +82,16 @@ public class MaterialMatchPreviewService {
         XlsxMaterialQuoteParser parser,
         MaterialSupplierCandidateProvider supplierCandidateProvider
     ) {
-        this(tokenService, null, impaItemRepository, parser, supplierCandidateProvider, new MaterialNameNormalizer());
+        this(
+            tokenService,
+            null,
+            impaItemRepository,
+            parser,
+            supplierCandidateProvider,
+            new MaterialNameNormalizer(),
+            new MaterialImpaSearchIndex(impaItemRepository),
+            disabledCategoryAnalyzer()
+        );
     }
 
     MaterialMatchPreviewService(
@@ -89,12 +102,46 @@ public class MaterialMatchPreviewService {
         MaterialSupplierCandidateProvider supplierCandidateProvider,
         MaterialNameNormalizer normalizer
     ) {
+        this(
+            tokenService,
+            authRepository,
+            impaItemRepository,
+            parser,
+            supplierCandidateProvider,
+            normalizer,
+            new MaterialImpaSearchIndex(impaItemRepository),
+            disabledCategoryAnalyzer()
+        );
+    }
+
+    MaterialMatchPreviewService(
+        TokenService tokenService,
+        AuthRepository authRepository,
+        ImpaItemRepository impaItemRepository,
+        XlsxMaterialQuoteParser parser,
+        MaterialSupplierCandidateProvider supplierCandidateProvider,
+        MaterialNameNormalizer normalizer,
+        MaterialImpaSearchIndex impaSearchIndex,
+        MaterialCategoryModelAnalyzer categoryModelAnalyzer
+    ) {
         this.tokenService = tokenService;
         this.authRepository = authRepository;
         this.impaItemRepository = impaItemRepository;
         this.parser = parser;
         this.supplierCandidateProvider = supplierCandidateProvider;
         this.normalizer = normalizer;
+        this.impaSearchIndex = impaSearchIndex;
+        this.categoryModelAnalyzer = categoryModelAnalyzer;
+    }
+
+    private static MaterialCategoryModelAnalyzer disabledCategoryAnalyzer() {
+        return new MaterialCategoryModelAnalyzer(
+            new com.fasterxml.jackson.databind.ObjectMapper(),
+            false,
+            "https://api.openai.com/v1",
+            "",
+            "gpt-5-mini"
+        );
     }
 
     public MaterialMatchPreviewResponse matchPreview(String authorizationHeader, MultipartFile file) {
@@ -138,9 +185,22 @@ public class MaterialMatchPreviewService {
     }
 
     MaterialMatchPreviewResponse matchDocument(MaterialParsedDocument document, String sourceFileId, String sourceFileName) {
-        SearchCache searchCache = new SearchCache();
-        List<MaterialMatchPreviewItem> items = document.rows().stream()
+        SearchCache searchCache = new SearchCache(impaSearchIndex.snapshot());
+        List<MaterialMatchPreviewItem> baseItems = document.rows().stream()
             .map(row -> matchRow(row, searchCache))
+            .toList();
+        List<MaterialMatchPreviewItem> rowsNeedingCategoryModel = baseItems.stream()
+            .filter(this::requiresCategoryModel)
+            .toList();
+        Map<Integer, MaterialCategoryModelAnalyzer.CategoryDecision> modelCategories = categoryModelAnalyzer.configured()
+            ? categoryModelAnalyzer.analyze(rowsNeedingCategoryModel)
+            : Map.of();
+        List<MaterialMatchPreviewItem> items = baseItems.stream()
+            .map(item -> applyCategoryModelResult(
+                item,
+                modelCategories.get(item.sourceRowNumber()),
+                categoryModelAnalyzer.configured()
+            ))
             .toList();
         long exactCount = items.stream().filter(item -> "EXACT".equals(item.matchResult())).count();
         long similarCount = items.stream().filter(item -> "SIMILAR".equals(item.matchResult())).count();
@@ -168,6 +228,65 @@ public class MaterialMatchPreviewService {
             Math.toIntExact(unmatchedCount),
             items
         );
+    }
+
+    private boolean requiresCategoryModel(MaterialMatchPreviewItem item) {
+        return item != null && (
+            "UNMATCHED".equals(item.matchResult())
+                || item.candidates() == null
+                || item.candidates().isEmpty()
+                || REASON_NAME_MATCH_LOW_CONFIDENCE.equals(item.reason())
+                || REASON_NAME_SPEC_MISMATCH.equals(item.reason())
+        );
+    }
+
+    private MaterialMatchPreviewItem applyCategoryModelResult(
+        MaterialMatchPreviewItem item,
+        MaterialCategoryModelAnalyzer.CategoryDecision decision,
+        boolean modelConfigured
+    ) {
+        if (!requiresCategoryModel(item)) {
+            return item;
+        }
+        List<String> riskFlags = new ArrayList<>(item.riskFlags() == null ? List.of() : item.riskFlags());
+        List<MaterialMatchCandidate> candidates = new ArrayList<>(item.candidates() == null ? List.of() : item.candidates());
+        String matchResult = item.matchResult();
+        String matchResultName = item.matchResultName();
+        String reason = item.reason();
+        String validationReason = modelConfigured ? "MODEL_CATEGORY_UNRESOLVED" : "MODEL_CONFIGURATION_REQUIRED";
+        if (decision != null) {
+            candidates.add(0, new MaterialMatchCandidate(
+                null,
+                decision.categoryCode(),
+                categoryName(decision.categoryCode()),
+                null,
+                null,
+                null,
+                item.unit(),
+                "MODEL_CATEGORY",
+                "MODEL_CATEGORY_ONLY"
+            ));
+            riskFlags.add("MODEL_CATEGORY_ONLY");
+            matchResult = "SIMILAR";
+            matchResultName = "Category Match";
+            reason = "MODEL_CATEGORY_ONLY";
+            validationReason = "IMPA_CODE_REQUIRED";
+        } else {
+            riskFlags.add(validationReason);
+        }
+        return new MaterialMatchPreviewItem(
+            item.documentType(), item.sourceFormat(), item.headerRowIndex(), item.sequence(), item.sourceRowNo(),
+            item.sourceRowNumber(), item.rawColumns(), item.cleanName(), item.coreName(), item.parsedAttributes(),
+            riskFlags.stream().distinct().toList(), item.impaCode(), item.description(), item.sizeModel(), item.quantity(),
+            item.unit(), item.remarks(), item.supplierItemNo(), item.rawNameSpec(), item.price(), item.packing(), item.stock(),
+            item.candidateImpaCode(), item.candidateNameCn(), item.candidateNameEn(), item.candidateSpec(), matchResult,
+            matchResultName, reason, "ABNORMAL", validationReason, item.hasImage(), item.imageIndex(), item.imageAnchor(),
+            List.copyOf(candidates), item.supplierCandidates()
+        );
+    }
+
+    private String categoryName(String code) {
+        return MaterialImpaCategories.name(code);
     }
 
     private String saveTemplateFile(Long userId, MultipartFile file, Path source) throws IOException {
@@ -747,8 +866,11 @@ public class MaterialMatchPreviewService {
     private class SearchCache {
 
         private final Map<String, List<ImpaItemResponse>> itemsByKeyword = new LinkedHashMap<>();
-        private List<SearchableImpaItem> searchableItems;
-        private Map<String, ImpaItemResponse> itemsByCode;
+        private final MaterialImpaSearchIndex.Snapshot snapshot;
+
+        private SearchCache(MaterialImpaSearchIndex.Snapshot snapshot) {
+            this.snapshot = snapshot;
+        }
 
         private List<ImpaItemResponse> findItems(String keyword) {
             return itemsByKeyword.computeIfAbsent(keyword, this::findItemsInMemory);
@@ -758,11 +880,11 @@ public class MaterialMatchPreviewService {
             String normalizedKeyword = keyword.toUpperCase(Locale.ROOT);
             String normalizedCode = normalizeCode(keyword);
             List<ImpaItemResponse> matches = new ArrayList<>();
-            ImpaItemResponse exactCodeItem = itemsByCode().get(normalizedCode);
+            ImpaItemResponse exactCodeItem = snapshot.byCode().get(normalizedCode);
             if (exactCodeItem != null) {
                 matches.add(exactCodeItem);
             }
-            for (SearchableImpaItem searchable : searchableItems()) {
+            for (MaterialImpaSearchIndex.IndexedItem searchable : snapshot.items()) {
                 if (matches.size() >= MAX_CANDIDATES) {
                     break;
                 }
@@ -777,44 +899,6 @@ public class MaterialMatchPreviewService {
             return matches;
         }
 
-        private List<SearchableImpaItem> searchableItems() {
-            if (searchableItems == null) {
-                searchableItems = impaItemRepository.findItems(null, null, null, 60000).stream()
-                    .map(item -> new SearchableImpaItem(item, haystack(item)))
-                    .toList();
-                itemsByCode = searchableItems.stream()
-                    .map(SearchableImpaItem::item)
-                    .collect(java.util.stream.Collectors.toMap(
-                        item -> normalizeCode(item.impaCode()),
-                        item -> item,
-                        (first, ignored) -> first,
-                        LinkedHashMap::new
-                    ));
-            }
-            return searchableItems;
-        }
-
-        private Map<String, ImpaItemResponse> itemsByCode() {
-            searchableItems();
-            return itemsByCode;
-        }
-
-        private String haystack(ImpaItemResponse item) {
-            return String.join(
-                " ",
-                nullToEmpty(item.impaCode()),
-                nullToEmpty(item.nameCn()),
-                nullToEmpty(item.nameEn()),
-                nullToEmpty(item.specification())
-            ).toUpperCase(Locale.ROOT);
-        }
-
-        private String nullToEmpty(String value) {
-            return value == null ? "" : value;
-        }
-    }
-
-    private record SearchableImpaItem(ImpaItemResponse item, String haystack) {
     }
 
     private record MatchDecision(

@@ -87,6 +87,23 @@ public class MaterialDemandController {
         return materialDemandComparisonService.comparison(authorizationHeader, id);
     }
 
+    @GetMapping("/{id}/comparison-strategy")
+    public MaterialComparisonStrategySettings comparisonStrategy(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long id
+    ) {
+        return materialDemandComparisonService.strategySettings(authorizationHeader, id);
+    }
+
+    @PutMapping("/{id}/comparison-strategy")
+    public MaterialComparisonStrategySettings saveComparisonStrategy(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @PathVariable Long id,
+        @RequestBody MaterialComparisonStrategySettingsRequest request
+    ) {
+        return materialDemandComparisonService.saveStrategySettings(authorizationHeader, id, request);
+    }
+
     @PostMapping("/{id}/comparison-quotes")
     public MaterialComparisonQuoteSaveResponse saveComparisonQuotes(
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,

@@ -363,6 +363,42 @@ class FoodProcurementApplicationServiceTest {
     }
 
     @Test
+    void fixedSupplyFeesIncreaseOrderTotalButDoNotReduceProfit() {
+        when(demandRepository.getDemand(55L, 11L)).thenReturn(demandDetail("QUOTED"));
+        when(demandRepository.getComparisonSettings(55L, 11L)).thenReturn(new ComparisonSettings(
+            BigDecimal.TEN,
+            new BigDecimal("5.00"),
+            new BigDecimal("2.00"),
+            new BigDecimal("1.00"),
+            new BigDecimal("2.00"),
+            "SEA", "BARGE", "", "", null, List.of()
+        ));
+        when(orderRepository.orderExistsForDemand(55L)).thenReturn(false);
+        when(orderRepository.orderableItems(55L)).thenReturn(List.of(
+            orderable(101L, 21L, "Supplier A", "12", "3.00"),
+            orderable(102L, 22L, "Supplier B", "12", "2.00")
+        ));
+        when(orderRepository.insertOrder(
+            eq(55L), eq(11L), eq(7L), eq("LOWEST_ITEM"), eq("USD"),
+            eq(new BigDecimal("32.0000")), eq(new BigDecimal("20.0000")),
+            eq(new BigDecimal("22.0000")), eq(new BigDecimal("2.0000")), any()
+        )).thenReturn(900L);
+        when(orderRepository.insertSupplierOrders(eq(900L), anyList())).thenReturn(Map.of(22L, 901L));
+        when(orderRepository.orderNo(900L)).thenReturn("FPO-FIXED-FEE");
+
+        OrderCreateResponse response = service.createOrder(
+            "Bearer token", 55L, orderRequest("LOWEST_ITEM", false, null, List.of())
+        );
+
+        assertThat(response.totalAmount()).isEqualByComparingTo("32.0000");
+        verify(orderRepository).insertOrder(
+            eq(55L), eq(11L), eq(7L), eq("LOWEST_ITEM"), eq("USD"),
+            eq(new BigDecimal("32.0000")), eq(new BigDecimal("20.0000")),
+            eq(new BigDecimal("22.0000")), eq(new BigDecimal("2.0000")), any()
+        );
+    }
+
+    @Test
     void selectedComparisonItemControlsTheCreatedOrder() {
         when(demandRepository.getDemand(55L, 11L)).thenReturn(demandDetail("QUOTED"));
         when(orderRepository.orderExistsForDemand(55L)).thenReturn(false);
@@ -437,6 +473,26 @@ class FoodProcurementApplicationServiceTest {
         verify(demandRepository).updateComparisonSettings(eq(55L), eq(11L), eq(7L), settings.capture());
         assertThat(settings.getValue().trafficServiceJson()).isNull();
         assertThat(settings.getValue().selectedDemandItemIds()).containsExactly(501L);
+    }
+
+    @Test
+    void saveComparisonSettingsPersistsProductStrategyWithThreeSuppliersByDefault() {
+        when(demandRepository.getDemand(55L, 11L)).thenReturn(demandDetail("QUOTED"));
+        when(demandRepository.updateComparisonSettings(eq(55L), eq(11L), eq(7L), any())).thenReturn(1);
+
+        ComparisonSettings saved = service.saveComparisonSettings(
+            "Bearer token", 55L,
+            new ComparisonSettings(
+                BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                "SEA", "BARGE", "", "", "", List.of(501L),
+                3, true, 5, true, 3, List.of(501L)
+            )
+        );
+
+        assertThat(saved.mixedSupplierCount()).isEqualTo(3);
+        assertThat(saved.priceEnabled()).isTrue();
+        assertThat(saved.qualityEnabled()).isTrue();
+        assertThat(saved.coreDemandItemIds()).containsExactly(501L);
     }
 
     @Test

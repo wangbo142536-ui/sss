@@ -10,26 +10,33 @@ interface ProviderItem {
   title: string;
   summary: string;
   action?: string;
+  label?: string;
 }
 
 const activeTopic = ref<ProviderKind>("business");
+const activeBusinessProvider = ref(0);
+const isBusinessRotationManuallyPaused = ref(false);
 let topicObserver: IntersectionObserver | undefined;
+let businessProviderTimer: number | undefined;
 
 const businessProviders: ProviderItem[] = [
   {
     key: "ship-supply",
     title: "船供服务商",
-    summary: "为船舶靠港与航行提供稳定的物料和伙食供应。"
+    summary: "为船舶靠港与航行提供稳定的物料和伙食供应。",
+    label: "SHIP SUPPLY"
   },
   {
     key: "crew",
     title: "船员服务商",
-    summary: "围绕船员在船、靠港及职业周期提供专业保障。"
+    summary: "围绕船员在船、靠港及职业周期提供专业保障。",
+    label: "CREW SUPPORT"
   },
   {
     key: "finance",
     title: "金融服务商",
-    summary: "为航运经营、采购交易和履约环节提供金融支持。"
+    summary: "为航运经营、采购交易和履约环节提供金融支持。",
+    label: "MARITIME FINANCE"
   }
 ];
 
@@ -61,6 +68,34 @@ function registrationLink(providerType: ProviderKind, category: string) {
   };
 }
 
+function selectBusinessProvider(index: number) {
+  activeBusinessProvider.value = (index + businessProviders.length) % businessProviders.length;
+}
+
+function stopBusinessProviderRotation() {
+  if (businessProviderTimer !== undefined) {
+    window.clearInterval(businessProviderTimer);
+    businessProviderTimer = undefined;
+  }
+}
+
+function startBusinessProviderRotation() {
+  stopBusinessProviderRotation();
+  if (isBusinessRotationManuallyPaused.value || window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.hidden) return;
+  businessProviderTimer = window.setInterval(() => selectBusinessProvider(activeBusinessProvider.value + 1), 4200);
+}
+
+function toggleBusinessProviderRotation() {
+  isBusinessRotationManuallyPaused.value = !isBusinessRotationManuallyPaused.value;
+  if (isBusinessRotationManuallyPaused.value) stopBusinessProviderRotation();
+  else startBusinessProviderRotation();
+}
+
+function handleVisibilityChange() {
+  if (document.hidden) stopBusinessProviderRotation();
+  else startBusinessProviderRotation();
+}
+
 onMounted(() => {
   const sections = document.querySelectorAll<HTMLElement>("[data-entry-topic]");
   topicObserver = new IntersectionObserver(
@@ -76,9 +111,15 @@ onMounted(() => {
     { rootMargin: "-24% 0px -52%", threshold: [0.08, 0.3, 0.6] }
   );
   sections.forEach((section) => topicObserver?.observe(section));
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  startBusinessProviderRotation();
 });
 
-onBeforeUnmount(() => topicObserver?.disconnect());
+onBeforeUnmount(() => {
+  topicObserver?.disconnect();
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  stopBusinessProviderRotation();
+});
 </script>
 
 <template>
@@ -94,6 +135,7 @@ onBeforeUnmount(() => topicObserver?.disconnect());
             <a href="/prototypes/maritime_integrated_service_home.html#policy">政策发放</a>
             <a href="/prototypes/maritime_integrated_service_home.html#publish">最新动态</a>
             <a href="/prototypes/maritime_about.html">关于我们</a>
+            <a href="/prototypes/maritime_plan.html">平台规划</a>
           </nav>
         </div>
       </div>
@@ -145,14 +187,54 @@ onBeforeUnmount(() => topicObserver?.disconnect());
             </div>
           </div>
 
-          <div class="business-journey" aria-label="经营服务商类型">
-            <div class="business-journey__route" aria-hidden="true"></div>
-            <article v-for="(provider, index) in businessProviders" :key="provider.key" class="business-station">
-              <div class="business-station__number">0{{ index + 1 }}</div>
-              <div class="business-station__node" aria-hidden="true"><span></span></div>
-              <h3>{{ provider.title }}</h3>
-              <p>{{ provider.summary }}</p>
-            </article>
+          <div
+            class="business-journey"
+            aria-label="经营服务商类型轮询展示"
+            @mouseenter="stopBusinessProviderRotation"
+            @mouseleave="startBusinessProviderRotation"
+            @focusin="stopBusinessProviderRotation"
+            @focusout="startBusinessProviderRotation"
+          >
+            <div class="business-journey__ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="business-journey__cards">
+              <article
+                v-for="(provider, index) in businessProviders"
+                :key="provider.key"
+                class="business-station"
+                :class="{ 'is-active': activeBusinessProvider === index }"
+                :aria-current="activeBusinessProvider === index ? 'true' : undefined"
+                tabindex="0"
+                @mouseenter="selectBusinessProvider(index)"
+                @focus="selectBusinessProvider(index)"
+              >
+                <div class="business-station__topline"><span>0{{ index + 1 }}</span><small>{{ provider.label }}</small></div>
+                <div class="business-station__node" aria-hidden="true"><span></span><i></i></div>
+                <div class="business-station__copy"><h3>{{ provider.title }}</h3><p>{{ provider.summary }}</p></div>
+                <div class="business-station__status"><i></i><span>服务能力接入</span></div>
+              </article>
+            </div>
+            <div class="business-journey__controls" aria-label="切换经营服务商">
+              <button type="button" aria-label="上一个服务商" @click="selectBusinessProvider(activeBusinessProvider - 1)">←</button>
+              <div class="business-journey__dots">
+                <button
+                  v-for="(provider, index) in businessProviders"
+                  :key="provider.key"
+                  type="button"
+                  :class="{ 'is-active': activeBusinessProvider === index }"
+                  :aria-label="`展示${provider.title}`"
+                  :aria-pressed="activeBusinessProvider === index"
+                  @click="selectBusinessProvider(index)"
+                ><span></span></button>
+              </div>
+              <button type="button" aria-label="下一个服务商" @click="selectBusinessProvider(activeBusinessProvider + 1)">→</button>
+              <button
+                class="business-journey__pause"
+                type="button"
+                :aria-label="isBusinessRotationManuallyPaused ? '继续经营服务商轮询' : '暂停经营服务商轮询'"
+                :aria-pressed="isBusinessRotationManuallyPaused"
+                @click="toggleBusinessProviderRotation"
+              >{{ isBusinessRotationManuallyPaused ? '▶' : 'Ⅱ' }}</button>
+            </div>
           </div>
 
           <div class="qualification-band">
@@ -188,8 +270,37 @@ onBeforeUnmount(() => topicObserver?.disconnect());
           </div>
 
           <div class="data-network" aria-label="可对接的数据类型">
+            <svg class="data-network__routes" viewBox="0 0 1280 720" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="data-route-gradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#14b8d6" stop-opacity="0"></stop>
+                  <stop offset=".44" stop-color="#2bc9e4" stop-opacity=".5"></stop>
+                  <stop offset="1" stop-color="#8cecff" stop-opacity=".9"></stop>
+                </linearGradient>
+              </defs>
+              <g class="data-route-lines">
+                <path id="data-route-1" d="M218 116 C398 116 432 246 640 350"></path>
+                <path id="data-route-2" d="M1062 116 C882 116 848 246 640 350"></path>
+                <path id="data-route-3" d="M1162 330 C962 330 878 350 640 350"></path>
+                <path id="data-route-4" d="M1018 610 C846 590 814 452 640 350"></path>
+                <path id="data-route-5" d="M262 610 C434 590 466 452 640 350"></path>
+                <path id="data-route-6" d="M118 330 C318 330 402 350 640 350"></path>
+              </g>
+              <g class="data-route-packets">
+                <circle r="4"><animateMotion dur="4.6s" begin="-1.2s" repeatCount="indefinite"><mpath href="#data-route-1"></mpath></animateMotion></circle>
+                <circle r="3"><animateMotion dur="5.1s" begin="-3.4s" repeatCount="indefinite"><mpath href="#data-route-2"></mpath></animateMotion></circle>
+                <circle r="4"><animateMotion dur="4.2s" begin="-2.2s" repeatCount="indefinite"><mpath href="#data-route-3"></mpath></animateMotion></circle>
+                <circle r="3"><animateMotion dur="5.4s" begin="-4.1s" repeatCount="indefinite"><mpath href="#data-route-4"></mpath></animateMotion></circle>
+                <circle r="4"><animateMotion dur="4.9s" begin="-.6s" repeatCount="indefinite"><mpath href="#data-route-5"></mpath></animateMotion></circle>
+                <circle r="3"><animateMotion dur="4.4s" begin="-2.9s" repeatCount="indefinite"><mpath href="#data-route-6"></mpath></animateMotion></circle>
+              </g>
+            </svg>
             <div class="data-network__rings" aria-hidden="true"><i></i><i></i><i></i></div>
-            <div class="data-network__hub"><span>MARITIME DATA HUB</span><strong>海事数据枢纽</strong><small>标准接口 · 安全传输 · 持续更新</small></div>
+            <div class="data-network__hub">
+              <span>MARITIME DATA CORE</span>
+              <strong>海事数据枢纽</strong>
+              <small><i>标准接口</i><i>安全传输</i><i>持续更新</i></small>
+            </div>
             <article v-for="(provider, index) in dataProviders" :key="provider.key" class="data-node" :style="{ '--node-index': index }">
               <span class="data-node__index">0{{ index + 1 }}</span>
               <div><h3>{{ provider.title }}</h3><p>{{ provider.summary }}</p></div>
@@ -225,7 +336,7 @@ onBeforeUnmount(() => topicObserver?.disconnect());
           </div>
           <p>连接服务能力与数据资源，服务航运产业协同。</p>
         </div>
-        <nav aria-label="页脚导航"><a href="/">返回官网</a><a href="/prototypes/maritime_about.html">关于我们</a><RouterLink to="/login">登录平台</RouterLink></nav>
+        <nav aria-label="页脚导航"><a href="/">返回官网</a><a href="/prototypes/maritime_about.html">关于我们</a><a href="/prototypes/maritime_plan.html">平台规划</a><RouterLink to="/login">登录平台</RouterLink></nav>
       </div>
     </footer>
   </div>
